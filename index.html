@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Canlı Hareket Takip Sistemi</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>Canlı Hareket Takip Sistemi</h1>
+      <div class="header-right">
+        <button id="fullscreenBtn" class="btn-icon" title="Полный экран">⛶</button>
+        <div class="fps-badge" id="fps">0 FPS</div>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="camera-section">
+        <div class="camera-wrapper" id="cameraWrapper">
+          <div class="draw-toolbar" id="drawToolbar">
+            <div class="toolbar-trigger" id="toolbarTrigger" title="Настройки (управление жестами)">⚙</div>
+            <div class="toolbar-content" id="toolbarContent">
+              <div class="toolbar-row">
+                <label>Renk</label>
+                <div class="toolbar-colors">
+                  <button type="button" class="color-preset active" data-color="#00ff9f" style="background:#00ff9f"></button>
+                  <button type="button" class="color-preset" data-color="#ff6b9d" style="background:#ff6b9d"></button>
+                  <button type="button" class="color-preset" data-color="#6b9dff" style="background:#6b9dff"></button>
+                  <button type="button" class="color-preset" data-color="#ffd93d" style="background:#ffd93d"></button>
+                  <button type="button" class="color-preset" data-color="#ff4757" style="background:#ff4757"></button>
+                  <button type="button" class="color-preset" data-color="#ffffff" style="background:#fff;border-color:#888"></button>
+                </div>
+                <input type="color" id="toolbarColor" value="#00ff9f">
+              </div>
+              <div class="toolbar-row">
+                <label>Kalınlık <span id="toolbarSizeVal">4</span></label>
+                <div class="toolbar-size-btns">
+                  <button type="button" class="size-btn" data-delta="-1">−</button>
+                  <input type="range" id="toolbarSize" min="1" max="20" value="4" step="1">
+                  <button type="button" class="size-btn" data-delta="1">+</button>
+                </div>
+              </div>
+              <div class="toolbar-row">
+                <label>Şekil</label>
+                <div class="shape-btns">
+                  <button class="shape-btn active" data-shape="free" title="Serbest">✏️</button>
+                  <button class="shape-btn" data-shape="circle" title="Daire">⭕</button>
+                  <button class="shape-btn" data-shape="rect" title="Dikdörtgen">▢</button>
+                  <button class="shape-btn" data-shape="line" title="Çizgi">📏</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <video id="video" playsinline style="display:none"></video>
+          <canvas id="output"></canvas>
+          <div class="white-sheet-bg" id="whiteSheetBg"></div>
+          <canvas id="drawCanvas"></canvas>
+          <div class="camera-preview-mini" id="cameraPreviewMini">
+            <canvas id="previewCanvas"></canvas>
+            <span class="preview-label">Kamera (arka plan)</span>
+          </div>
+          <div class="eye-overlay" id="eyeOverlay"></div>
+          <div class="camera-overlay" id="cameraOverlay">
+            <p>Kamerayı başlatmak için butona tıklayın</p>
+            <p class="overlay-hint">İzin istendiğinde "İzin Ver"e tıklayın</p>
+          </div>
+          <div class="error-message" id="errorMessage"></div>
+          <div class="low-light-warning" id="lowLightWarning">💡 Daha iyi algılama için ışığı artırın</div>
+          <div class="gesture-cursor" id="gestureCursor"></div>
+          <button id="exitFullscreenBtn" class="exit-fullscreen-btn" title="Выйти (Esc)" style="display:none">✕</button>
+        </div>
+        </div>
+        <div class="controls">
+          <button id="startBtn" class="btn btn-primary">Kamerayı Başlat</button>
+          <button id="stopBtn" class="btn btn-secondary" disabled>Kamerayı Durdur</button>
+          <div class="color-picker-wrap">
+            <label>Renk:</label>
+            <input type="color" id="drawColor" value="#00ff9f" title="Çizim rengi">
+          </div>
+          <div class="mode-toggle">
+            <button id="modeCameraBtn" class="btn btn-mode active">📷 Kamera</button>
+            <button id="modeWhiteSheetBtn" class="btn btn-mode">📄 Beyaz Kağıt</button>
+          </div>
+          <button id="drawBtn" class="btn btn-draw" disabled>✏️ Çizim Aç</button>
+          <button id="clearDrawBtn" class="btn btn-draw" disabled>🗑️ Çizimi Sil</button>
+          <button id="objectsBtn" class="btn btn-draw" disabled>🔮 Nesneler Aç</button>
+          <button id="addObjBtn" class="btn btn-draw" disabled>+ Nesne Ekle</button>
+          <button id="removeObjBtn" class="btn btn-draw" disabled>− Nesne Sil</button>
+          <label class="skeleton-toggle">
+            <input type="checkbox" id="showSkeleton" checked>
+            <span>İskelet göster</span>
+          </label>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script type="module" src="script.js"></script>
+</body>
+</html>

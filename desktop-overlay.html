@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Masaüstü Çizim</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: transparent;
+      font-family: system-ui, sans-serif;
+    }
+    #drawCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .toolbar {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 1000;
+      display: flex;
+      align-items: flex-start;
+      background: rgba(26, 26, 31, 0.9);
+      border: 1px solid #2a2a35;
+      border-radius: 8px;
+      padding: 8px;
+      gap: 8px;
+    }
+    .toolbar-toggle {
+      width: 40px;
+      height: 40px;
+      border-radius: 6px;
+      border: 1px solid #2a2a35;
+      background: #1a1a1f;
+      color: #f0f0f5;
+      font-size: 1.2rem;
+      cursor: pointer;
+    }
+    .toolbar-toggle:hover { border-color: #00ff9f; }
+    .toolbar-content {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 160px;
+    }
+    .toolbar.expanded .toolbar-content { display: flex; }
+    .toolbar-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .toolbar-row label {
+      font-size: 11px;
+      color: #a0a0b0;
+      text-transform: uppercase;
+    }
+    .toolbar-row input[type="color"] {
+      width: 100%;
+      height: 32px;
+      border: 1px solid #2a2a35;
+      border-radius: 6px;
+      cursor: pointer;
+      background: transparent;
+    }
+    .toolbar-row input[type="range"] { width: 100%; }
+    .shape-btns { display: flex; gap: 4px; }
+    .shape-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      border: 1px solid #2a2a35;
+      background: #16161a;
+      color: #f0f0f5;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .shape-btn:hover { border-color: #00ff9f; }
+    .shape-btn.active { background: #00ff9f; color: #0d0d0f; }
+    .clear-btn {
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid #2a2a35;
+      background: #16161a;
+      color: #f0f0f5;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .clear-btn:hover { border-color: #ff4757; background: rgba(255,71,87,0.2); }
+    .camera-preview {
+      position: fixed;
+      bottom: 12px;
+      right: 12px;
+      width: 100px;
+      height: 75px;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 2px solid #2a2a35;
+      z-index: 100;
+      background: #1a1a1f;
+    }
+    .camera-preview video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    .camera-preview canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    #video { display: none; }
+  </style>
+</head>
+<body>
+  <div class="toolbar" id="toolbar">
+    <button class="toolbar-toggle" id="toolbarToggle">⚙️</button>
+    <div class="toolbar-content">
+      <div class="toolbar-row">
+        <label>Renk</label>
+        <input type="color" id="toolbarColor" value="#00ff9f">
+      </div>
+      <div class="toolbar-row">
+        <label>Kalınlık</label>
+        <input type="range" id="toolbarSize" min="1" max="20" value="4">
+        <span id="toolbarSizeVal">4</span>
+      </div>
+      <div class="toolbar-row">
+        <button id="clearBtn" class="clear-btn">🗑️ Temizle</button>
+      </div>
+      <div class="toolbar-row">
+        <label>Şekil</label>
+        <div class="shape-btns">
+          <button class="shape-btn active" data-shape="free">✏️</button>
+          <button class="shape-btn" data-shape="circle">⭕</button>
+          <button class="shape-btn" data-shape="rect">▢</button>
+          <button class="shape-btn" data-shape="line">📏</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="camera-preview" id="cameraPreview">
+    <video id="video" playsinline></video>
+    <canvas id="previewCanvas"></canvas>
+  </div>
+  <canvas id="drawCanvas"></canvas>
+  <script type="module" src="desktop-overlay.js"></script>
+</body>
+</html>

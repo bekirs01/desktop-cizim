@@ -1,0 +1,19 @@
+{
+  "name": "desktop-cizim",
+  "version": "1.0.0",
+  "description": "Masaüstünde el hareketi ile çizim",
+  "main": "electron-main.js",
+  "scripts": {
+    "start": "electron .",
+    "desktop": "node_modules/electron/dist/Electron.app/Contents/MacOS/Electron .",
+    "web": "python3 -m http.server 8080"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.3",
+    "electron": "^28.3.3"
+  },
+  "dependencies": {
+    "@nut-tree-fork/nut-js": "^4.2.6",
+    "robotjs": "^0.6.0"
+  }
+}

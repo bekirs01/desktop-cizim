@@ -1,0 +1,757 @@
+/* ============================================
+   Canlı Hareket Takip Sistemi - Stil Dosyası
+   Koyu tema, modern, mobil uyumlu
+   ============================================ */
+
+:root {
+  --bg-primary: #0d0d0f;
+  --bg-secondary: #16161a;
+  --bg-card: #1a1a1f;
+  --accent: #00ff9f;
+  --accent-dim: #00cc7d;
+  --accent-glow: rgba(0, 255, 159, 0.3);
+  --text-primary: #f0f0f5;
+  --text-secondary: #a0a0b0;
+  --border: #2a2a35;
+  --error: #ff4757;
+  --warning: #ffa502;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --transition: 0.2s ease;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+/* Arka plan deseni */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(ellipse at 20% 20%, rgba(0, 255, 159, 0.05) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(0, 255, 159, 0.03) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  margin: 0;
+  padding: 0.75rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+html.canvas-fullscreen,
+html.canvas-fullscreen body,
+body.canvas-fullscreen { overflow: hidden !important; height: 100%; position: fixed; width: 100%; }
+.app.canvas-fullscreen { padding: 0; height: 100vh; overflow: hidden; max-height: 100vh; }
+.app.canvas-fullscreen .header,
+.app.canvas-fullscreen .controls,
+.app.canvas-fullscreen .main > .camera-section > .controls { display: none !important; visibility: hidden !important; }
+.app.canvas-fullscreen .camera-section { flex: 1; min-height: 0; overflow: hidden; gap: 0; display: flex; flex-direction: column; }
+.app.canvas-fullscreen .camera-wrapper { border-radius: 0; border: none; flex: 1; }
+.exit-fullscreen-btn { position: absolute; top: 8px; right: 8px; z-index: 60; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: rgba(0,0,0,0.6); color: #fff; font-size: 1.2rem; cursor: pointer; display: none; }
+.app.canvas-fullscreen .exit-fullscreen-btn { display: flex; align-items: center; justify-content: center; }
+
+/* ========== Header ========== */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.header h1 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.header-right { display: flex; align-items: center; gap: 0.5rem; }
+.btn-icon { width: 36px; height: 36px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary); font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.btn-icon:hover { border-color: var(--accent); color: var(--accent); }
+.fps-badge {
+  font-size: 0.75rem;
+  padding: 0.35rem 0.65rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ========== Ana layout ========== */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ========== Kamera bölümü ========== */
+.camera-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.camera-wrapper {
+  position: relative;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  flex: 1;
+  min-height: 250px;
+  min-width: 0;
+}
+
+/* При активной камере: ширина 100%, высота по пропорциям видео, без обрезки */
+.camera-wrapper[data-camera-active="1"] {
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 0;
+}
+
+#video,
+#output,
+#drawCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+#drawCanvas {
+  pointer-events: none;
+  z-index: 10;
+}
+
+#output {
+  pointer-events: none;
+}
+
+.white-sheet-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  z-index: 1;
+  display: none;
+  border-radius: inherit;
+}
+
+.camera-wrapper.white-sheet-mode .white-sheet-bg {
+  display: block;
+}
+
+.camera-wrapper.white-sheet-mode #output {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.camera-wrapper.white-sheet-mode .eye-overlay {
+  opacity: 0;
+}
+
+/* ========== Çizim панель - слева выезжает ========== */
+.draw-toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.toolbar-trigger {
+  width: 40px;
+  min-width: 40px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 10px 10px 0;
+  color: var(--text-secondary);
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+  flex-shrink: 0;
+}
+
+.toolbar-trigger:hover,
+.draw-toolbar.expanded .toolbar-trigger {
+  background: var(--bg-secondary);
+  color: var(--accent);
+}
+
+.toolbar-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: var(--bg-card);
+  border-right: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  width: 200px;
+  min-width: 0;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-width 0.2s ease, opacity 0.15s ease;
+}
+
+.draw-toolbar.expanded .toolbar-content {
+  max-width: 200px;
+  opacity: 1;
+}
+
+/* Курсор жеста над панелью — видно куда наводишь */
+.gesture-cursor {
+  position: fixed;
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: rgba(0, 255, 159, 0.2);
+  pointer-events: none;
+  z-index: 50;
+  display: none;
+  transition: left 0.05s, top 0.05s;
+}
+
+.gesture-cursor.visible {
+  display: block;
+}
+
+.toolbar-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.toolbar-row label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.toolbar-colors { display: flex; flex-wrap: wrap; gap: 6px; }
+.color-preset { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; padding: 0; transition: var(--transition); }
+.color-preset[data-color="#ffffff"] { border: 2px solid var(--border); }
+.color-preset:hover { border-color: var(--accent); transform: scale(1.1); }
+.color-preset.active { border-color: var(--accent); }
+.toolbar-size-btns { display: flex; align-items: center; gap: 6px; }
+.size-btn { width: 34px; height: 34px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-primary); font-size: 1.2rem; cursor: pointer; }
+.size-btn:hover { border-color: var(--accent); }
+.toolbar-row input[type="range"] { flex: 1; min-width: 60px; }
+.toolbar-row input[type="color"] {
+  width: 100%;
+  height: 32px;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: transparent;
+}
+
+.toolbar-row input[type="range"] {
+  flex: 1;
+  min-width: 60px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.toolbar-row .shape-btns {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.shape-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+}
+
+.shape-btn:hover {
+  border-color: var(--accent);
+  background: rgba(0, 255, 159, 0.1);
+}
+
+.shape-btn.active {
+  background: var(--accent);
+  color: var(--bg-primary);
+  border-color: var(--accent);
+}
+
+.camera-preview-mini {
+  position: absolute;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  width: 120px;
+  height: 90px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 2px solid var(--border);
+  z-index: 20;
+  display: none;
+  background: var(--bg-card);
+}
+
+.camera-wrapper.white-sheet-mode .camera-preview-mini {
+  display: flex;
+  flex-direction: column;
+}
+
+.camera-preview-mini #previewCanvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.camera-preview-mini .preview-label {
+  font-size: 0.65rem;
+  padding: 0.2rem;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  text-align: center;
+}
+
+.mode-toggle {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-mode {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.9rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-mode:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.btn-mode.active {
+  background: var(--accent);
+  color: var(--bg-primary);
+  border-color: var(--accent);
+}
+
+/* Göz durumu overlay - kırmızı/yeşil */
+.eye-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  transition: background 0.3s ease;
+  border-radius: inherit;
+}
+
+.eye-overlay.eyes-open {
+  background: rgba(0, 255, 100, 0.08);
+}
+
+.eye-overlay.eyes-closed {
+  background: rgba(255, 50, 50, 0.2);
+}
+
+.camera-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 1rem;
+  transition: opacity var(--transition);
+}
+
+.camera-overlay .overlay-hint {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.camera-overlay .overlay-permission {
+  font-size: 0.8rem;
+  color: var(--warning);
+  margin-top: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 165, 2, 0.15);
+  border-radius: var(--radius-sm);
+  max-width: 320px;
+  text-align: center;
+}
+
+.camera-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.error-message {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  right: 1rem;
+  padding: 1rem;
+  background: rgba(255, 71, 87, 0.95);
+  color: white;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  display: none;
+  z-index: 100;
+}
+
+.error-message.visible {
+  display: block;
+}
+
+.low-light-warning {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.5rem 1rem;
+  background: rgba(255, 165, 2, 0.2);
+  color: var(--warning);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  display: none;
+}
+
+.low-light-warning.visible {
+  display: block;
+}
+
+/* Kontrol butonları */
+.controls {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.mode-tabs {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.mode-tab {
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.mode-tab:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.mode-tab.active {
+  background: rgba(0, 255, 159, 0.15);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.mode-controls.hidden {
+  display: none !important;
+}
+
+.skeleton-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.skeleton-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.color-picker-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.color-picker-wrap label {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.color-picker-wrap input[type="color"] {
+  width: 36px;
+  height: 36px;
+  padding: 2px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: var(--bg-secondary);
+}
+
+.color-picker-wrap input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+.color-picker-wrap input[type="color"]::-webkit-color-swatch { border-radius: 4px; }
+
+.btn {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-dim);
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.btn-secondary {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-draw {
+  background: var(--bg-card);
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
+.btn-draw:hover:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.btn-draw.active {
+  background: rgba(0, 255, 159, 0.2);
+  border-color: var(--accent);
+}
+
+/* ========== Hareket paneli ========== */
+.motion-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  position: sticky;
+  top: 1.5rem;
+}
+
+.motion-panel h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Son hareket - büyük başlık */
+.current-motion {
+  min-height: 80px;
+  padding: 1rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.current-motion .placeholder {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.current-motion .motion-text {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--accent);
+  animation: pulse 0.5s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.current-motion .motion-tr {
+  color: var(--accent);
+}
+
+.current-motion .motion-ru {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.current-motion .motion-text.highlight {
+  animation: highlight 0.6s ease;
+}
+
+@keyframes pulse {
+  from { opacity: 0.8; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes highlight {
+  0% { 
+    color: var(--accent); 
+    text-shadow: 0 0 20px var(--accent-glow);
+  }
+  50% { 
+    color: var(--text-primary);
+    text-shadow: 0 0 30px var(--accent-glow);
+  }
+  100% { 
+    color: var(--accent);
+    text-shadow: 0 0 20px var(--accent-glow);
+  }
+}
+
+/* Hareket geçmişi */
+.motion-history h3 {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.motion-history ul {
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.motion-history li {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  transition: background var(--transition);
+}
+
+.motion-history li:last-child {
+  border-bottom: none;
+}
+
+.motion-history li:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.motion-history li .time {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  margin-right: 0.5rem;
+}
+
+/* Scrollbar */
+.motion-history ul::-webkit-scrollbar {
+  width: 6px;
+}
+
+.motion-history ul::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 3px;
+}
+
+.motion-history ul::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
