@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron .",
     "desktop": "node_modules/electron/dist/Electron.app/Contents/MacOS/Electron .",
-    "web": "python3 -m http.server 8080"
+    "web": "npx --yes serve -l 8080"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.3",

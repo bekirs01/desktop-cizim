@@ -71,7 +71,7 @@
       background: transparent;
     }
     .toolbar-row input[type="range"] { width: 100%; }
-    .shape-btns { display: flex; gap: 4px; }
+    .shape-btns { display: flex; flex-wrap: wrap; gap: 4px; max-width: 180px; }
     .shape-btn {
       width: 32px;
       height: 32px;
@@ -143,9 +143,12 @@
         <label>Şekil</label>
         <div class="shape-btns">
           <button class="shape-btn active" data-shape="free">✏️</button>
-          <button class="shape-btn" data-shape="circle">⭕</button>
           <button class="shape-btn" data-shape="rect">▢</button>
+          <button class="shape-btn" data-shape="ellipse">⬭</button>
+          <button class="shape-btn" data-shape="circle">⭕</button>
           <button class="shape-btn" data-shape="line">📏</button>
+          <button class="shape-btn" data-shape="arrow">➤</button>
+          <button class="shape-btn" data-shape="triangle">△</button>
         </div>
       </div>
     </div>

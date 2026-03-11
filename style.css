@@ -243,8 +243,9 @@ body.canvas-fullscreen { overflow: hidden !important; height: 100%; position: fi
 }
 
 .draw-toolbar.expanded .toolbar-content {
-  max-width: 200px;
+  max-width: 280px;
   opacity: 1;
+  overflow: visible;
 }
 
 /* Курсор жеста над панелью — видно куда наводишь */
@@ -307,7 +308,10 @@ body.canvas-fullscreen { overflow: hidden !important; height: 100%; position: fi
 
 .toolbar-row .shape-btns {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.35rem;
+  max-height: none;
+  overflow: visible;
 }
 
 .shape-btn {

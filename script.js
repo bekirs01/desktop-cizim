@@ -137,6 +137,7 @@ let wasTwoFingersClick = false;
 let showSkeleton = true;
 let whiteSheetMode = false;
 let wasToolbarPinch = false;
+let shapeInProgress = null; // { center, size, type } — pinch+drag для размера фигуры
 // Кэш для throttled detection (переиспользуем при пропуске кадров)
 let cachedLm = null;
 let cachedEyesClosed = false;
@@ -215,26 +216,42 @@ function drawHandLandmarks(ctx, hands, w, h) {
   });
 }
 
-// İki parmak (işaret + orta) - V işareti veya parmaklar birleşik
+// İki parmak (işaret + orta) - ТОЛЬКО полностью выпрямлены (ластик)
 function isTwoFingersExtended(hand) {
   if (!hand || hand.length < 21) return false;
-  const idxTip = hand[8], midTip = hand[12], ringTip = hand[16], pinkyTip = hand[20];
+  const idxTip = hand[8], midTip = hand[12], idxPip = hand[6], midPip = hand[10];
+  const ringTip = hand[16], pinkyTip = hand[20];
   const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   const lenIdx = d(idxTip, hand[5]);
   const lenMid = d(midTip, hand[9]);
   const lenRing = d(ringTip, hand[13]);
   const lenPinky = d(pinkyTip, hand[17]);
   const distIdxMid = d(idxTip, midTip);
-  return lenIdx > 0.035 && lenMid > 0.035 &&
-         lenIdx > lenRing * 0.8 && lenMid > lenRing * 0.8 &&
-         lenIdx > lenPinky * 0.8 && lenMid > lenPinky * 0.8 &&
-         distIdxMid < 0.22;
+  // Минимум 0.07 — при согнутых пальцах tip ближе к MCP
+  const minExtended = 0.07;
+  // Проверка "прямоты": tip далеко от PIP — при согнутом пальце tip ближе к суставу
+  const tipToPipIdx = d(idxTip, idxPip);
+  const tipToPipMid = d(midTip, midPip);
+  return lenIdx >= minExtended && lenMid >= minExtended &&
+         tipToPipIdx > 0.03 && tipToPipMid > 0.03 &&
+         lenIdx > lenRing * 1.2 && lenMid > lenRing * 1.2 &&
+         lenIdx > lenPinky * 1.2 && lenMid > lenPinky * 1.2 &&
+         distIdxMid > 0.03 && distIdxMid < 0.22;
 }
 
 function getTwoFingerPosition(hand) {
   if (!hand || hand.length < 13 || !isTwoFingersExtended(hand)) return null;
   const idx = hand[8], mid = hand[12];
   return { x: (idx.x + mid.x) / 2, y: (idx.y + mid.y) / 2 };
+}
+
+// Центр, расстояние и вектор между большим и указательным (для размера фигуры)
+function getThumbIndexSize(hand) {
+  if (!hand || hand.length < 9) return null;
+  const thumb = hand[4], idx = hand[8];
+  const dx = idx.x - thumb.x, dy = idx.y - thumb.y;
+  const dist = Math.hypot(dx, dy);
+  return { center: { x: (thumb.x + idx.x) / 2, y: (thumb.y + idx.y) / 2 }, size: dist, dx, dy };
 }
 
 function normToClient(normX, normY, w, h) {
@@ -469,12 +486,12 @@ function getIndexFingerTip(hand, requireExtended = false) {
   return { x: tip.x, y: tip.y };
 }
 
-// İşaret + başparmak pinch - только при соприкосновении кончиков
+// İşaret + başparmak pinch - для рисования и фигур
 function isIndexThumbPinch(hand) {
   if (!hand || hand.length < 9) return false;
   const idxTip = hand[8], thumbTip = hand[4];
   const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-  return d(idxTip, thumbTip) < 0.035;
+  return d(idxTip, thumbTip) < 0.06;
 }
 
 function getPinchCursorPosition(hand) {
@@ -634,12 +651,12 @@ function drawStrokesToCanvas(w, h) {
   dctx.clearRect(0, 0, w, h);
   const sx = (x) => (MIRROR_CAMERA ? (1 - x) * w : x * w);
 
-  const lw = drawLineWidth || 4;
-  const lwGlow = Math.max(lw * 4, 18);
-  const lwMid = Math.max(lw * 2, 10);
+  const defLw = drawLineWidth || 4;
 
   shapes.forEach((sh) => {
     const color = sh.color || drawColor;
+    const lw = sh.lineWidth ?? defLw;
+    const lwGlow = Math.max(lw * 4, 18);
     dctx.strokeStyle = color;
     dctx.lineWidth = lw;
     dctx.lineCap = "round";
@@ -652,19 +669,117 @@ function drawStrokesToCanvas(w, h) {
     } else if (sh.type === "rect") {
       const x = sx(sh.x), y = sh.y * h;
       const rw = sh.w * w, rh = sh.h * h;
-      dctx.strokeRect(x - rw / 2, y - rh / 2, rw, rh);
+      dctx.strokeRect(x, y, rw, rh);
     } else if (sh.type === "line") {
       dctx.beginPath();
       dctx.moveTo(sx(sh.x1), sh.y1 * h);
       dctx.lineTo(sx(sh.x2), sh.y2 * h);
       dctx.stroke();
+    } else if (sh.type === "ellipse") {
+      const cx = sx(sh.x + sh.w / 2), cy = (sh.y + sh.h / 2) * h;
+      const rx = (sh.w / 2) * w, ry = (sh.h / 2) * h;
+      dctx.beginPath();
+      dctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      dctx.stroke();
+    } else if (sh.type === "triangle") {
+      dctx.beginPath();
+      dctx.moveTo(sx(sh.x1), sh.y1 * h);
+      dctx.lineTo(sx(sh.x2), sh.y2 * h);
+      dctx.lineTo(sx(sh.x3), sh.y3 * h);
+      dctx.closePath();
+      dctx.stroke();
+    } else if (sh.type === "arrow") {
+      const x1 = sx(sh.x1), y1 = sh.y1 * h, x2 = sx(sh.x2), y2 = sh.y2 * h;
+      const dx = x2 - x1, dy = y2 - y1;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      const arrowLen = Math.min(len * 0.3, 20);
+      const ax = x2 - ux * arrowLen + uy * arrowLen * 0.4;
+      const ay = y2 - uy * arrowLen - ux * arrowLen * 0.4;
+      const bx = x2 - ux * arrowLen - uy * arrowLen * 0.4;
+      const by = y2 - uy * arrowLen + ux * arrowLen * 0.4;
+      dctx.beginPath();
+      dctx.moveTo(x1, y1);
+      dctx.lineTo(x2, y2);
+      dctx.moveTo(ax, ay);
+      dctx.lineTo(x2, y2);
+      dctx.lineTo(bx, by);
+      dctx.stroke();
     }
   });
+
+  // Превью фигуры при pinch+drag (зажать и тянуть по диагонали)
+  if (shapeInProgress && drawMode) {
+    const sp = shapeInProgress;
+    const x1 = Math.min(sp.start.x, sp.end.x), x2 = Math.max(sp.start.x, sp.end.x);
+    const y1 = Math.min(sp.start.y, sp.end.y), y2 = Math.max(sp.start.y, sp.end.y);
+    const px1 = sx(x1), py1 = y1 * h, px2 = sx(x2), py2 = y2 * h;
+    const rw = (x2 - x1) * w, rh = (y2 - y1) * h;
+    const cx = (px1 + px2) / 2, cy = (py1 + py2) / 2;
+    const rad = Math.hypot(rw, rh) / 2;
+    const startPx = sx(sp.start.x), startPy = sp.start.y * h;
+    dctx.strokeStyle = drawColor;
+    dctx.lineWidth = 2;
+    dctx.setLineDash([6, 4]);
+    if (sp.type === "rect" || sp.type === "ellipse") {
+      dctx.beginPath();
+      dctx.arc(startPx, startPy, 6, 0, Math.PI * 2);
+      dctx.fillStyle = drawColor;
+      dctx.globalAlpha = 0.5;
+      dctx.fill();
+      dctx.globalAlpha = 1;
+      dctx.stroke();
+    }
+    if (sp.type === "circle") {
+      dctx.beginPath();
+      dctx.arc(cx, cy, Math.max(rad, 4), 0, Math.PI * 2);
+      dctx.stroke();
+    } else if (sp.type === "rect" || sp.type === "ellipse") {
+      if (sp.type === "rect") dctx.strokeRect(px1, py1, rw, rh);
+      else if (sp.type === "ellipse") {
+        dctx.beginPath();
+        dctx.ellipse(cx, cy, rw / 2, rh / 2, 0, 0, Math.PI * 2);
+        dctx.stroke();
+      }
+    } else if (sp.type === "line" || sp.type === "arrow") {
+      dctx.beginPath();
+      dctx.moveTo(sx(sp.start.x), sp.start.y * h);
+      dctx.lineTo(sx(sp.end.x), sp.end.y * h);
+      dctx.stroke();
+      if (sp.type === "arrow") {
+        const dx = sp.end.x - sp.start.x, dy = sp.end.y - sp.start.y;
+        const len = Math.hypot(dx, dy) || 0.001;
+        const ux = dx / len, uy = dy / len;
+        const arr = 0.08;
+        const ax = sp.end.x - ux * arr + uy * arr * 0.5;
+        const ay = sp.end.y - uy * arr - ux * arr * 0.5;
+        const bx = sp.end.x - ux * arr - uy * arr * 0.5;
+        const by = sp.end.y - uy * arr + ux * arr * 0.5;
+        dctx.beginPath();
+        dctx.moveTo(sx(ax), ay * h);
+        dctx.lineTo(sx(sp.end.x), sp.end.y * h);
+        dctx.lineTo(sx(bx), by * h);
+        dctx.stroke();
+      }
+    } else if (sp.type === "triangle") {
+      const x3 = sp.start.x, y3 = sp.end.y;
+      dctx.beginPath();
+      dctx.moveTo(sx(sp.start.x), sp.start.y * h);
+      dctx.lineTo(sx(sp.end.x), sp.end.y * h);
+      dctx.lineTo(sx(x3), y3 * h);
+      dctx.closePath();
+      dctx.stroke();
+    }
+    dctx.setLineDash([]);
+  }
 
   const allStrokes = [...strokes, currentStroke.points.length > 0 ? currentStroke : null].filter(Boolean);
   allStrokes.forEach((stroke) => {
     const pts = stroke.points || stroke;
     const color = stroke.color || drawColor;
+    const lw = stroke.lineWidth ?? defLw;
+    const lwGlow = Math.max(lw * 4, 18);
+    const lwMid = Math.max(lw * 2, 10);
     if (pts.length < 2) return;
     dctx.beginPath();
     dctx.moveTo(sx(pts[0].x), pts[0].y * h);
@@ -719,8 +834,9 @@ function eraseAtPosition(eraseX, eraseY, radius = 0.07) {
   shapes = shapes.filter((sh) => {
     let dx, dy;
     if (sh.type === "circle") { dx = sh.cx - eraseX; dy = sh.cy - eraseY; }
-    else if (sh.type === "rect") { dx = sh.x - eraseX; dy = sh.y - eraseY; }
-    else if (sh.type === "line") { dx = (sh.x1 + sh.x2) / 2 - eraseX; dy = (sh.y1 + sh.y2) / 2 - eraseY; }
+    else if (sh.type === "rect" || sh.type === "ellipse") { dx = (sh.x + sh.w / 2) - eraseX; dy = (sh.y + sh.h / 2) - eraseY; }
+    else if (sh.type === "line" || sh.type === "arrow") { dx = (sh.x1 + sh.x2) / 2 - eraseX; dy = (sh.y1 + sh.y2) / 2 - eraseY; }
+    else if (sh.type === "triangle") { dx = (sh.x1 + sh.x2 + sh.x3) / 3 - eraseX; dy = (sh.y1 + sh.y2 + sh.y3) / 3 - eraseY; }
     else return true;
     return dx * dx + dy * dy > r2;
   });
@@ -728,18 +844,19 @@ function eraseAtPosition(eraseX, eraseY, radius = 0.07) {
   for (const stroke of strokes) {
     const pts = stroke.points || stroke;
     const color = stroke.color || drawColor;
+    const lw = stroke.lineWidth ?? drawLineWidth;
     const segments = [];
     let seg = [];
     for (const pt of pts) {
       const d2 = (pt.x - eraseX) ** 2 + (pt.y - eraseY) ** 2;
       if (d2 < r2) {
-        if (seg.length > 1) segments.push({ points: seg, color });
+        if (seg.length > 1) segments.push({ points: seg, color, lineWidth: lw });
         seg = [];
       } else {
         seg.push(pt);
       }
     }
-    if (seg.length > 1) segments.push({ points: seg, color });
+    if (seg.length > 1) segments.push({ points: seg, color, lineWidth: lw });
     segments.forEach((s) => newStrokes.push(s));
   }
   strokes = newStrokes;
@@ -888,6 +1005,7 @@ function detectLoop() {
       })();
 
       if (overToolbar) {
+        shapeInProgress = null;
         drawToolbar?.classList.add("expanded");
         const { clientX, clientY } = normToClient(cursorPos.x, cursorPos.y, w, h);
         simulateMouseMoveAtPosition(cursorPos.x, cursorPos.y, w, h);
@@ -913,6 +1031,7 @@ function detectLoop() {
         drawToolbar?.classList.remove("expanded");
         fingerLostFrames = 0;
         wasPinching = false;
+        shapeInProgress = null;
         currentStroke = { points: [], color: drawColor };
         window.drawCursor = null;
         eraseAtPosition(twoFingerPos.x, twoFingerPos.y, 0.08);
@@ -920,18 +1039,14 @@ function detectLoop() {
         drawToolbar?.classList.remove("expanded");
         window.drawCursor = cursorPos;
         const isPinch = handLandmarks[handIdx] && isIndexThumbPinch(handLandmarks[handIdx]);
+        const tiCenter = handLandmarks[handIdx] && getThumbIndexSize(handLandmarks[handIdx])?.center;
+        const pinchPos = tiCenter && tiCenter.x >= 0 && tiCenter.x <= 1 && tiCenter.y >= 0 && tiCenter.y <= 1 ? tiCenter : cursorPos;
         if (isPinch) {
           fingerLostFrames = 0;
-          if (drawShape === "circle" || drawShape === "rect" || drawShape === "line") {
-            if (!wasPinching && cursorPos.x >= 0 && cursorPos.x <= 1 && cursorPos.y >= 0 && cursorPos.y <= 1) {
-              const cx = cursorPos.x, cy = cursorPos.y;
-              if (drawShape === "circle") {
-                shapes.push({ type: "circle", cx, cy, r: 0.04, color: drawColor });
-              } else if (drawShape === "rect") {
-                shapes.push({ type: "rect", x: cx, y: cy, w: 0.1, h: 0.06, color: drawColor });
-              } else if (drawShape === "line") {
-                shapes.push({ type: "line", x1: cx - 0.04, y1: cy, x2: cx + 0.04, y2: cy, color: drawColor });
-              }
+          if (["circle","rect","line","ellipse","triangle","arrow"].includes(drawShape)) {
+            if (cursorPos.x >= 0 && cursorPos.x <= 1 && cursorPos.y >= 0 && cursorPos.y <= 1) {
+              if (!shapeInProgress) shapeInProgress = { start: { x: pinchPos.x, y: pinchPos.y }, end: { x: pinchPos.x, y: pinchPos.y }, type: drawShape };
+              else shapeInProgress.end = { x: pinchPos.x, y: pinchPos.y };
             }
           } else {
             const pts = currentStroke.points;
@@ -941,30 +1056,64 @@ function detectLoop() {
             const dist = Math.hypot(dx, dy);
             const maxJump = 0.15;
             if (dist > maxJump && last) {
-              if (pts.length > 1) strokes.push({ points: [...pts], color: currentStroke.color });
+              if (pts.length > 1) strokes.push({ points: [...pts], color: currentStroke.color, lineWidth: currentStroke.lineWidth ?? drawLineWidth });
               currentStroke = { points: [], color: drawColor };
             } else if (cursorPos.x >= 0 && cursorPos.x <= 1 && cursorPos.y >= 0 && cursorPos.y <= 1) {
               if (!last || dist > 0.002) {
                 currentStroke.points.push({ x: cursorPos.x, y: cursorPos.y });
                 currentStroke.color = currentStroke.color || drawColor;
+                currentStroke.lineWidth = currentStroke.lineWidth ?? drawLineWidth;
               }
             }
           }
           wasPinching = true;
         } else {
+          if (shapeInProgress) {
+            const s = shapeInProgress.start, e = shapeInProgress.end;
+            let x1 = Math.min(s.x, e.x), x2 = Math.max(s.x, e.x);
+            let y1 = Math.min(s.y, e.y), y2 = Math.max(s.y, e.y);
+            let w = x2 - x1, h = y2 - y1;
+            const diag = Math.hypot(w, h);
+            const minSize = 0.03;
+            if (diag < minSize) {
+              const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+              const half = minSize / 2;
+              x1 = cx - half; x2 = cx + half; y1 = cy - half; y2 = cy + half;
+              w = minSize; h = minSize;
+            }
+            {
+              const lw = drawLineWidth;
+              const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+              if (shapeInProgress.type === "circle") {
+                shapes.push({ type: "circle", cx, cy, r: Math.max(diag / 2, minSize / 2), color: drawColor, lineWidth: lw });
+              } else if (shapeInProgress.type === "rect") {
+                shapes.push({ type: "rect", x: x1, y: y1, w, h, color: drawColor, lineWidth: lw });
+              } else if (shapeInProgress.type === "line") {
+                shapes.push({ type: "line", x1: s.x, y1: s.y, x2: e.x, y2: e.y, color: drawColor, lineWidth: lw });
+              } else if (shapeInProgress.type === "ellipse") {
+                shapes.push({ type: "ellipse", x: x1, y: y1, w, h, color: drawColor, lineWidth: lw });
+              } else if (shapeInProgress.type === "triangle") {
+                shapes.push({ type: "triangle", x1: s.x, y1: s.y, x2: e.x, y2: e.y, x3: s.x, y3: e.y, color: drawColor, lineWidth: lw });
+              } else if (shapeInProgress.type === "arrow") {
+                shapes.push({ type: "arrow", x1: s.x, y1: s.y, x2: e.x, y2: e.y, color: drawColor, lineWidth: lw });
+              }
+            }
+            shapeInProgress = null;
+          }
           wasPinching = false;
           fingerLostFrames++;
           if (fingerLostFrames >= 2 && currentStroke.points.length > 0) {
-            strokes.push({ points: [...currentStroke.points], color: currentStroke.color || drawColor });
+            strokes.push({ points: [...currentStroke.points], color: currentStroke.color || drawColor, lineWidth: currentStroke.lineWidth ?? drawLineWidth });
             currentStroke = { points: [], color: drawColor };
           }
         }
       } else {
         window.drawCursor = null;
         wasPinching = false;
+        shapeInProgress = null;
         fingerLostFrames++;
         if (fingerLostFrames >= 2 && currentStroke.points.length > 0) {
-          strokes.push({ points: [...currentStroke.points], color: currentStroke.color || drawColor });
+          strokes.push({ points: [...currentStroke.points], color: currentStroke.color || drawColor, lineWidth: currentStroke.lineWidth ?? drawLineWidth });
           currentStroke = { points: [], color: drawColor };
         }
       }
@@ -1334,8 +1483,9 @@ document.querySelectorAll(".color-preset").forEach((b) => {
 drawBtn.addEventListener("click", () => {
   drawMode = !drawMode;
   drawBtn.classList.toggle("active", drawMode);
+  if (drawMode) drawToolbar?.classList.add("expanded");
   if (!drawMode && currentStroke.points.length > 0) {
-    strokes.push({ points: [...currentStroke.points], color: currentStroke.color || drawColor });
+    strokes.push({ points: [...currentStroke.points], color: currentStroke.color || drawColor, lineWidth: currentStroke.lineWidth ?? drawLineWidth });
     currentStroke = { points: [], color: drawColor };
   }
 });

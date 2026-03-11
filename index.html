@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <title>Canlı Hareket Takip Sistemi</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
   <div class="app">
@@ -19,7 +20,7 @@
     <main class="main">
       <section class="camera-section">
         <div class="camera-wrapper" id="cameraWrapper">
-          <div class="draw-toolbar" id="drawToolbar">
+          <div class="draw-toolbar expanded" id="drawToolbar">
             <div class="toolbar-trigger" id="toolbarTrigger" title="Настройки (управление жестами)">⚙</div>
             <div class="toolbar-content" id="toolbarContent">
               <div class="toolbar-row">
@@ -43,12 +44,15 @@
                 </div>
               </div>
               <div class="toolbar-row">
-                <label>Şekil</label>
+                <label>Şekil (7)</label>
                 <div class="shape-btns">
                   <button class="shape-btn active" data-shape="free" title="Serbest">✏️</button>
-                  <button class="shape-btn" data-shape="circle" title="Daire">⭕</button>
-                  <button class="shape-btn" data-shape="rect" title="Dikdörtgen">▢</button>
-                  <button class="shape-btn" data-shape="line" title="Çizgi">📏</button>
+                  <button class="shape-btn" data-shape="rect" title="Прямоугольник">▢</button>
+                  <button class="shape-btn" data-shape="ellipse" title="Эллипс">⬭</button>
+                  <button class="shape-btn" data-shape="circle" title="Круг">⭕</button>
+                  <button class="shape-btn" data-shape="line" title="Линия">📏</button>
+                  <button class="shape-btn" data-shape="arrow" title="Стрелка">➤</button>
+                  <button class="shape-btn" data-shape="triangle" title="Треугольник">△</button>
                 </div>
               </div>
             </div>
@@ -96,6 +100,6 @@
       </section>
     </main>
   </div>
-  <script type="module" src="script.js"></script>
+  <script type="module" src="script.js?v=3"></script>
 </body>
 </html>
