@@ -79,6 +79,16 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   max-height: 100vh;
   aspect-ratio: auto !important;
 }
+.app.canvas-fullscreen .camera-wrapper.pdf-mode .pdf-container,
+.app.canvas-fullscreen .camera-wrapper.pptx-mode .pptx-container {
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+.app.canvas-fullscreen .camera-wrapper.pdf-mode .pdf-page-wrap,
+.app.canvas-fullscreen .camera-wrapper.pptx-mode .pptx-slide-wrap {
+  width: 100%;
+}
 .exit-fullscreen-btn { position: absolute; top: 8px; right: 8px; z-index: 60; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: rgba(0,0,0,0.6); color: #fff; font-size: 1.2rem; cursor: pointer; display: none; }
 .app.canvas-fullscreen .exit-fullscreen-btn { display: flex; align-items: center; justify-content: center; }
 
@@ -210,7 +220,7 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   display: none;
   align-items: center;
   justify-content: center;
-  background: #fff;
+  background: #e8e8ec;
   overflow: hidden;
   z-index: 2;
 }
@@ -242,7 +252,8 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
 
 .camera-wrapper.pdf-mode #output,
 .camera-wrapper.pdf-mode #video,
-.camera-wrapper.pdf-mode .white-sheet-bg {
+.camera-wrapper.pdf-mode .white-sheet-bg,
+.camera-wrapper.pdf-mode #drawCanvas {
   display: none !important;
 }
 
@@ -323,7 +334,7 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   display: none;
   align-items: center;
   justify-content: center;
-  background: #fff;
+  background: #e8e8ec;
   overflow: hidden;
   z-index: 2;
 }
@@ -356,7 +367,8 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
 .camera-wrapper.pptx-mode #output,
 .camera-wrapper.pptx-mode #video,
 .camera-wrapper.pptx-mode .white-sheet-bg,
-.camera-wrapper.pptx-mode .pdf-container {
+.camera-wrapper.pptx-mode .pdf-container,
+.camera-wrapper.pptx-mode #drawCanvas {
   display: none !important;
 }
 

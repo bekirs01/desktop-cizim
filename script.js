@@ -230,6 +230,14 @@ function savePptxPageState() {
   pptxStrokesByPage[pptxPageNum] = pageLayer;
 }
 
+function syncCurrentDocumentPageState() {
+  if (pdfMode && pdfDoc) {
+    pdfStrokesByPage[pdfPageNum] = clonePageLayer(pdfStrokes, pdfShapes);
+  } else if (pptxMode && pptxViewer) {
+    pptxStrokesByPage[pptxPageNum] = clonePageLayer(pptxStrokes, pptxShapes);
+  }
+}
+
 function loadPptxPageState() {
   const saved = pptxStrokesByPage[pptxPageNum];
   pptxStrokes = saved ? (saved.strokes || []).map(cloneStroke) : [];
@@ -377,7 +385,11 @@ function getThumbIndexSize(hand) {
 function normToClient(normX, normY, w, h) {
   const px = MIRROR_CAMERA ? (1 - normX) * w : normX * w;
   const py = normY * h;
-  const rect = output.getBoundingClientRect();
+  const rect = (pdfMode && pdfDrawCanvas)
+    ? pdfDrawCanvas.getBoundingClientRect()
+    : (pptxMode && pptxDrawCanvas)
+      ? pptxDrawCanvas.getBoundingClientRect()
+      : output.getBoundingClientRect();
   return {
     clientX: rect.left + (px / w) * rect.width,
     clientY: rect.top + (py / h) * rect.height
@@ -893,6 +905,23 @@ function isCanvasFullscreenMode() {
   return !!document.fullscreenElement && document.fullscreenElement === app;
 }
 
+function setWrapperAspect(width, height) {
+  if (!cameraWrapper) return;
+  if (!width || !height) return;
+  if (isCanvasFullscreenMode()) {
+    cameraWrapper.style.aspectRatio = "";
+    return;
+  }
+  cameraWrapper.style.aspectRatio = `${width} / ${height}`;
+}
+
+function restoreCameraAspect() {
+  if (!cameraWrapper) return;
+  const w = output?.width || video?.videoWidth || 0;
+  const h = output?.height || video?.videoHeight || 0;
+  if (w > 0 && h > 0) cameraWrapper.style.aspectRatio = `${w} / ${h}`;
+}
+
 // ========== PDF РЕЖИМ ==========
 async function renderPdfPage() {
   if (!pdfDoc || !pdfCanvas || !pdfDrawCanvas || !pdfPageWrap) return;
@@ -902,11 +931,12 @@ async function renderPdfPage() {
   const maxH = container.clientHeight || 600;
   const viewport = page.getViewport({ scale: 1 });
   const scale = isCanvasFullscreenMode()
-    ? Math.max(0.1, Math.min(maxW / viewport.width, maxH / viewport.height))
+    ? Math.max(0.1, maxW / viewport.width)
     : Math.max(0.1, maxW / viewport.width);
   const scaledViewport = page.getViewport({ scale });
   const w = Math.floor(scaledViewport.width);
   const h = Math.floor(scaledViewport.height);
+  setWrapperAspect(w, h);
   pdfCanvas.width = w;
   pdfCanvas.height = h;
   pdfDrawCanvas.width = w;
@@ -1159,17 +1189,13 @@ async function renderPptxSlide() {
   if (!pptxViewer || !pptxCanvas || !pptxDrawCanvas) return;
   const container = pptxContainer;
   const maxW = container?.clientWidth || 800;
-  const maxH = container?.clientHeight || 600;
   const inferred = pptxViewer.getSlideSize?.() || pptxViewer.getPresentationSize?.() || pptxViewer.slideSize || pptxViewer.presentationSize;
   if (inferred && Number.isFinite(inferred.width) && Number.isFinite(inferred.height) && inferred.width > 0 && inferred.height > 0) {
     pptxAspectRatio = inferred.width / inferred.height;
   }
   let targetW = maxW;
   let targetH = Math.max(1, Math.round(targetW / pptxAspectRatio));
-  if (isCanvasFullscreenMode() && targetH > maxH) {
-    targetH = maxH;
-    targetW = Math.max(1, Math.round(targetH * pptxAspectRatio));
-  }
+  setWrapperAspect(targetW, targetH);
   pptxCanvas.width = targetW;
   pptxCanvas.height = targetH;
   pptxDrawCanvas.width = targetW;
@@ -1614,6 +1640,7 @@ function detectLoop() {
         shapes = activeShapes;
         currentStroke = activeCurrentStroke;
       }
+      syncCurrentDocumentPageState();
     } else {
       window.drawCursor = null;
       smoothedCursor = null;
@@ -1901,6 +1928,7 @@ modeCameraBtn?.addEventListener("click", () => {
   modePptxBtn?.classList.remove("active");
   if (pdfUploadGroup) pdfUploadGroup.style.display = "none";
   if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
+  restoreCameraAspect();
   updateDocumentOverlays();
 });
 
@@ -1916,6 +1944,7 @@ modeWhiteSheetBtn?.addEventListener("click", () => {
   modePptxBtn?.classList.remove("active");
   if (pdfUploadGroup) pdfUploadGroup.style.display = "none";
   if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
+  restoreCameraAspect();
   updateDocumentOverlays();
 });
 
@@ -1932,6 +1961,7 @@ modePdfBtn?.addEventListener("click", () => {
   if (pdfUploadGroup) pdfUploadGroup.style.display = "flex";
   if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
   if (pdfDoc) {
+    loadPdfPageState();
     cameraWrapper?.classList.add("pdf-loaded");
     renderPdfPage();
   }
@@ -1951,6 +1981,7 @@ modePptxBtn?.addEventListener("click", () => {
   if (pdfUploadGroup) pdfUploadGroup.style.display = "none";
   if (pptxUploadGroup) pptxUploadGroup.style.display = "flex";
   if (pptxViewer) {
+    loadPptxPageState();
     cameraWrapper?.classList.add("pptx-loaded");
     renderPptxSlide();
   }
@@ -2057,6 +2088,7 @@ clearDrawBtn.addEventListener("click", () => {
     const dctx = drawCanvas.getContext("2d");
     dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
   }
+  syncCurrentDocumentPageState();
 });
 
 objectsBtn.addEventListener("click", () => {
