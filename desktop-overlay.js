@@ -28,27 +28,20 @@ let wasPinching = false;
 let wasToolbarPinch = false;
 let wasTwoFingersClick = false;
 let shapeInProgress = null;
+let smoothedCursor = null;
+let smoothedPinch = null;
+const CURSOR_SMOOTH = 0.55;
 
 function toPx(p, w, h) {
   const x = MIRROR_CAMERA ? (1 - p.x) * w : p.x * w;
   return { x, y: p.y * h };
 }
 
-function isOnlyIndexThumbExtended(hand) {
-  if (!hand || hand.length < 21) return false;
-  const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-  const wrist = hand[0];
-  const idxTip = hand[8], midTip = hand[12], ringTip = hand[16], pinkyTip = hand[20];
-  const distIdx = d(idxTip, wrist), distMid = d(midTip, wrist), distRing = d(ringTip, wrist), distPinky = d(pinkyTip, wrist);
-  return distIdx > 0.06 && distMid < 0.18 && distRing < 0.18 && distPinky < 0.18;
-}
-
 function isIndexThumbPinch(hand) {
   if (!hand || hand.length < 9) return false;
   const idxTip = hand[8], thumbTip = hand[4];
   const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-  if (d(idxTip, thumbTip) >= 0.06) return false;
-  return isOnlyIndexThumbExtended(hand);
+  return d(idxTip, thumbTip) < 0.05;
 }
 
 
@@ -68,10 +61,9 @@ function isIndexFingerExtended(hand) {
 
 function getPinchCursorPosition(hand) {
   if (!hand || hand.length < 9) return null;
+  if (isTwoFingersExtended(hand)) return null;
   const idxTip = hand[8];
-  if (isIndexThumbPinch(hand)) return { x: idxTip.x, y: idxTip.y };
-  if (isIndexFingerExtended(hand) && isOnlyIndexThumbExtended(hand)) return { x: idxTip.x, y: idxTip.y };
-  return null;
+  return { x: idxTip.x, y: idxTip.y };
 }
 
 // ТОЛЬКО полностью выпрямленные указательный и средний (ластик)
@@ -370,6 +362,8 @@ function detectLoop() {
   }
 
   if (twoFingerPos && !cursorPos) {
+    smoothedCursor = null;
+    smoothedPinch = null;
     fingerLostFrames = 0;
     wasPinching = false;
     shapeInProgress = null;
@@ -381,34 +375,50 @@ function detectLoop() {
     window.drawCursor = null;
   } else if (cursorPos) {
     wasTwoFingersClick = false;
-    window.drawCursor = cursorPos;
+    if (!smoothedCursor) smoothedCursor = { x: cursorPos.x, y: cursorPos.y };
+    else {
+      smoothedCursor.x = smoothedCursor.x * (1 - CURSOR_SMOOTH) + cursorPos.x * CURSOR_SMOOTH;
+      smoothedCursor.y = smoothedCursor.y * (1 - CURSOR_SMOOTH) + cursorPos.y * CURSOR_SMOOTH;
+    }
+    window.drawCursor = smoothedCursor;
     const overToolbar = MIRROR_CAMERA ? cursorPos.x > 0.88 : cursorPos.x < 0.12;
     const isPinch = handLandmarks[handIdx] && isIndexThumbPinch(handLandmarks[handIdx]);
     const tiCenter = handLandmarks[handIdx] && getThumbIndexSize(handLandmarks[handIdx])?.center;
-    const pinchPos = tiCenter && tiCenter.x >= 0 && tiCenter.x <= 1 && tiCenter.y >= 0 && tiCenter.y <= 1 ? tiCenter : cursorPos;
+    let pinchPos;
+    if (tiCenter && tiCenter.x >= 0 && tiCenter.x <= 1 && tiCenter.y >= 0 && tiCenter.y <= 1) {
+      if (!smoothedPinch) smoothedPinch = { x: tiCenter.x, y: tiCenter.y };
+      else {
+        smoothedPinch.x = smoothedPinch.x * (1 - CURSOR_SMOOTH) + tiCenter.x * CURSOR_SMOOTH;
+        smoothedPinch.y = smoothedPinch.y * (1 - CURSOR_SMOOTH) + tiCenter.y * CURSOR_SMOOTH;
+      }
+      pinchPos = smoothedPinch;
+    } else {
+      smoothedPinch = null;
+      pinchPos = smoothedCursor;
+    }
     if (isPinch && overToolbar) {
       if (!wasToolbarPinch) { wasToolbarPinch = true; simulateClickAtPosition(cursorPos.x, cursorPos.y, w, h); }
     } else { wasToolbarPinch = false; }
     if (isPinch && !overToolbar) {
       fingerLostFrames = 0;
       if (["circle","rect","line","ellipse","triangle","arrow"].includes(drawShape)) {
-        if (cursorPos.x >= 0 && cursorPos.x <= 1 && cursorPos.y >= 0 && cursorPos.y <= 1) {
+        if (pinchPos && pinchPos.x >= 0 && pinchPos.x <= 1 && pinchPos.y >= 0 && pinchPos.y <= 1) {
           if (!shapeInProgress) shapeInProgress = { start: { x: pinchPos.x, y: pinchPos.y }, end: { x: pinchPos.x, y: pinchPos.y }, type: drawShape };
           else shapeInProgress.end = { x: pinchPos.x, y: pinchPos.y };
         }
       } else {
         const pts = currentStroke.points;
         const last = pts[pts.length - 1];
-        const dx = last ? cursorPos.x - last.x : 0;
-        const dy = last ? cursorPos.y - last.y : 0;
+        const dx = last ? smoothedCursor.x - last.x : 0;
+        const dy = last ? smoothedCursor.y - last.y : 0;
         const dist = Math.hypot(dx, dy);
         const maxJump = 0.15;
         if (dist > maxJump && last) {
           if (pts.length > 1) strokes.push({ points: [...pts], color: currentStroke.color, lineWidth: currentStroke.lineWidth ?? drawLineWidth });
           currentStroke = { points: [], color: drawColor };
-        } else if (cursorPos.x >= 0 && cursorPos.x <= 1 && cursorPos.y >= 0 && cursorPos.y <= 1) {
-          if (!last || dist > 0.002) {
-            currentStroke.points.push({ x: cursorPos.x, y: cursorPos.y });
+        } else if (smoothedCursor.x >= 0 && smoothedCursor.x <= 1 && smoothedCursor.y >= 0 && smoothedCursor.y <= 1) {
+          if (!last || dist > 0.006) {
+            currentStroke.points.push({ x: smoothedCursor.x, y: smoothedCursor.y });
             currentStroke.color = currentStroke.color || drawColor;
             currentStroke.lineWidth = currentStroke.lineWidth ?? drawLineWidth;
           }
@@ -457,6 +467,8 @@ function detectLoop() {
     }
   } else {
     window.drawCursor = null;
+    smoothedCursor = null;
+    smoothedPinch = null;
     wasPinching = false;
     wasToolbarPinch = false;
     shapeInProgress = null;
@@ -532,9 +544,24 @@ async function init() {
     document.getElementById("toolbar").classList.toggle("expanded");
   });
 
-  document.getElementById("toolbarColor").addEventListener("input", (e) => {
-    drawColor = e.target.value;
+  document.querySelectorAll(".color-preset").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const c = btn.dataset.color || "#00ff9f";
+      drawColor = c;
+      document.querySelectorAll(".color-preset").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const tc = document.getElementById("toolbarColor");
+      if (tc) tc.value = c;
+    });
   });
+
+  const toolbarColorEl = document.getElementById("toolbarColor");
+  if (toolbarColorEl) {
+    toolbarColorEl.addEventListener("input", (e) => {
+      drawColor = e.target.value;
+      document.querySelectorAll(".color-preset").forEach((b) => b.classList.remove("active"));
+    });
+  }
 
   document.getElementById("toolbarSize").addEventListener("input", (e) => {
     drawLineWidth = parseInt(e.target.value, 10);
