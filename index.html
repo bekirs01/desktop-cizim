@@ -32,8 +32,14 @@
                   <button type="button" class="color-preset" data-color="#ffd93d" style="background:#ffd93d"></button>
                   <button type="button" class="color-preset" data-color="#ff4757" style="background:#ff4757"></button>
                   <button type="button" class="color-preset" data-color="#ffffff" style="background:#fff;border-color:#888"></button>
+                  <button type="button" class="color-preset" data-color="#9b59b6" style="background:#9b59b6"></button>
+                  <button type="button" class="color-preset" data-color="#1abc9c" style="background:#1abc9c"></button>
+                  <button type="button" class="color-preset" data-color="#e74c3c" style="background:#e74c3c"></button>
+                  <button type="button" class="color-preset" data-color="#3498db" style="background:#3498db"></button>
+                  <button type="button" class="color-preset" data-color="#2ecc71" style="background:#2ecc71"></button>
+                  <button type="button" class="color-preset" data-color="#000000" style="background:#000;border-color:#444"></button>
+                  <input type="color" id="toolbarColor" class="color-picker" value="#00ff9f" title="Tam palet">
                 </div>
-                <input type="color" id="toolbarColor" value="#00ff9f">
               </div>
               <div class="toolbar-row">
                 <label>Kalınlık <span id="toolbarSizeVal">4</span></label>
@@ -77,21 +83,23 @@
         </div>
         </div>
         <div class="controls">
-          <button id="startBtn" class="btn btn-primary">Kamerayı Başlat</button>
-          <button id="stopBtn" class="btn btn-secondary" disabled>Kamerayı Durdur</button>
-          <div class="color-picker-wrap">
-            <label>Renk:</label>
-            <input type="color" id="drawColor" value="#00ff9f" title="Çizim rengi">
+          <div class="controls-group">
+            <button id="startBtn" class="btn btn-primary">Kamerayı Başlat</button>
+            <button id="stopBtn" class="btn btn-secondary" disabled>Kamerayı Durdur</button>
           </div>
           <div class="mode-toggle">
             <button id="modeCameraBtn" class="btn btn-mode active">📷 Kamera</button>
             <button id="modeWhiteSheetBtn" class="btn btn-mode">📄 Beyaz Kağıt</button>
           </div>
-          <button id="drawBtn" class="btn btn-draw" disabled>✏️ Çizim Aç</button>
-          <button id="clearDrawBtn" class="btn btn-draw" disabled>🗑️ Çizimi Sil</button>
-          <button id="objectsBtn" class="btn btn-draw" disabled>🔮 Nesneler Aç</button>
-          <button id="addObjBtn" class="btn btn-draw" disabled>+ Nesne Ekle</button>
-          <button id="removeObjBtn" class="btn btn-draw" disabled>− Nesne Sil</button>
+          <div class="controls-group">
+            <button id="drawBtn" class="btn btn-draw" disabled>✏️ Çizim Aç</button>
+            <button id="clearDrawBtn" class="btn btn-draw" disabled>🗑️ Çizimi Sil</button>
+          </div>
+          <div class="controls-group">
+            <button id="objectsBtn" class="btn btn-draw" disabled>🔮 Nesneler</button>
+            <button id="addObjBtn" class="btn btn-draw" disabled>+</button>
+            <button id="removeObjBtn" class="btn btn-draw" disabled>−</button>
+          </div>
           <label class="skeleton-toggle">
             <input type="checkbox" id="showSkeleton" checked>
             <span>İskelet göster</span>

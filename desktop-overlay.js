@@ -532,9 +532,24 @@ async function init() {
     document.getElementById("toolbar").classList.toggle("expanded");
   });
 
-  document.getElementById("toolbarColor").addEventListener("input", (e) => {
-    drawColor = e.target.value;
+  document.querySelectorAll(".color-preset").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const c = btn.dataset.color || "#00ff9f";
+      drawColor = c;
+      document.querySelectorAll(".color-preset").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const tc = document.getElementById("toolbarColor");
+      if (tc) tc.value = c;
+    });
   });
+
+  const toolbarColorEl = document.getElementById("toolbarColor");
+  if (toolbarColorEl) {
+    toolbarColorEl.addEventListener("input", (e) => {
+      drawColor = e.target.value;
+      document.querySelectorAll(".color-preset").forEach((b) => b.classList.remove("active"));
+    });
+  }
 
   document.getElementById("toolbarSize").addEventListener("input", (e) => {
     drawLineWidth = parseInt(e.target.value, 10);
