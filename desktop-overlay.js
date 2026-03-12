@@ -1,5 +1,5 @@
 /**
- * Masaüstü overlay - el hareketi ile çizim
+ * Оверлей рабочего стола — рисование жестами
  */
 import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/vision_bundle.mjs";
 
@@ -537,7 +537,7 @@ async function init() {
     detectLoop();
   } catch (err) {
     console.error("Kamera hatası:", err);
-    alert("Kamera başlatılamadı. Lütfen izin verin.");
+    alert("Не удалось запустить камеру. Разрешите доступ.");
   }
 
   document.getElementById("toolbarToggle").addEventListener("click", () => {

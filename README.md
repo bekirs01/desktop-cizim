@@ -1,42 +1,42 @@
-# Canlı Hareket Takip Sistemi
+# Система отслеживания движений в реальном времени
 
-Masaüstünde el hareketi ile çizim yapabileceğiniz Electron uygulaması.
+Electron-приложение для рисования жестами на рабочем столе.
 
-## Kurulum
+## Установка
 
 ```bash
 npm install
 ```
 
-## Çalıştırma
+## Запуск
 
-### Electron (Masaüstü Uygulaması)
+### Electron (десктоп)
 ```bash
 npm start
 ```
-Tam ekran şeffaf pencere açılır. Kapatmak için: **Cmd+Shift+Q** (Mac) veya **Ctrl+Shift+Q** (Windows)
+Откроется полноэкранное прозрачное окно. Закрыть: **Cmd+Shift+Q** (Mac) или **Ctrl+Shift+Q** (Windows)
 
-### Web (Tarayıcıda)
+### Web (в браузере)
 ```bash
 npm run web
 ```
-Ardından tarayıcıda **http://localhost:8080** adresine gidin ve `desktop-overlay.html` dosyasını açın.
+Откройте в браузере **http://localhost:8080** и файл `desktop-overlay.html`.
 
-**Not:** Dosyayı doğrudan açmak (file://) çalışmaz. Mutlaka HTTP sunucusu kullanın.
+**Важно:** Открытие по file:// не работает. Используйте HTTP-сервер.
 
-## Özellikler
+## Возможности
 
-- ✅ Gerçek kamera akışı
-- ✅ MediaPipe Hands 21 landmark (tüm parmak boğumları ve uçları)
-- ✅ Pose iskelet çizimi
-- ✅ Face Mesh göz konturu
-- ✅ İşaret parmağı ile çizim modu
-- ✅ Hareket algılama (Türkçe + Rusça)
-- ✅ Sanal nesneleri tutup taşıma
+- ✅ Поток с камеры в реальном времени
+- ✅ MediaPipe Hands 21 landmark (все суставы и кончики пальцев)
+- ✅ Отрисовка скелета позы
+- ✅ Face Mesh контур глаз
+- ✅ Режим рисования указательным пальцем
+- ✅ Распознавание движений (русский)
+- ✅ Захват и перемещение виртуальных объектов
 
-## Kullanım
+## Использование
 
-1. **Kamerayı Başlat** – Kamera izni verin
-2. **Çizim Modu** – İşaret parmağınızı kameraya doğrultup hareket ettirin
-3. **Çizimi Sil** – Tüm çizimleri temizler
-4. Nesneleri 3 parmağınızı birleştirerek tutup taşıyabilirsiniz
+1. **Запустить камеру** — Разрешите доступ к камере
+2. **Режим рисования** — Направьте указательный палец на камеру и двигайте
+3. **Очистить** — Удаляет все рисунки
+4. Объекты можно захватывать и перемещать, соединив 3 пальца

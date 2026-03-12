@@ -1,16 +1,16 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <title>Canlı Hareket Takip Sistemi</title>
+  <title>Система отслеживания движений в реальном времени</title>
   <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
   <div class="app">
     <header class="header">
-      <h1>Canlı Hareket Takip Sistemi</h1>
+      <h1>Система отслеживания движений в реальном времени</h1>
       <div class="header-right">
         <button id="fullscreenBtn" class="btn-icon" title="Полный экран">⛶</button>
         <div class="fps-badge" id="fps">0 FPS</div>
@@ -20,11 +20,11 @@
     <main class="main">
       <section class="camera-section">
         <div class="camera-wrapper" id="cameraWrapper">
-          <div class="draw-toolbar expanded" id="drawToolbar">
+          <div class="draw-toolbar" id="drawToolbar">
             <div class="toolbar-trigger" id="toolbarTrigger" title="Настройки (управление жестами)">⚙</div>
             <div class="toolbar-content" id="toolbarContent">
               <div class="toolbar-row">
-                <label>Renk</label>
+                <label>Цвет</label>
                 <div class="toolbar-colors">
                   <button type="button" class="color-preset active" data-color="#00ff9f" style="background:#00ff9f"></button>
                   <button type="button" class="color-preset" data-color="#ff6b9d" style="background:#ff6b9d"></button>
@@ -38,11 +38,11 @@
                   <button type="button" class="color-preset" data-color="#3498db" style="background:#3498db"></button>
                   <button type="button" class="color-preset" data-color="#2ecc71" style="background:#2ecc71"></button>
                   <button type="button" class="color-preset" data-color="#000000" style="background:#000;border-color:#444"></button>
-                  <input type="color" id="toolbarColor" class="color-picker" value="#00ff9f" title="Tam palet">
+                  <input type="color" id="toolbarColor" class="color-picker" value="#00ff9f" title="Полная палитра">
                 </div>
               </div>
               <div class="toolbar-row">
-                <label>Kalınlık <span id="toolbarSizeVal">4</span></label>
+                <label>Толщина <span id="toolbarSizeVal">4</span></label>
                 <div class="toolbar-size-btns">
                   <button type="button" class="size-btn" data-delta="-1">−</button>
                   <input type="range" id="toolbarSize" min="1" max="20" value="4" step="1">
@@ -50,9 +50,9 @@
                 </div>
               </div>
               <div class="toolbar-row">
-                <label>Şekil (7)</label>
+                <label>Фигуры (7)</label>
                 <div class="shape-btns">
-                  <button class="shape-btn active" data-shape="free" title="Serbest">✏️</button>
+                  <button class="shape-btn active" data-shape="free" title="Свободно">✏️</button>
                   <button class="shape-btn" data-shape="rect" title="Прямоугольник">▢</button>
                   <button class="shape-btn" data-shape="ellipse" title="Эллипс">⬭</button>
                   <button class="shape-btn" data-shape="circle" title="Круг">⭕</button>
@@ -71,59 +71,80 @@
               <canvas id="pdfDrawCanvas"></canvas>
             </div>
           </div>
+          <div class="pptx-container" id="pptxContainer">
+            <div class="pptx-slide-wrap" id="pptxSlideWrap">
+              <canvas id="pptxCanvas"></canvas>
+              <canvas id="pptxDrawCanvas"></canvas>
+            </div>
+          </div>
           <div class="white-sheet-bg" id="whiteSheetBg"></div>
           <canvas id="drawCanvas"></canvas>
           <div class="camera-preview-mini" id="cameraPreviewMini">
             <canvas id="previewCanvas"></canvas>
-            <span class="preview-label">Kamera (arka plan)</span>
+            <span class="preview-label">Камера (фон)</span>
           </div>
           <div class="eye-overlay" id="eyeOverlay"></div>
           <div class="camera-overlay" id="cameraOverlay">
-            <p>Kamerayı başlatmak için butona tıklayın</p>
-            <p class="overlay-hint">İzin istendiğinde "İzin Ver"e tıklayın</p>
+            <p>Нажмите кнопку для запуска камеры</p>
+            <p class="overlay-hint">При запросе разрешения нажмите «Разрешить»</p>
           </div>
           <div class="pdf-overlay" id="pdfOverlay">
-            <p>PDF yüklemek için yukarıdaki "PDF Yükle" butonuna tıklayın</p>
-            <p class="overlay-hint">PDF yüklendikten sonra üzerinde çizim yapabilirsiniz</p>
+            <p>Нажмите «Загрузить PDF» выше для загрузки PDF</p>
+            <p class="overlay-hint">После загрузки PDF можно рисовать поверх</p>
+          </div>
+          <div class="pptx-overlay" id="pptxOverlay">
+            <p>Нажмите «Загрузить презентацию» выше для загрузки</p>
+            <p class="overlay-hint">После загрузки PPTX можно рисовать поверх</p>
           </div>
           <div class="error-message" id="errorMessage"></div>
-          <div class="low-light-warning" id="lowLightWarning">💡 Daha iyi algılama için ışığı artırın</div>
+          <div class="low-light-warning" id="lowLightWarning">💡 Увеличьте освещение для лучшего распознавания</div>
           <div class="gesture-cursor" id="gestureCursor"></div>
           <button id="exitFullscreenBtn" class="exit-fullscreen-btn" title="Выйти (Esc)" style="display:none">✕</button>
         </div>
         </div>
         <div class="controls">
           <div class="controls-group">
-            <button id="startBtn" class="btn btn-primary">Kamerayı Başlat</button>
-            <button id="stopBtn" class="btn btn-secondary" disabled>Kamerayı Durdur</button>
+            <button id="startBtn" class="btn btn-primary">Запустить камеру</button>
+            <button id="stopBtn" class="btn btn-secondary" disabled>Остановить камеру</button>
           </div>
           <div class="controls-group mode-toggle">
-            <button id="modeCameraBtn" class="btn btn-mode active">Kamera</button>
-            <button id="modeWhiteSheetBtn" class="btn btn-mode">Beyaz Kağıt</button>
+            <button id="modeCameraBtn" class="btn btn-mode active">Камера</button>
+            <button id="modeWhiteSheetBtn" class="btn btn-mode">Белый лист</button>
             <button id="modePdfBtn" class="btn btn-mode">PDF</button>
+            <button id="modePptxBtn" class="btn btn-mode">Презентация</button>
           </div>
           <div class="controls-group pdf-upload-group" id="pdfUploadGroup" style="display:none">
             <label class="pdf-upload-zone" id="pdfUploadZone">
               <input type="file" id="pdfFileInput" accept="application/pdf" hidden>
-              <span class="pdf-upload-text">📄 PDF Yükle</span>
+              <span class="pdf-upload-text">📄 Загрузить PDF</span>
             </label>
             <button id="pdfPrevBtn" class="btn btn-secondary btn-small" disabled>◀</button>
             <span id="pdfPageInfo" class="pdf-page-info">-</span>
             <button id="pdfNextBtn" class="btn btn-secondary btn-small" disabled>▶</button>
-            <button id="pdfClearBtn" class="btn btn-draw btn-small" disabled>PDF Kaldır</button>
+            <button id="pdfClearBtn" class="btn btn-draw btn-small" disabled>Удалить PDF</button>
+          </div>
+          <div class="controls-group pptx-upload-group" id="pptxUploadGroup" style="display:none">
+            <label class="pptx-upload-zone" id="pptxUploadZone">
+              <input type="file" id="pptxFileInput" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" hidden>
+              <span class="pptx-upload-text">📊 Загрузить презентацию</span>
+            </label>
+            <button id="pptxPrevBtn" class="btn btn-secondary btn-small" disabled>◀</button>
+            <span id="pptxPageInfo" class="pptx-page-info">-</span>
+            <button id="pptxNextBtn" class="btn btn-secondary btn-small" disabled>▶</button>
+            <button id="pptxClearBtn" class="btn btn-draw btn-small" disabled>Удалить презентацию</button>
           </div>
           <div class="controls-group">
-            <button id="drawBtn" class="btn btn-draw" disabled>Çizim</button>
-            <button id="clearDrawBtn" class="btn btn-draw" disabled>Temizle</button>
+            <button id="drawBtn" class="btn btn-draw" disabled>Рисование</button>
+            <button id="clearDrawBtn" class="btn btn-draw" disabled>Очистить</button>
           </div>
           <div class="controls-group">
-            <button id="objectsBtn" class="btn btn-draw" disabled>Nesneler</button>
+            <button id="objectsBtn" class="btn btn-draw" disabled>Объекты</button>
             <button id="addObjBtn" class="btn btn-draw btn-small" disabled>+</button>
             <button id="removeObjBtn" class="btn btn-draw btn-small" disabled>−</button>
           </div>
           <label class="skeleton-toggle">
             <input type="checkbox" id="showSkeleton" checked>
-            <span>İskelet</span>
+            <span>Скелет</span>
           </label>
         </div>
       </section>

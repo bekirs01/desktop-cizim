@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Masaüstü Çizim</title>
+  <title>Рисование на рабочем столе</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -127,7 +127,7 @@
     <button class="toolbar-toggle" id="toolbarToggle">⚙️</button>
     <div class="toolbar-content">
       <div class="toolbar-row">
-        <label>Renk</label>
+        <label>Цвет</label>
         <div class="toolbar-colors">
           <button type="button" class="color-preset active" data-color="#00ff9f" style="background:#00ff9f"></button>
           <button type="button" class="color-preset" data-color="#ff6b9d" style="background:#ff6b9d"></button>
@@ -141,19 +141,19 @@
           <button type="button" class="color-preset" data-color="#3498db" style="background:#3498db"></button>
           <button type="button" class="color-preset" data-color="#2ecc71" style="background:#2ecc71"></button>
           <button type="button" class="color-preset" data-color="#000000" style="background:#000;border-color:#444"></button>
-          <input type="color" id="toolbarColor" class="color-picker" value="#00ff9f" title="Tam palet">
+          <input type="color" id="toolbarColor" class="color-picker" value="#00ff9f" title="Полная палитра">
         </div>
       </div>
       <div class="toolbar-row">
-        <label>Kalınlık</label>
+        <label>Толщина</label>
         <input type="range" id="toolbarSize" min="1" max="20" value="4">
         <span id="toolbarSizeVal">4</span>
       </div>
       <div class="toolbar-row">
-        <button id="clearBtn" class="clear-btn">🗑️ Temizle</button>
+        <button id="clearBtn" class="clear-btn">🗑️ Очистить</button>
       </div>
       <div class="toolbar-row">
-        <label>Şekil</label>
+        <label>Фигуры</label>
         <div class="shape-btns">
           <button class="shape-btn active" data-shape="free">✏️</button>
           <button class="shape-btn" data-shape="rect">▢</button>

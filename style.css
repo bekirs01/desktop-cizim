@@ -1,6 +1,6 @@
 /* ============================================
-   Canlı Hareket Takip Sistemi - Stil Dosyası
-   Koyu tema, modern, mobil uyumlu
+   Система отслеживания движений - Стили
+   Тёмная тема, современный, мобильная версия
    ============================================ */
 
 :root {
@@ -117,7 +117,7 @@ body.canvas-fullscreen { overflow: hidden !important; height: 100%; position: fi
   min-height: 0;
 }
 
-/* ========== Kamera bölümü ========== */
+/* ========== Секция камеры ========== */
 .camera-section {
   display: flex;
   flex-direction: column;
@@ -138,9 +138,9 @@ body.canvas-fullscreen { overflow: hidden !important; height: 100%; position: fi
   min-width: 0;
 }
 
-/* При активной камере: ширина 100%, высота по пропорциям видео, без обрезки */
+/* При активной камере: заполняет пространство, пропорции = видео */
 .camera-wrapper[data-camera-active="1"] {
-  flex: 0 0 auto;
+  flex: 1 1 0;
   width: 100%;
   min-height: 0;
 }
@@ -153,7 +153,7 @@ body.canvas-fullscreen { overflow: hidden !important; height: 100%; position: fi
   left: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   object-position: center;
 }
 
@@ -304,7 +304,121 @@ body.canvas-fullscreen { overflow: hidden !important; height: 100%; position: fi
   text-align: center;
 }
 
-/* ========== Çizim панель - слева выезжает ========== */
+/* ========== PPTX Modu ========== */
+.pptx-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: #e8e8ec;
+  overflow: auto;
+  z-index: 2;
+}
+
+.pptx-slide-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.pptx-slide-wrap canvas {
+  display: block;
+}
+
+#pptxCanvas {
+  background: #fff;
+}
+
+#pptxDrawCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+.camera-wrapper.pptx-mode .pptx-container {
+  display: flex;
+}
+
+.camera-wrapper.pptx-mode #output,
+.camera-wrapper.pptx-mode #video,
+.camera-wrapper.pptx-mode .white-sheet-bg,
+.camera-wrapper.pptx-mode .pdf-container {
+  display: none !important;
+}
+
+.camera-wrapper.pptx-mode .eye-overlay {
+  opacity: 0;
+}
+
+.camera-wrapper.pptx-mode {
+  min-height: 400px;
+}
+
+.pptx-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 1rem;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.camera-wrapper.pptx-mode .pptx-overlay {
+  display: flex;
+}
+
+.camera-wrapper.pptx-mode.pptx-loaded .pptx-overlay {
+  display: none;
+}
+
+.pptx-upload-group {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.pptx-upload-zone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  background: var(--bg-card);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.pptx-upload-zone:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pptx-page-info {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  min-width: 60px;
+  text-align: center;
+}
+
+/* ========== Панель рисования - слева ========== */
 .draw-toolbar {
   position: absolute;
   top: 0;
@@ -519,7 +633,7 @@ body.canvas-fullscreen { overflow: hidden !important; height: 100%; position: fi
   border-color: var(--accent);
 }
 
-/* Göz durumu overlay - kırmızı/yeşil */
+/* Оверлей состояния глаз — красный/зелёный */
 .eye-overlay {
   position: absolute;
   top: 0;
@@ -612,7 +726,7 @@ body.canvas-fullscreen { overflow: hidden !important; height: 100%; position: fi
   display: block;
 }
 
-/* Kontrol butonları */
+/* Кнопки управления */
 .controls {
   display: flex;
   gap: 0.75rem;
@@ -765,138 +879,4 @@ body.canvas-fullscreen { overflow: hidden !important; height: 100%; position: fi
 .btn-draw.active {
   background: rgba(0, 255, 159, 0.2);
   border-color: var(--accent);
-}
-
-/* ========== Hareket paneli ========== */
-.motion-panel {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.25rem;
-  position: sticky;
-  top: 1.5rem;
-}
-
-.motion-panel h2 {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 1rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-/* Son hareket - büyük başlık */
-.current-motion {
-  min-height: 80px;
-  padding: 1rem;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  margin-bottom: 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-
-.current-motion .placeholder {
-  color: var(--text-secondary);
-  font-size: 0.95rem;
-}
-
-.current-motion .motion-text {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--accent);
-  animation: pulse 0.5s ease;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.current-motion .motion-tr {
-  color: var(--accent);
-}
-
-.current-motion .motion-ru {
-  font-size: 0.95rem;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.current-motion .motion-text.highlight {
-  animation: highlight 0.6s ease;
-}
-
-@keyframes pulse {
-  from { opacity: 0.8; transform: scale(0.98); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-@keyframes highlight {
-  0% { 
-    color: var(--accent); 
-    text-shadow: 0 0 20px var(--accent-glow);
-  }
-  50% { 
-    color: var(--text-primary);
-    text-shadow: 0 0 30px var(--accent-glow);
-  }
-  100% { 
-    color: var(--accent);
-    text-shadow: 0 0 20px var(--accent-glow);
-  }
-}
-
-/* Hareket geçmişi */
-.motion-history h3 {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  margin-bottom: 0.5rem;
-}
-
-.motion-history ul {
-  list-style: none;
-  max-height: 280px;
-  overflow-y: auto;
-}
-
-.motion-history li {
-  padding: 0.5rem 0.75rem;
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border);
-  transition: background var(--transition);
-}
-
-.motion-history li:last-child {
-  border-bottom: none;
-}
-
-.motion-history li:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.motion-history li .time {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  opacity: 0.7;
-  margin-right: 0.5rem;
-}
-
-/* Scrollbar */
-.motion-history ul::-webkit-scrollbar {
-  width: 6px;
-}
-
-.motion-history ul::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
-  border-radius: 3px;
-}
-
-.motion-history ul::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
 }
