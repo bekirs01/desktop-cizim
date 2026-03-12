@@ -10,6 +10,9 @@ import {
   FilesetResolver,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/vision_bundle.mjs";
 
+import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4/build/pdf.mjs";
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4/build/pdf.worker.mjs";
+
 // Model URL'leri
 const POSE_MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
 const FACE_MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
@@ -99,8 +102,21 @@ const motionLogEl = document.getElementById("motionLog");
 const fpsEl = document.getElementById("fps");
 const modeCameraBtn = document.getElementById("modeCameraBtn");
 const modeWhiteSheetBtn = document.getElementById("modeWhiteSheetBtn");
+const modePdfBtn = document.getElementById("modePdfBtn");
 const cameraWrapper = document.getElementById("cameraWrapper");
 const previewCanvas = document.getElementById("previewCanvas");
+const pdfContainer = document.getElementById("pdfContainer");
+const pdfCanvas = document.getElementById("pdfCanvas");
+const pdfDrawCanvas = document.getElementById("pdfDrawCanvas");
+const pdfPageWrap = document.getElementById("pdfPageWrap");
+const pdfFileInput = document.getElementById("pdfFileInput");
+const pdfUploadZone = document.getElementById("pdfUploadZone");
+const pdfUploadGroup = document.getElementById("pdfUploadGroup");
+const pdfOverlay = document.getElementById("pdfOverlay");
+const pdfPrevBtn = document.getElementById("pdfPrevBtn");
+const pdfNextBtn = document.getElementById("pdfNextBtn");
+const pdfPageInfo = document.getElementById("pdfPageInfo");
+const pdfClearBtn = document.getElementById("pdfClearBtn");
 
 // State
 let poseLandmarker = null;
@@ -144,6 +160,16 @@ let cachedEyesClosed = false;
 let cachedHandLandmarks = [];
 let lastStrokesVersion = 0;
 let strokesVersion = 0;
+
+// PDF state
+let pdfMode = false;
+let pdfDoc = null;
+let pdfPageNum = 1;
+let pdfTotalPages = 0;
+let pdfStrokes = [];
+let pdfShapes = [];
+let pdfCurrentStroke = { points: [], color: "#00ff9f" };
+let pdfIsDrawing = false;
 
 const OBJECT_COLORS = ["#00ff9f", "#ff6b9d", "#6b9dff", "#ffd93d", "#6bcb77", "#4d96ff"];
 let objectIdCounter = 0;
@@ -837,6 +863,193 @@ function eraseAtPosition(eraseX, eraseY, radius = 0.07) {
   strokes = newStrokes;
 }
 
+// ========== PDF MODU ==========
+async function renderPdfPage() {
+  if (!pdfDoc || !pdfCanvas || !pdfDrawCanvas || !pdfPageWrap) return;
+  const page = await pdfDoc.getPage(pdfPageNum);
+  const container = pdfContainer;
+  const maxW = container.clientWidth || 800;
+  const maxH = container.clientHeight || 600;
+  const viewport = page.getViewport({ scale: 1 });
+  const scale = Math.min(maxW / viewport.width, maxH / viewport.height, 2);
+  const scaledViewport = page.getViewport({ scale });
+  const w = Math.floor(scaledViewport.width);
+  const h = Math.floor(scaledViewport.height);
+  pdfCanvas.width = w;
+  pdfCanvas.height = h;
+  pdfDrawCanvas.width = w;
+  pdfDrawCanvas.height = h;
+  const ctx = pdfCanvas.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, w, h);
+  await page.render({
+    canvasContext: ctx,
+    viewport: scaledViewport,
+  }).promise;
+  drawStrokesToPdfCanvas(w, h);
+}
+
+function drawStrokesToPdfCanvas(w, h) {
+  if (!pdfDrawCanvas) return;
+  const dctx = pdfDrawCanvas.getContext("2d");
+  dctx.clearRect(0, 0, w, h);
+  const defLw = drawLineWidth || 4;
+  pdfShapes.forEach((sh) => {
+    const color = sh.color || drawColor;
+    const lw = sh.lineWidth ?? defLw;
+    dctx.strokeStyle = color;
+    dctx.lineWidth = lw;
+    dctx.lineCap = "round";
+    dctx.lineJoin = "round";
+    if (sh.type === "circle") {
+      dctx.beginPath();
+      dctx.arc(sh.cx * w, sh.cy * h, sh.r * Math.min(w, h), 0, Math.PI * 2);
+      dctx.stroke();
+    } else if (sh.type === "rect") {
+      dctx.strokeRect(sh.x * w, sh.y * h, sh.w * w, sh.h * h);
+    } else if (sh.type === "line") {
+      dctx.beginPath();
+      dctx.moveTo(sh.x1 * w, sh.y1 * h);
+      dctx.lineTo(sh.x2 * w, sh.y2 * h);
+      dctx.stroke();
+    } else if (sh.type === "ellipse") {
+      const cx = (sh.x + sh.w / 2) * w, cy = (sh.y + sh.h / 2) * h;
+      const rx = (sh.w / 2) * w, ry = (sh.h / 2) * h;
+      dctx.beginPath();
+      dctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      dctx.stroke();
+    } else if (sh.type === "arrow") {
+      const x1 = sh.x1 * w, y1 = sh.y1 * h, x2 = sh.x2 * w, y2 = sh.y2 * h;
+      const dx = x2 - x1, dy = y2 - y1;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      const arrowLen = Math.min(len * 0.3, 20);
+      dctx.beginPath();
+      dctx.moveTo(x1, y1);
+      dctx.lineTo(x2, y2);
+      dctx.moveTo(x2 - ux * arrowLen + uy * arrowLen * 0.4, y2 - uy * arrowLen - ux * arrowLen * 0.4);
+      dctx.lineTo(x2, y2);
+      dctx.lineTo(x2 - ux * arrowLen - uy * arrowLen * 0.4, y2 - uy * arrowLen + ux * arrowLen * 0.4);
+      dctx.stroke();
+    }
+  });
+  const allStrokes = [...pdfStrokes, pdfCurrentStroke.points.length > 0 ? pdfCurrentStroke : null].filter(Boolean);
+  allStrokes.forEach((stroke) => {
+    const pts = stroke.points || stroke;
+    const color = stroke.color || drawColor;
+    const lw = stroke.lineWidth ?? defLw;
+    if (pts.length < 2) return;
+    dctx.beginPath();
+    dctx.moveTo(pts[0].x * w, pts[0].y * h);
+    for (let i = 1; i < pts.length; i++) dctx.lineTo(pts[i].x * w, pts[i].y * h);
+    dctx.strokeStyle = hexToRgba(color, 0.25);
+    dctx.lineWidth = Math.max(lw * 2.5, 12);
+    dctx.stroke();
+    dctx.strokeStyle = color;
+    dctx.lineWidth = lw;
+    dctx.stroke();
+  });
+}
+
+function loadPdfFromFile(file) {
+  if (!file || file.type !== "application/pdf") return;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      pdfDoc = await pdfjsLib.getDocument({ data }).promise;
+      pdfTotalPages = pdfDoc.numPages;
+      pdfPageNum = 1;
+      pdfStrokes = [];
+      pdfShapes = [];
+      pdfCurrentStroke = { points: [], color: drawColor };
+      if (cameraWrapper) {
+        cameraWrapper.classList.add("pdf-loaded");
+      }
+      if (pdfPageInfo) pdfPageInfo.textContent = `1 / ${pdfTotalPages}`;
+      if (pdfPrevBtn) pdfPrevBtn.disabled = pdfTotalPages <= 1;
+      if (pdfNextBtn) pdfNextBtn.disabled = pdfTotalPages <= 1;
+      if (pdfClearBtn) pdfClearBtn.disabled = false;
+      if (drawBtn) drawBtn.disabled = false;
+      if (clearDrawBtn) clearDrawBtn.disabled = false;
+      await renderPdfPage();
+      if (pdfOverlay) pdfOverlay.style.display = "none";
+    } catch (err) {
+      console.error("PDF yükleme hatası:", err);
+      alert("PDF yüklenemedi: " + (err.message || "Bilinmeyen hata"));
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function setupPdfDrawing() {
+  if (!pdfDrawCanvas) return;
+  const getNorm = (e) => {
+    const rect = pdfDrawCanvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+      x: (clientX - rect.left) / rect.width,
+      y: (clientY - rect.top) / rect.height
+    };
+  };
+  const onStart = (e) => {
+    if (!pdfMode || !pdfDoc) return;
+    e.preventDefault();
+    pdfIsDrawing = true;
+    const p = getNorm(e);
+    pdfCurrentStroke = { points: [{ x: p.x, y: p.y }], color: drawColor, lineWidth: drawLineWidth };
+  };
+  const onMove = (e) => {
+    if (!pdfIsDrawing || !pdfCurrentStroke.points.length) return;
+    e.preventDefault();
+    const p = getNorm(e);
+    if (p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1) {
+      pdfCurrentStroke.points.push({ x: p.x, y: p.y });
+      drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+    }
+  };
+  const onEnd = (e) => {
+    if (!pdfIsDrawing) return;
+    e.preventDefault();
+    pdfIsDrawing = false;
+    if (pdfCurrentStroke.points.length > 1) {
+      pdfStrokes.push({ ...pdfCurrentStroke });
+    }
+    pdfCurrentStroke = { points: [], color: drawColor };
+  };
+  pdfDrawCanvas.addEventListener("mousedown", onStart);
+  pdfDrawCanvas.addEventListener("mousemove", onMove);
+  pdfDrawCanvas.addEventListener("mouseup", onEnd);
+  pdfDrawCanvas.addEventListener("mouseleave", onEnd);
+  pdfDrawCanvas.addEventListener("touchstart", onStart, { passive: false });
+  pdfDrawCanvas.addEventListener("touchmove", onMove, { passive: false });
+  pdfDrawCanvas.addEventListener("touchend", onEnd, { passive: false });
+}
+
+function clearPdf() {
+  pdfDoc = null;
+  pdfPageNum = 1;
+  pdfTotalPages = 0;
+  pdfStrokes = [];
+  pdfShapes = [];
+  pdfCurrentStroke = { points: [], color: drawColor };
+  if (cameraWrapper) cameraWrapper.classList.remove("pdf-loaded");
+  if (pdfPageInfo) pdfPageInfo.textContent = "-";
+  if (pdfPrevBtn) pdfPrevBtn.disabled = true;
+  if (pdfNextBtn) pdfNextBtn.disabled = true;
+  if (pdfClearBtn) pdfClearBtn.disabled = true;
+  if (pdfCanvas) {
+    const ctx = pdfCanvas.getContext("2d");
+    ctx.clearRect(0, 0, pdfCanvas.width, pdfCanvas.height);
+  }
+  if (pdfDrawCanvas) {
+    const dctx = pdfDrawCanvas.getContext("2d");
+    dctx.clearRect(0, 0, pdfDrawCanvas.width, pdfDrawCanvas.height);
+  }
+  if (pdfOverlay) pdfOverlay.style.display = "flex";
+}
+
 // ========== ANA DÖNGÜ ==========
 function detectLoop() {
   if (!stream || !video.srcObject) {
@@ -1399,16 +1612,38 @@ document.addEventListener("fullscreenchange", () => {
 
 modeCameraBtn?.addEventListener("click", () => {
   whiteSheetMode = false;
-  cameraWrapper?.classList.remove("white-sheet-mode");
+  pdfMode = false;
+  cameraWrapper?.classList.remove("white-sheet-mode", "pdf-mode", "pdf-loaded");
   modeCameraBtn?.classList.add("active");
   modeWhiteSheetBtn?.classList.remove("active");
+  modePdfBtn?.classList.remove("active");
+  if (pdfUploadGroup) pdfUploadGroup.style.display = "none";
 });
 
 modeWhiteSheetBtn?.addEventListener("click", () => {
   whiteSheetMode = true;
+  pdfMode = false;
+  cameraWrapper?.classList.remove("pdf-mode", "pdf-loaded");
   cameraWrapper?.classList.add("white-sheet-mode");
   modeCameraBtn?.classList.remove("active");
   modeWhiteSheetBtn?.classList.add("active");
+  modePdfBtn?.classList.remove("active");
+  if (pdfUploadGroup) pdfUploadGroup.style.display = "none";
+});
+
+modePdfBtn?.addEventListener("click", () => {
+  whiteSheetMode = false;
+  pdfMode = true;
+  cameraWrapper?.classList.remove("white-sheet-mode");
+  cameraWrapper?.classList.add("pdf-mode");
+  modeCameraBtn?.classList.remove("active");
+  modeWhiteSheetBtn?.classList.remove("active");
+  modePdfBtn?.classList.add("active");
+  if (pdfUploadGroup) pdfUploadGroup.style.display = "flex";
+  if (pdfDoc) {
+    cameraWrapper?.classList.add("pdf-loaded");
+    renderPdfPage();
+  } else if (pdfOverlay) pdfOverlay.style.display = "flex";
 });
 
 showSkeletonCheck.addEventListener("change", () => {
@@ -1476,11 +1711,19 @@ drawBtn.addEventListener("click", () => {
 });
 
 clearDrawBtn.addEventListener("click", () => {
-  strokes = [];
-  shapes = [];
-  currentStroke = { points: [], color: drawColor };
-  const dctx = drawCanvas.getContext("2d");
-  dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+  if (pdfMode && pdfDrawCanvas) {
+    pdfStrokes = [];
+    pdfShapes = [];
+    pdfCurrentStroke = { points: [], color: drawColor };
+    const dctx = pdfDrawCanvas.getContext("2d");
+    dctx.clearRect(0, 0, pdfDrawCanvas.width, pdfDrawCanvas.height);
+  } else {
+    strokes = [];
+    shapes = [];
+    currentStroke = { points: [], color: drawColor };
+    const dctx = drawCanvas.getContext("2d");
+    dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+  }
 });
 
 objectsBtn.addEventListener("click", () => {
@@ -1504,3 +1747,43 @@ removeObjBtn.addEventListener("click", () => {
 
 startBtn.addEventListener("click", startCamera);
 stopBtn.addEventListener("click", stopCamera);
+
+// PDF event listeners
+pdfFileInput?.addEventListener("change", (e) => {
+  const file = e.target.files?.[0];
+  if (file) loadPdfFromFile(file);
+  e.target.value = "";
+});
+
+pdfUploadZone?.addEventListener("click", () => pdfFileInput?.click());
+
+pdfPrevBtn?.addEventListener("click", async () => {
+  if (pdfPageNum <= 1 || !pdfDoc) return;
+  pdfPageNum--;
+  pdfStrokes = [];
+  pdfShapes = [];
+  pdfCurrentStroke = { points: [], color: drawColor };
+  if (pdfPageInfo) pdfPageInfo.textContent = `${pdfPageNum} / ${pdfTotalPages}`;
+  pdfPrevBtn.disabled = pdfPageNum <= 1;
+  pdfNextBtn.disabled = false;
+  await renderPdfPage();
+});
+
+pdfNextBtn?.addEventListener("click", async () => {
+  if (pdfPageNum >= pdfTotalPages || !pdfDoc) return;
+  pdfPageNum++;
+  pdfStrokes = [];
+  pdfShapes = [];
+  pdfCurrentStroke = { points: [], color: drawColor };
+  if (pdfPageInfo) pdfPageInfo.textContent = `${pdfPageNum} / ${pdfTotalPages}`;
+  pdfNextBtn.disabled = pdfPageNum >= pdfTotalPages;
+  pdfPrevBtn.disabled = false;
+  await renderPdfPage();
+});
+
+pdfClearBtn?.addEventListener("click", () => {
+  clearPdf();
+});
+
+// PDF çizim için mouse/touch başlat
+setupPdfDrawing();

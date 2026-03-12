@@ -65,6 +65,12 @@
           </div>
           <video id="video" playsinline style="display:none"></video>
           <canvas id="output"></canvas>
+          <div class="pdf-container" id="pdfContainer">
+            <div class="pdf-page-wrap" id="pdfPageWrap">
+              <canvas id="pdfCanvas"></canvas>
+              <canvas id="pdfDrawCanvas"></canvas>
+            </div>
+          </div>
           <div class="white-sheet-bg" id="whiteSheetBg"></div>
           <canvas id="drawCanvas"></canvas>
           <div class="camera-preview-mini" id="cameraPreviewMini">
@@ -75,6 +81,10 @@
           <div class="camera-overlay" id="cameraOverlay">
             <p>Kamerayı başlatmak için butona tıklayın</p>
             <p class="overlay-hint">İzin istendiğinde "İzin Ver"e tıklayın</p>
+          </div>
+          <div class="pdf-overlay" id="pdfOverlay">
+            <p>PDF yüklemek için yukarıdaki "PDF Yükle" butonuna tıklayın</p>
+            <p class="overlay-hint">PDF yüklendikten sonra üzerinde çizim yapabilirsiniz</p>
           </div>
           <div class="error-message" id="errorMessage"></div>
           <div class="low-light-warning" id="lowLightWarning">💡 Daha iyi algılama için ışığı artırın</div>
@@ -90,6 +100,17 @@
           <div class="controls-group mode-toggle">
             <button id="modeCameraBtn" class="btn btn-mode active">Kamera</button>
             <button id="modeWhiteSheetBtn" class="btn btn-mode">Beyaz Kağıt</button>
+            <button id="modePdfBtn" class="btn btn-mode">PDF</button>
+          </div>
+          <div class="controls-group pdf-upload-group" id="pdfUploadGroup" style="display:none">
+            <label class="pdf-upload-zone" id="pdfUploadZone">
+              <input type="file" id="pdfFileInput" accept="application/pdf" hidden>
+              <span class="pdf-upload-text">📄 PDF Yükle</span>
+            </label>
+            <button id="pdfPrevBtn" class="btn btn-secondary btn-small" disabled>◀</button>
+            <span id="pdfPageInfo" class="pdf-page-info">-</span>
+            <button id="pdfNextBtn" class="btn btn-secondary btn-small" disabled>▶</button>
+            <button id="pdfClearBtn" class="btn btn-draw btn-small" disabled>PDF Kaldır</button>
           </div>
           <div class="controls-group">
             <button id="drawBtn" class="btn btn-draw" disabled>Çizim</button>
@@ -108,6 +129,6 @@
       </section>
     </main>
   </div>
-  <script type="module" src="script.js?v=3"></script>
+  <script type="module" src="script.js?v=4"></script>
 </body>
 </html>
