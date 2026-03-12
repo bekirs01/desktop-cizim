@@ -187,9 +187,88 @@ let pptxStrokesByPage = {};
 let pptxShapesByPage = {};
 let pptxCurrentStroke = { points: [], color: "#00ff9f" };
 let pptxIsDrawing = false;
+let pptxAspectRatio = 16 / 9;
 
 const OBJECT_COLORS = ["#00ff9f", "#ff6b9d", "#6b9dff", "#ffd93d", "#6bcb77", "#4d96ff"];
 let objectIdCounter = 0;
+
+function cloneStroke(stroke) {
+  if (!stroke) return stroke;
+  const points = Array.isArray(stroke.points) ? stroke.points.map((p) => ({ x: p.x, y: p.y })) : [];
+  return { ...stroke, points };
+}
+
+function cloneShape(shape) {
+  return shape ? { ...shape } : shape;
+}
+
+function clonePageLayer(strokesArr = [], shapesArr = []) {
+  return {
+    strokes: strokesArr.map(cloneStroke),
+    shapes: shapesArr.map(cloneShape)
+  };
+}
+
+function savePdfPageState() {
+  if (!pdfDoc) return;
+  const pageLayer = clonePageLayer(pdfStrokes, pdfShapes);
+  if (pdfCurrentStroke.points.length > 1) pageLayer.strokes.push(cloneStroke(pdfCurrentStroke));
+  pdfStrokesByPage[pdfPageNum] = pageLayer;
+}
+
+function loadPdfPageState() {
+  const saved = pdfStrokesByPage[pdfPageNum];
+  pdfStrokes = saved ? (saved.strokes || []).map(cloneStroke) : [];
+  pdfShapes = saved ? (saved.shapes || []).map(cloneShape) : [];
+  pdfCurrentStroke = { points: [], color: drawColor, lineWidth: drawLineWidth };
+}
+
+function savePptxPageState() {
+  if (!pptxViewer) return;
+  const pageLayer = clonePageLayer(pptxStrokes, pptxShapes);
+  if (pptxCurrentStroke.points.length > 1) pageLayer.strokes.push(cloneStroke(pptxCurrentStroke));
+  pptxStrokesByPage[pptxPageNum] = pageLayer;
+}
+
+function loadPptxPageState() {
+  const saved = pptxStrokesByPage[pptxPageNum];
+  pptxStrokes = saved ? (saved.strokes || []).map(cloneStroke) : [];
+  pptxShapes = saved ? (saved.shapes || []).map(cloneShape) : [];
+  pptxCurrentStroke = { points: [], color: drawColor, lineWidth: drawLineWidth };
+}
+
+function eraseLayerAtPosition(strokesArr, shapesArr, eraseX, eraseY, radius = 0.07) {
+  const r2 = radius * radius;
+  const nextShapes = shapesArr.filter((sh) => {
+    let dx, dy;
+    if (sh.type === "circle") { dx = sh.cx - eraseX; dy = sh.cy - eraseY; }
+    else if (sh.type === "rect" || sh.type === "ellipse") { dx = (sh.x + sh.w / 2) - eraseX; dy = (sh.y + sh.h / 2) - eraseY; }
+    else if (sh.type === "line" || sh.type === "arrow") { dx = (sh.x1 + sh.x2) / 2 - eraseX; dy = (sh.y1 + sh.y2) / 2 - eraseY; }
+    else if (sh.type === "triangle") { dx = (sh.x1 + sh.x2 + sh.x3) / 3 - eraseX; dy = (sh.y1 + sh.y2 + sh.y3) / 3 - eraseY; }
+    else return true;
+    return dx * dx + dy * dy > r2;
+  });
+  const nextStrokes = [];
+  for (const stroke of strokesArr) {
+    const pts = stroke.points || stroke;
+    const color = stroke.color || drawColor;
+    const lw = stroke.lineWidth ?? drawLineWidth;
+    const segments = [];
+    let seg = [];
+    for (const pt of pts) {
+      const d2 = (pt.x - eraseX) ** 2 + (pt.y - eraseY) ** 2;
+      if (d2 < r2) {
+        if (seg.length > 1) segments.push({ points: seg, color, lineWidth: lw });
+        seg = [];
+      } else {
+        seg.push(pt);
+      }
+    }
+    if (seg.length > 1) segments.push({ points: seg, color, lineWidth: lw });
+    segments.forEach((s) => nextStrokes.push(s));
+  }
+  return { strokes: nextStrokes, shapes: nextShapes };
+}
 
 function createObject(x, y, r = 0.05) {
   objectIdCounter++;
@@ -778,36 +857,40 @@ function drawStrokesToCanvas(w, h) {
 }
 
 function eraseAtPosition(eraseX, eraseY, radius = 0.07) {
-  const r2 = radius * radius;
-  shapes = shapes.filter((sh) => {
-    let dx, dy;
-    if (sh.type === "circle") { dx = sh.cx - eraseX; dy = sh.cy - eraseY; }
-    else if (sh.type === "rect" || sh.type === "ellipse") { dx = (sh.x + sh.w / 2) - eraseX; dy = (sh.y + sh.h / 2) - eraseY; }
-    else if (sh.type === "line" || sh.type === "arrow") { dx = (sh.x1 + sh.x2) / 2 - eraseX; dy = (sh.y1 + sh.y2) / 2 - eraseY; }
-    else if (sh.type === "triangle") { dx = (sh.x1 + sh.x2 + sh.x3) / 3 - eraseX; dy = (sh.y1 + sh.y2 + sh.y3) / 3 - eraseY; }
-    else return true;
-    return dx * dx + dy * dy > r2;
-  });
-  const newStrokes = [];
-  for (const stroke of strokes) {
-    const pts = stroke.points || stroke;
-    const color = stroke.color || drawColor;
-    const lw = stroke.lineWidth ?? drawLineWidth;
-    const segments = [];
-    let seg = [];
-    for (const pt of pts) {
-      const d2 = (pt.x - eraseX) ** 2 + (pt.y - eraseY) ** 2;
-      if (d2 < r2) {
-        if (seg.length > 1) segments.push({ points: seg, color, lineWidth: lw });
-        seg = [];
-      } else {
-        seg.push(pt);
-      }
-    }
-    if (seg.length > 1) segments.push({ points: seg, color, lineWidth: lw });
-    segments.forEach((s) => newStrokes.push(s));
-  }
-  strokes = newStrokes;
+  const next = eraseLayerAtPosition(strokes, shapes, eraseX, eraseY, radius);
+  strokes = next.strokes;
+  shapes = next.shapes;
+}
+
+function toDocNormX(x) {
+  return MIRROR_CAMERA ? (1 - x) : x;
+}
+
+function drawCursorDot(ctx, w, h, useDocX = false) {
+  if (!window.drawCursor || !drawMode) return;
+  const normX = useDocX ? toDocNormX(window.drawCursor.x) : window.drawCursor.x;
+  const cx = normX * w;
+  const cy = window.drawCursor.y * h;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+  ctx.shadowColor = drawColor;
+  ctx.shadowBlur = 6;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = drawColor;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+function updateDocumentOverlays() {
+  if (pdfOverlay) pdfOverlay.style.display = (pdfMode && !pdfDoc) ? "flex" : "none";
+  if (pptxOverlay) pptxOverlay.style.display = (pptxMode && !pptxViewer) ? "flex" : "none";
+}
+
+function isCanvasFullscreenMode() {
+  const app = document.querySelector(".app");
+  return !!document.fullscreenElement && document.fullscreenElement === app;
 }
 
 // ========== PDF РЕЖИМ ==========
@@ -818,7 +901,9 @@ async function renderPdfPage() {
   const maxW = container.clientWidth || 800;
   const maxH = container.clientHeight || 600;
   const viewport = page.getViewport({ scale: 1 });
-  const scale = Math.min(maxW / viewport.width, maxH / viewport.height, 2);
+  const scale = isCanvasFullscreenMode()
+    ? Math.max(0.1, Math.min(maxW / viewport.width, maxH / viewport.height))
+    : Math.max(0.1, maxW / viewport.width);
   const scaledViewport = page.getViewport({ scale });
   const w = Math.floor(scaledViewport.width);
   const h = Math.floor(scaledViewport.height);
@@ -897,6 +982,7 @@ function drawStrokesToPdfCanvas(w, h) {
     dctx.lineWidth = lw;
     dctx.stroke();
   });
+  drawCursorDot(dctx, w, h, true);
 }
 
 async function loadPdfFromFile(file) {
@@ -920,7 +1006,7 @@ async function loadPdfFromFile(file) {
     if (drawBtn) drawBtn.disabled = false;
     if (clearDrawBtn) clearDrawBtn.disabled = false;
     await renderPdfPage();
-    if (pdfOverlay) pdfOverlay.style.display = "none";
+    updateDocumentOverlays();
   } catch (err) {
     console.error("Ошибка загрузки PDF:", err);
     alert("Не удалось загрузить PDF: " + (err.message || "Неизвестная ошибка"));
@@ -1001,7 +1087,8 @@ function clearPdf() {
   strokes = [];
   shapes = [];
   currentStroke = { points: [], color: drawColor };
-  if (pdfOverlay) pdfOverlay.style.display = "flex";
+  if (pdfFileInput) pdfFileInput.value = "";
+  updateDocumentOverlays();
 }
 
 // ========== PPTX РЕЖИМ ==========
@@ -1065,6 +1152,7 @@ function drawStrokesToPptxCanvas(w, h) {
     dctx.lineWidth = lw;
     dctx.stroke();
   });
+  drawCursorDot(dctx, w, h, true);
 }
 
 async function renderPptxSlide() {
@@ -1072,14 +1160,23 @@ async function renderPptxSlide() {
   const container = pptxContainer;
   const maxW = container?.clientWidth || 800;
   const maxH = container?.clientHeight || 600;
-  pptxCanvas.width = maxW;
-  pptxCanvas.height = maxH;
-  pptxDrawCanvas.width = maxW;
-  pptxDrawCanvas.height = maxH;
+  const inferred = pptxViewer.getSlideSize?.() || pptxViewer.getPresentationSize?.() || pptxViewer.slideSize || pptxViewer.presentationSize;
+  if (inferred && Number.isFinite(inferred.width) && Number.isFinite(inferred.height) && inferred.width > 0 && inferred.height > 0) {
+    pptxAspectRatio = inferred.width / inferred.height;
+  }
+  let targetW = maxW;
+  let targetH = Math.max(1, Math.round(targetW / pptxAspectRatio));
+  if (isCanvasFullscreenMode() && targetH > maxH) {
+    targetH = maxH;
+    targetW = Math.max(1, Math.round(targetH * pptxAspectRatio));
+  }
+  pptxCanvas.width = targetW;
+  pptxCanvas.height = targetH;
+  pptxDrawCanvas.width = targetW;
+  pptxDrawCanvas.height = targetH;
   await pptxViewer.goToSlide(pptxPageNum - 1);
   await pptxViewer.render();
-  pptxDrawCanvas.width = pptxDrawCanvas.width;
-  drawStrokesToPptxCanvas(maxW, maxH);
+  drawStrokesToPptxCanvas(targetW, targetH);
 }
 
 async function loadPptxFromFile(file) {
@@ -1112,7 +1209,7 @@ async function loadPptxFromFile(file) {
     if (drawBtn) drawBtn.disabled = false;
     if (clearDrawBtn) clearDrawBtn.disabled = false;
     await renderPptxSlide();
-    if (pptxOverlay) pptxOverlay.style.display = "none";
+    updateDocumentOverlays();
   } catch (err) {
     console.error("Ошибка загрузки PPTX:", err);
     alert("Не удалось загрузить презентацию: " + (err.message || "Неизвестная ошибка"));
@@ -1160,6 +1257,9 @@ function setupPptxDrawing() {
 }
 
 function clearPptx() {
+  try {
+    pptxViewer?.dispose?.();
+  } catch (_) {}
   pptxViewer = null;
   pptxPageNum = 1;
   pptxTotalPages = 0;
@@ -1188,7 +1288,8 @@ function clearPptx() {
   strokes = [];
   shapes = [];
   currentStroke = { points: [], color: drawColor };
-  if (pptxOverlay) pptxOverlay.style.display = "flex";
+  if (pptxFileInput) pptxFileInput.value = "";
+  updateDocumentOverlays();
 }
 
 // ========== ОСНОВНОЙ ЦИКЛ ==========
@@ -1307,6 +1408,22 @@ function detectLoop() {
 
     // 5. Çizim / Silgi - pinch ile çizim (işaret+başparmak), imleç göster
     if (drawMode && handLandmarker) {
+      let activeStrokes = strokes;
+      let activeShapes = shapes;
+      let activeCurrentStroke = currentStroke;
+      let activeRedraw = () => drawStrokesToCanvas(w, h);
+
+      if (pdfMode && pdfDoc) {
+        activeStrokes = pdfStrokes;
+        activeShapes = pdfShapes;
+        activeCurrentStroke = pdfCurrentStroke;
+        activeRedraw = () => drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+      } else if (pptxMode && pptxViewer) {
+        activeStrokes = pptxStrokes;
+        activeShapes = pptxShapes;
+        activeCurrentStroke = pptxCurrentStroke;
+        activeRedraw = () => drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+      }
       let cursorPos = null;
       let twoFingerPos = null;
       let handIdx = -1;
@@ -1372,11 +1489,17 @@ function detectLoop() {
         fingerLostFrames = 0;
         wasPinching = false;
         shapeInProgress = null;
-        currentStroke = { points: [], color: drawColor };
-        window.drawCursor = null;
+        activeCurrentStroke = { points: [], color: drawColor };
+        const eraseHand = handLandmarks[twoFingerHandIdx];
+        const eraseTip = eraseHand && eraseHand[8];
+        window.drawCursor = eraseTip ? { x: eraseTip.x, y: eraseTip.y } : { x: twoFingerPos.x, y: twoFingerPos.y };
         smoothedCursor = null;
         smoothedPinch = null;
-        eraseAtPosition(twoFingerPos.x, twoFingerPos.y, 0.08);
+        const eraseX = (pdfMode && pdfDoc) || (pptxMode && pptxViewer) ? toDocNormX(twoFingerPos.x) : twoFingerPos.x;
+        const erased = eraseLayerAtPosition(activeStrokes, activeShapes, eraseX, twoFingerPos.y, 0.08);
+        activeStrokes = erased.strokes;
+        activeShapes = erased.shapes;
+        activeRedraw();
       } else if (cursorPos) {
         drawToolbar?.classList.remove("expanded");
         if (!smoothedCursor) smoothedCursor = { x: cursorPos.x, y: cursorPos.y };
@@ -1401,26 +1524,28 @@ function detectLoop() {
         }
         if (isPinch) {
           fingerLostFrames = 0;
+          const drawCursorX = (pdfMode && pdfDoc) || (pptxMode && pptxViewer) ? toDocNormX(smoothedCursor.x) : smoothedCursor.x;
+          const drawPinchX = (pdfMode && pdfDoc) || (pptxMode && pptxViewer) ? toDocNormX(pinchPos.x) : pinchPos.x;
           if (["circle","rect","line","ellipse","triangle","arrow"].includes(drawShape)) {
-            if (pinchPos && pinchPos.x >= 0 && pinchPos.x <= 1 && pinchPos.y >= 0 && pinchPos.y <= 1) {
-              if (!shapeInProgress) shapeInProgress = { start: { x: pinchPos.x, y: pinchPos.y }, end: { x: pinchPos.x, y: pinchPos.y }, type: drawShape };
-              else shapeInProgress.end = { x: pinchPos.x, y: pinchPos.y };
+            if (pinchPos && drawPinchX >= 0 && drawPinchX <= 1 && pinchPos.y >= 0 && pinchPos.y <= 1) {
+              if (!shapeInProgress) shapeInProgress = { start: { x: drawPinchX, y: pinchPos.y }, end: { x: drawPinchX, y: pinchPos.y }, type: drawShape };
+              else shapeInProgress.end = { x: drawPinchX, y: pinchPos.y };
             }
           } else {
-            const pts = currentStroke.points;
+            const pts = activeCurrentStroke.points;
             const last = pts[pts.length - 1];
-            const dx = last ? smoothedCursor.x - last.x : 0;
+            const dx = last ? drawCursorX - last.x : 0;
             const dy = last ? smoothedCursor.y - last.y : 0;
             const dist = Math.hypot(dx, dy);
             const maxJump = 0.15;
             if (dist > maxJump && last) {
-              if (pts.length > 1) strokes.push({ points: [...pts], color: currentStroke.color, lineWidth: currentStroke.lineWidth ?? drawLineWidth });
-              currentStroke = { points: [], color: drawColor };
-            } else if (smoothedCursor.x >= 0 && smoothedCursor.x <= 1 && smoothedCursor.y >= 0 && smoothedCursor.y <= 1) {
+              if (pts.length > 1) activeStrokes.push({ points: [...pts], color: activeCurrentStroke.color, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth });
+              activeCurrentStroke = { points: [], color: drawColor };
+            } else if (drawCursorX >= 0 && drawCursorX <= 1 && smoothedCursor.y >= 0 && smoothedCursor.y <= 1) {
               if (!last || dist > 0.006) {
-                currentStroke.points.push({ x: smoothedCursor.x, y: smoothedCursor.y });
-                currentStroke.color = currentStroke.color || drawColor;
-                currentStroke.lineWidth = currentStroke.lineWidth ?? drawLineWidth;
+                activeCurrentStroke.points.push({ x: drawCursorX, y: smoothedCursor.y });
+                activeCurrentStroke.color = activeCurrentStroke.color || drawColor;
+                activeCurrentStroke.lineWidth = activeCurrentStroke.lineWidth ?? drawLineWidth;
               }
             }
           }
@@ -1443,26 +1568,26 @@ function detectLoop() {
               const lw = drawLineWidth;
               const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
               if (shapeInProgress.type === "circle") {
-                shapes.push({ type: "circle", cx, cy, r: Math.max(diag / 2, minSize / 2), color: drawColor, lineWidth: lw });
+                activeShapes.push({ type: "circle", cx, cy, r: Math.max(diag / 2, minSize / 2), color: drawColor, lineWidth: lw });
               } else if (shapeInProgress.type === "rect") {
-                shapes.push({ type: "rect", x: x1, y: y1, w, h, color: drawColor, lineWidth: lw });
+                activeShapes.push({ type: "rect", x: x1, y: y1, w, h, color: drawColor, lineWidth: lw });
               } else if (shapeInProgress.type === "line") {
-                shapes.push({ type: "line", x1: s.x, y1: s.y, x2: e.x, y2: e.y, color: drawColor, lineWidth: lw });
+                activeShapes.push({ type: "line", x1: s.x, y1: s.y, x2: e.x, y2: e.y, color: drawColor, lineWidth: lw });
               } else if (shapeInProgress.type === "ellipse") {
-                shapes.push({ type: "ellipse", x: x1, y: y1, w, h, color: drawColor, lineWidth: lw });
+                activeShapes.push({ type: "ellipse", x: x1, y: y1, w, h, color: drawColor, lineWidth: lw });
               } else if (shapeInProgress.type === "triangle") {
-                shapes.push({ type: "triangle", x1: s.x, y1: s.y, x2: e.x, y2: e.y, x3: s.x, y3: e.y, color: drawColor, lineWidth: lw });
+                activeShapes.push({ type: "triangle", x1: s.x, y1: s.y, x2: e.x, y2: e.y, x3: s.x, y3: e.y, color: drawColor, lineWidth: lw });
               } else if (shapeInProgress.type === "arrow") {
-                shapes.push({ type: "arrow", x1: s.x, y1: s.y, x2: e.x, y2: e.y, color: drawColor, lineWidth: lw });
+                activeShapes.push({ type: "arrow", x1: s.x, y1: s.y, x2: e.x, y2: e.y, color: drawColor, lineWidth: lw });
               }
             }
             shapeInProgress = null;
           }
           wasPinching = false;
           fingerLostFrames++;
-          if (fingerLostFrames >= 2 && currentStroke.points.length > 0) {
-            strokes.push({ points: [...currentStroke.points], color: currentStroke.color || drawColor, lineWidth: currentStroke.lineWidth ?? drawLineWidth });
-            currentStroke = { points: [], color: drawColor };
+          if (fingerLostFrames >= 2 && activeCurrentStroke.points.length > 0) {
+            activeStrokes.push({ points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth });
+            activeCurrentStroke = { points: [], color: drawColor };
           }
         }
       } else {
@@ -1470,10 +1595,24 @@ function detectLoop() {
         wasPinching = false;
         shapeInProgress = null;
         fingerLostFrames++;
-        if (fingerLostFrames >= 2 && currentStroke.points.length > 0) {
-          strokes.push({ points: [...currentStroke.points], color: currentStroke.color || drawColor, lineWidth: currentStroke.lineWidth ?? drawLineWidth });
-          currentStroke = { points: [], color: drawColor };
+        if (fingerLostFrames >= 2 && activeCurrentStroke.points.length > 0) {
+          activeStrokes.push({ points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth });
+          activeCurrentStroke = { points: [], color: drawColor };
         }
+      }
+
+      if (pdfMode && pdfDoc) {
+        pdfStrokes = activeStrokes;
+        pdfShapes = activeShapes;
+        pdfCurrentStroke = activeCurrentStroke;
+      } else if (pptxMode && pptxViewer) {
+        pptxStrokes = activeStrokes;
+        pptxShapes = activeShapes;
+        pptxCurrentStroke = activeCurrentStroke;
+      } else {
+        strokes = activeStrokes;
+        shapes = activeShapes;
+        currentStroke = activeCurrentStroke;
       }
     } else {
       window.drawCursor = null;
@@ -1481,7 +1620,9 @@ function detectLoop() {
       smoothedPinch = null;
       updateGestureCursor(0, 0, false);
     }
-    drawStrokesToCanvas(w, h);
+    if (pdfMode && pdfDoc) drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+    else if (pptxMode && pptxViewer) drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+    else drawStrokesToCanvas(w, h);
 
     if (whiteSheetMode && previewCanvas && stream) {
       const pw = 120, ph = 90;
@@ -1730,12 +1871,8 @@ function toggleCanvasFullscreen() {
     return;
   }
   app?.classList.add("canvas-fullscreen");
-  document.body.classList.add("canvas-fullscreen");
-  document.documentElement.classList.add("canvas-fullscreen");
-  document.documentElement.requestFullscreen?.().catch(() => {
+  app?.requestFullscreen?.().catch(() => {
     app?.classList.remove("canvas-fullscreen");
-    document.body.classList.remove("canvas-fullscreen");
-    document.documentElement.classList.remove("canvas-fullscreen");
   });
 }
 fullscreenBtn?.addEventListener("click", toggleCanvasFullscreen);
@@ -1749,9 +1886,8 @@ document.addEventListener("keydown", (e) => {
 document.addEventListener("fullscreenchange", () => {
   if (!document.fullscreenElement) {
     document.querySelector(".app")?.classList.remove("canvas-fullscreen");
-    document.body.classList.remove("canvas-fullscreen");
-    document.documentElement.classList.remove("canvas-fullscreen");
   }
+  scheduleDocRefitStable();
 });
 
 modeCameraBtn?.addEventListener("click", () => {
@@ -1765,6 +1901,7 @@ modeCameraBtn?.addEventListener("click", () => {
   modePptxBtn?.classList.remove("active");
   if (pdfUploadGroup) pdfUploadGroup.style.display = "none";
   if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
+  updateDocumentOverlays();
 });
 
 modeWhiteSheetBtn?.addEventListener("click", () => {
@@ -1779,6 +1916,7 @@ modeWhiteSheetBtn?.addEventListener("click", () => {
   modePptxBtn?.classList.remove("active");
   if (pdfUploadGroup) pdfUploadGroup.style.display = "none";
   if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
+  updateDocumentOverlays();
 });
 
 modePdfBtn?.addEventListener("click", () => {
@@ -1796,7 +1934,8 @@ modePdfBtn?.addEventListener("click", () => {
   if (pdfDoc) {
     cameraWrapper?.classList.add("pdf-loaded");
     renderPdfPage();
-  } else if (pdfOverlay) pdfOverlay.style.display = "flex";
+  }
+  updateDocumentOverlays();
 });
 
 modePptxBtn?.addEventListener("click", () => {
@@ -1814,7 +1953,8 @@ modePptxBtn?.addEventListener("click", () => {
   if (pptxViewer) {
     cameraWrapper?.classList.add("pptx-loaded");
     renderPptxSlide();
-  } else if (pptxOverlay) pptxOverlay.style.display = "flex";
+  }
+  updateDocumentOverlays();
 });
 
 showSkeletonCheck.addEventListener("change", () => {
@@ -1827,7 +1967,9 @@ toolbarTrigger?.addEventListener("click", () => {
 
 toolbarColor?.addEventListener("input", () => {
   drawColor = toolbarColor.value;
-  currentStroke.color = drawColor;
+  if (pdfMode && pdfDoc) pdfCurrentStroke.color = drawColor;
+  else if (pptxMode && pptxViewer) pptxCurrentStroke.color = drawColor;
+  else currentStroke.color = drawColor;
   document.querySelectorAll(".color-preset").forEach((b) => b.classList.remove("active"));
 });
 
@@ -1848,7 +1990,9 @@ document.querySelectorAll(".color-preset").forEach((btn) => {
   btn.addEventListener("click", () => {
     const c = btn.dataset.color || "#00ff9f";
     drawColor = c;
-    currentStroke.color = c;
+    if (pdfMode && pdfDoc) pdfCurrentStroke.color = c;
+    else if (pptxMode && pptxViewer) pptxCurrentStroke.color = c;
+    else currentStroke.color = c;
     document.querySelectorAll(".color-preset").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     if (toolbarColor) toolbarColor.value = c;
@@ -1875,9 +2019,19 @@ drawBtn.addEventListener("click", () => {
   drawMode = !drawMode;
   drawBtn.classList.toggle("active", drawMode);
   if (drawMode) drawToolbar?.classList.add("expanded");
-  if (!drawMode && currentStroke.points.length > 0) {
-    strokes.push({ points: [...currentStroke.points], color: currentStroke.color || drawColor, lineWidth: currentStroke.lineWidth ?? drawLineWidth });
-    currentStroke = { points: [], color: drawColor };
+  if (!drawMode) {
+    if (pdfMode && pdfDoc && pdfCurrentStroke.points.length > 0) {
+      pdfStrokes.push({ points: [...pdfCurrentStroke.points], color: pdfCurrentStroke.color || drawColor, lineWidth: pdfCurrentStroke.lineWidth ?? drawLineWidth });
+      pdfCurrentStroke = { points: [], color: drawColor };
+      drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+    } else if (pptxMode && pptxViewer && pptxCurrentStroke.points.length > 0) {
+      pptxStrokes.push({ points: [...pptxCurrentStroke.points], color: pptxCurrentStroke.color || drawColor, lineWidth: pptxCurrentStroke.lineWidth ?? drawLineWidth });
+      pptxCurrentStroke = { points: [], color: drawColor };
+      drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+    } else if (currentStroke.points.length > 0) {
+      strokes.push({ points: [...currentStroke.points], color: currentStroke.color || drawColor, lineWidth: currentStroke.lineWidth ?? drawLineWidth });
+      currentStroke = { points: [], color: drawColor };
+    }
   }
 });
 
@@ -1936,15 +2090,9 @@ pdfFileInput?.addEventListener("change", (e) => {
 
 pdfPrevBtn?.addEventListener("click", async () => {
   if (pdfPageNum <= 1 || !pdfDoc) return;
-  pdfStrokesByPage[pdfPageNum] = { strokes: [...pdfStrokes], shapes: [...pdfShapes] };
-  if (pdfCurrentStroke.points.length > 1) {
-    pdfStrokesByPage[pdfPageNum].strokes.push({ ...pdfCurrentStroke });
-  }
+  savePdfPageState();
   pdfPageNum--;
-  const saved = pdfStrokesByPage[pdfPageNum];
-  pdfStrokes = saved ? [...(saved.strokes || [])] : [];
-  pdfShapes = saved ? [...(saved.shapes || [])] : [];
-  pdfCurrentStroke = { points: [], color: drawColor };
+  loadPdfPageState();
   if (pdfPageInfo) pdfPageInfo.textContent = `${pdfPageNum} / ${pdfTotalPages}`;
   pdfPrevBtn.disabled = pdfPageNum <= 1;
   pdfNextBtn.disabled = false;
@@ -1953,15 +2101,9 @@ pdfPrevBtn?.addEventListener("click", async () => {
 
 pdfNextBtn?.addEventListener("click", async () => {
   if (pdfPageNum >= pdfTotalPages || !pdfDoc) return;
-  pdfStrokesByPage[pdfPageNum] = { strokes: [...pdfStrokes], shapes: [...pdfShapes] };
-  if (pdfCurrentStroke.points.length > 1) {
-    pdfStrokesByPage[pdfPageNum].strokes.push({ ...pdfCurrentStroke });
-  }
+  savePdfPageState();
   pdfPageNum++;
-  const saved = pdfStrokesByPage[pdfPageNum];
-  pdfStrokes = saved ? [...(saved.strokes || [])] : [];
-  pdfShapes = saved ? [...(saved.shapes || [])] : [];
-  pdfCurrentStroke = { points: [], color: drawColor };
+  loadPdfPageState();
   if (pdfPageInfo) pdfPageInfo.textContent = `${pdfPageNum} / ${pdfTotalPages}`;
   pdfNextBtn.disabled = pdfPageNum >= pdfTotalPages;
   pdfPrevBtn.disabled = false;
@@ -1980,15 +2122,9 @@ pptxFileInput?.addEventListener("change", (e) => {
 
 pptxPrevBtn?.addEventListener("click", async () => {
   if (pptxPageNum <= 1 || !pptxViewer) return;
-  pptxStrokesByPage[pptxPageNum] = { strokes: [...pptxStrokes], shapes: [...pptxShapes] };
-  if (pptxCurrentStroke.points.length > 1) {
-    pptxStrokesByPage[pptxPageNum].strokes.push({ ...pptxCurrentStroke });
-  }
+  savePptxPageState();
   pptxPageNum--;
-  const saved = pptxStrokesByPage[pptxPageNum];
-  pptxStrokes = saved ? [...(saved.strokes || [])] : [];
-  pptxShapes = saved ? [...(saved.shapes || [])] : [];
-  pptxCurrentStroke = { points: [], color: drawColor };
+  loadPptxPageState();
   if (pptxPageInfo) pptxPageInfo.textContent = `${pptxPageNum} / ${pptxTotalPages}`;
   pptxPrevBtn.disabled = pptxPageNum <= 1;
   pptxNextBtn.disabled = false;
@@ -1997,15 +2133,9 @@ pptxPrevBtn?.addEventListener("click", async () => {
 
 pptxNextBtn?.addEventListener("click", async () => {
   if (pptxPageNum >= pptxTotalPages || !pptxViewer) return;
-  pptxStrokesByPage[pptxPageNum] = { strokes: [...pptxStrokes], shapes: [...pptxShapes] };
-  if (pptxCurrentStroke.points.length > 1) {
-    pptxStrokesByPage[pptxPageNum].strokes.push({ ...pptxCurrentStroke });
-  }
+  savePptxPageState();
   pptxPageNum++;
-  const saved = pptxStrokesByPage[pptxPageNum];
-  pptxStrokes = saved ? [...(saved.strokes || [])] : [];
-  pptxShapes = saved ? [...(saved.shapes || [])] : [];
-  pptxCurrentStroke = { points: [], color: drawColor };
+  loadPptxPageState();
   if (pptxPageInfo) pptxPageInfo.textContent = `${pptxPageNum} / ${pptxTotalPages}`;
   pptxNextBtn.disabled = pptxPageNum >= pptxTotalPages;
   pptxPrevBtn.disabled = false;
@@ -2015,6 +2145,30 @@ pptxNextBtn?.addEventListener("click", async () => {
 pptxClearBtn?.addEventListener("click", () => {
   clearPptx();
 });
+
+let docRefitRaf = null;
+function scheduleDocRefit() {
+  if (docRefitRaf) cancelAnimationFrame(docRefitRaf);
+  docRefitRaf = requestAnimationFrame(async () => {
+    docRefitRaf = null;
+    if (pdfMode && pdfDoc) {
+      await renderPdfPage();
+    } else if (pptxMode && pptxViewer) {
+      await renderPptxSlide();
+    }
+  });
+}
+
+function scheduleDocRefitStable() {
+  scheduleDocRefit();
+  setTimeout(() => scheduleDocRefit(), 120);
+}
+
+window.addEventListener("resize", scheduleDocRefit);
+if (window.ResizeObserver && cameraWrapper) {
+  const observer = new ResizeObserver(() => scheduleDocRefit());
+  observer.observe(cameraWrapper);
+}
 
 setupPdfDrawing();
 setupPptxDrawing();
