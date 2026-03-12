@@ -500,6 +500,19 @@ body.canvas-fullscreen { overflow: hidden !important; height: 100%; position: fi
   flex-wrap: wrap;
   align-items: center;
   flex-shrink: 0;
+  padding: 0.5rem 0;
+}
+
+.controls-group {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.btn-small {
+  padding: 0.5rem 0.75rem !important;
+  min-width: 36px;
+  font-size: 1.1rem !important;
 }
 
 .mode-tabs {
@@ -550,38 +563,15 @@ body.canvas-fullscreen { overflow: hidden !important; height: 100%; position: fi
   cursor: pointer;
 }
 
-.color-picker-wrap {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.color-picker-wrap label {
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-}
-
-.color-picker-wrap input[type="color"] {
-  width: 36px;
-  height: 36px;
-  padding: 2px;
-  border: 2px solid var(--border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  background: var(--bg-secondary);
-}
-
-.color-picker-wrap input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
-.color-picker-wrap input[type="color"]::-webkit-color-swatch { border-radius: 4px; }
-
 .btn {
-  padding: 0.75rem 1.5rem;
-  font-size: 1rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
   font-weight: 600;
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all var(--transition);
+  white-space: nowrap;
 }
 
 .btn:disabled {

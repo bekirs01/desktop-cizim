@@ -77,24 +77,26 @@
         </div>
         </div>
         <div class="controls">
-          <button id="startBtn" class="btn btn-primary">Kamerayı Başlat</button>
-          <button id="stopBtn" class="btn btn-secondary" disabled>Kamerayı Durdur</button>
-          <div class="color-picker-wrap">
-            <label>Renk:</label>
-            <input type="color" id="drawColor" value="#00ff9f" title="Çizim rengi">
+          <div class="controls-group">
+            <button id="startBtn" class="btn btn-primary">Kamerayı Başlat</button>
+            <button id="stopBtn" class="btn btn-secondary" disabled>Kamerayı Durdur</button>
           </div>
-          <div class="mode-toggle">
-            <button id="modeCameraBtn" class="btn btn-mode active">📷 Kamera</button>
-            <button id="modeWhiteSheetBtn" class="btn btn-mode">📄 Beyaz Kağıt</button>
+          <div class="controls-group mode-toggle">
+            <button id="modeCameraBtn" class="btn btn-mode active">Kamera</button>
+            <button id="modeWhiteSheetBtn" class="btn btn-mode">Beyaz Kağıt</button>
           </div>
-          <button id="drawBtn" class="btn btn-draw" disabled>✏️ Çizim Aç</button>
-          <button id="clearDrawBtn" class="btn btn-draw" disabled>🗑️ Çizimi Sil</button>
-          <button id="objectsBtn" class="btn btn-draw" disabled>🔮 Nesneler Aç</button>
-          <button id="addObjBtn" class="btn btn-draw" disabled>+ Nesne Ekle</button>
-          <button id="removeObjBtn" class="btn btn-draw" disabled>− Nesne Sil</button>
+          <div class="controls-group">
+            <button id="drawBtn" class="btn btn-draw" disabled>Çizim</button>
+            <button id="clearDrawBtn" class="btn btn-draw" disabled>Temizle</button>
+          </div>
+          <div class="controls-group">
+            <button id="objectsBtn" class="btn btn-draw" disabled>Nesneler</button>
+            <button id="addObjBtn" class="btn btn-draw btn-small" disabled>+</button>
+            <button id="removeObjBtn" class="btn btn-draw btn-small" disabled>−</button>
+          </div>
           <label class="skeleton-toggle">
             <input type="checkbox" id="showSkeleton" checked>
-            <span>İskelet göster</span>
+            <span>İskelet</span>
           </label>
         </div>
       </section>

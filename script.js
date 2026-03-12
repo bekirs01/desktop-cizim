@@ -49,9 +49,8 @@ const DEBOUNCE_MS = 600;
 const MIN_VIS = 0.25;
 const MIRROR_CAMERA = true;
 
-// Оптимизация FPS для слабых устройств (поставь true если лагает)
 const PERFORMANCE_MODE = true;
-const DETECT_EVERY_N_FRAMES = PERFORMANCE_MODE ? 2 : 1; // 2 = детекция раз в 2 кадра (~30 FPS)
+const DETECT_EVERY_N_FRAMES = PERFORMANCE_MODE ? 2 : 1;
 const VIDEO_WIDTH = PERFORMANCE_MODE ? 1280 : 1920;
 const VIDEO_HEIGHT = PERFORMANCE_MODE ? 720 : 1080;
 
@@ -84,7 +83,6 @@ const startBtn = document.getElementById("startBtn");
 const stopBtn = document.getElementById("stopBtn");
 const drawBtn = document.getElementById("drawBtn");
 const clearDrawBtn = document.getElementById("clearDrawBtn");
-const drawColorInput = document.getElementById("drawColor");
 const drawToolbar = document.getElementById("drawToolbar");
 const toolbarTrigger = document.getElementById("toolbarTrigger");
 const toolbarContent = document.getElementById("toolbarContent");
@@ -138,10 +136,11 @@ let showSkeleton = true;
 let whiteSheetMode = false;
 let wasToolbarPinch = false;
 let shapeInProgress = null; // { center, size, type } — pinch+drag для размера фигуры
-// Кэш для throttled detection (переиспользуем при пропуске кадров)
 let cachedLm = null;
 let cachedEyesClosed = false;
 let cachedHandLandmarks = [];
+let lastStrokesVersion = 0;
+let strokesVersion = 0;
 
 const OBJECT_COLORS = ["#00ff9f", "#ff6b9d", "#6b9dff", "#ffd93d", "#6bcb77", "#4d96ff"];
 let objectIdCounter = 0;
@@ -200,18 +199,14 @@ function drawHandLandmarks(ctx, hands, w, h) {
         ctx.stroke();
       }
     });
-    // Her parmak boğumu ve ucu - belirgin noktalar
     hand.forEach((p, i) => {
       if (!p) return;
       const pt = toPx(p, w, h);
       const isTip = [4, 8, 12, 16, 20].includes(i);
       ctx.fillStyle = getFingerColor(i);
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, isTip ? 10 : 6, 0, Math.PI * 2);
+      ctx.arc(pt.x, pt.y, isTip ? 7 : 4, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.9)";
-      ctx.lineWidth = 2;
-      ctx.stroke();
     });
   });
 }
@@ -329,10 +324,8 @@ function isIndexFingerExtended(hand) {
 function drawPoseSkeleton(ctx, lm, w, h) {
   if (!lm || lm.length < 29) return;
   ctx.strokeStyle = "#00ff9f";
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 3;
   ctx.lineCap = "round";
-  ctx.shadowColor = "rgba(0,255,159,0.5)";
-  ctx.shadowBlur = 6;
   POSE_CONNECTIONS.forEach(([i, j]) => {
     const a = lm[i], b = lm[j];
     const va = a?.visibility ?? 1, vb = b?.visibility ?? 1;
@@ -344,13 +337,12 @@ function drawPoseSkeleton(ctx, lm, w, h) {
       ctx.stroke();
     }
   });
-  ctx.shadowBlur = 0;
   ctx.fillStyle = "#00ff9f";
-  lm.forEach((p, i) => {
+  lm.forEach((p) => {
     if ((p?.visibility ?? 1) > MIN_VIS) {
       const pt = toPx(p, w, h);
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
+      ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
       ctx.fill();
     }
   });
@@ -774,40 +766,21 @@ function drawStrokesToCanvas(w, h) {
   }
 
   const allStrokes = [...strokes, currentStroke.points.length > 0 ? currentStroke : null].filter(Boolean);
+  dctx.lineCap = "round";
+  dctx.lineJoin = "round";
   allStrokes.forEach((stroke) => {
     const pts = stroke.points || stroke;
     const color = stroke.color || drawColor;
     const lw = stroke.lineWidth ?? defLw;
-    const lwGlow = Math.max(lw * 4, 18);
-    const lwMid = Math.max(lw * 2, 10);
     if (pts.length < 2) return;
     dctx.beginPath();
     dctx.moveTo(sx(pts[0].x), pts[0].y * h);
-    for (let i = 1; i < pts.length; i++) {
-      dctx.lineTo(sx(pts[i].x), pts[i].y * h);
-    }
-
-    const rgba = hexToRgba(color, 0.15);
-    const rgba2 = hexToRgba(color, 0.4);
-    dctx.strokeStyle = rgba;
-    dctx.lineWidth = lwGlow;
-    dctx.lineCap = "round";
-    dctx.lineJoin = "round";
+    for (let i = 1; i < pts.length; i++) dctx.lineTo(sx(pts[i].x), pts[i].y * h);
+    dctx.strokeStyle = hexToRgba(color, 0.25);
+    dctx.lineWidth = Math.max(lw * 2.5, 12);
     dctx.stroke();
-
-    dctx.strokeStyle = rgba2;
-    dctx.lineWidth = lwMid;
-    dctx.stroke();
-
     dctx.strokeStyle = color;
     dctx.lineWidth = lw;
-    dctx.shadowColor = color;
-    dctx.shadowBlur = 12;
-    dctx.stroke();
-
-    dctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
-    dctx.lineWidth = 1.5;
-    dctx.shadowBlur = 0;
     dctx.stroke();
   });
 
@@ -887,8 +860,8 @@ function detectLoop() {
   const dt = Math.min((t - lastVideoTime) / 1000, 0.05);
   lastVideoTime = t;
 
-  // При рисовании/объектах — детекция каждый кадр для точного отслеживания пальцев
-  const shouldDetect = (drawMode || objectsMode) || (frameCount % DETECT_EVERY_N_FRAMES) === 0;
+  const drawModeHandOnly = drawMode;
+  const shouldDetect = drawModeHandOnly || (frameCount % DETECT_EVERY_N_FRAMES) === 0;
 
   // 1. Video çiz - ayna modu (beyaz kağıt modunda output gizli)
   if (MIRROR_CAMERA) {
@@ -904,9 +877,9 @@ function detectLoop() {
     let lm, handLandmarks;
 
     if (shouldDetect) {
-      // 2. Pose (her zaman algıla, çizim showSkeleton'a bağlı)
+      // 2. Pose — пропускаем в режиме рисования (только рука нужна)
       lm = null;
-      if (poseLandmarker) {
+      if (!drawModeHandOnly && poseLandmarker) {
         const poseRes = poseLandmarker.detectForVideo(video, t);
         if (poseRes.landmarks?.length > 0) {
           lowLightWarning.classList.remove("visible");
@@ -921,8 +894,8 @@ function detectLoop() {
         }
       }
 
-      // 3. Yüz / Göz
-      if (faceLandmarker) {
+      // 3. Yüz / Göz — пропускаем в режиме рисования
+      if (!drawModeHandOnly && faceLandmarker) {
         try {
           const faceRes = faceLandmarker.detectForVideo(video, t);
           if (faceRes.faceLandmarks?.length > 0) {
@@ -943,7 +916,7 @@ function detectLoop() {
           const handRes = handLandmarker.detectForVideo(video, t);
           handLandmarks = handRes.landmarks || [];
           cachedHandLandmarks = handLandmarks;
-          if (showSkeleton) drawHandLandmarks(ctx, handLandmarks, w, h);
+          if (showSkeleton && !drawModeHandOnly) drawHandLandmarks(ctx, handLandmarks, w, h);
         } catch (_) {}
       }
     } else {
@@ -951,7 +924,7 @@ function detectLoop() {
       window.eyesClosed = cachedEyesClosed;
       handLandmarks = cachedHandLandmarks || [];
       if (lm && showSkeleton) drawPoseSkeleton(ctx, lm, w, h);
-      if (handLandmarks?.length && showSkeleton) drawHandLandmarks(ctx, handLandmarks, w, h);
+      if (handLandmarks?.length && showSkeleton && !drawModeHandOnly) drawHandLandmarks(ctx, handLandmarks, w, h);
     }
 
     if (objectsMode) {
@@ -1261,7 +1234,7 @@ async function startCamera() {
         try {
           const vision = await FilesetResolver.forVisionTasks(WASM);
           poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-            baseOptions: { modelAssetPath: POSE_MODEL },
+            baseOptions: { modelAssetPath: POSE_MODEL, delegate: "GPU" },
             runningMode: "VIDEO",
             numPoses: 1,
             minPoseDetectionConfidence: 0.4,
@@ -1269,18 +1242,18 @@ async function startCamera() {
             minTrackingConfidence: 0.25,
           });
           faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-            baseOptions: { modelAssetPath: FACE_MODEL },
+            baseOptions: { modelAssetPath: FACE_MODEL, delegate: "GPU" },
             runningMode: "VIDEO",
             numFaces: 1,
             outputFaceBlendshapes: true,
           });
           handLandmarker = await HandLandmarker.createFromOptions(vision, {
-            baseOptions: { modelAssetPath: HAND_MODEL },
+            baseOptions: { modelAssetPath: HAND_MODEL, delegate: "GPU" },
             runningMode: "VIDEO",
-            numHands: 2,
-            minHandDetectionConfidence: 0.2,
-            minHandPresenceConfidence: 0.2,
-            minTrackingConfidence: 0.2,
+            numHands: 1,
+            minHandDetectionConfidence: 0.3,
+            minHandPresenceConfidence: 0.3,
+            minTrackingConfidence: 0.3,
           });
         } catch (modelErr) {
           console.error("Model yükleme:", modelErr);
@@ -1420,14 +1393,6 @@ showSkeletonCheck.addEventListener("change", () => {
   showSkeleton = showSkeletonCheck.checked;
 });
 
-if (drawColorInput) {
-  drawColorInput.addEventListener("input", () => {
-    drawColor = drawColorInput.value;
-    currentStroke.color = drawColor;
-    if (toolbarColor) toolbarColor.value = drawColor;
-  });
-}
-
 toolbarTrigger?.addEventListener("click", () => {
   drawToolbar?.classList.toggle("expanded");
 });
@@ -1435,7 +1400,6 @@ toolbarTrigger?.addEventListener("click", () => {
 toolbarColor?.addEventListener("input", () => {
   drawColor = toolbarColor.value;
   currentStroke.color = drawColor;
-  if (drawColorInput) drawColorInput.value = drawColor;
   document.querySelectorAll(".color-preset").forEach((b) => b.classList.remove("active"));
 });
 
@@ -1457,10 +1421,9 @@ document.querySelectorAll(".color-preset").forEach((btn) => {
     const c = btn.dataset.color || "#00ff9f";
     drawColor = c;
     currentStroke.color = c;
-    if (toolbarColor) toolbarColor.value = c;
-    if (drawColorInput) drawColorInput.value = c;
     document.querySelectorAll(".color-preset").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
+    if (toolbarColor) toolbarColor.value = c;
   });
 });
 
@@ -1474,8 +1437,8 @@ document.querySelectorAll(".size-btn").forEach((btn) => {
   });
 });
 
-if (toolbarColor) toolbarColor.value = drawColor;
 if (toolbarSizeVal) toolbarSizeVal.textContent = drawLineWidth;
+if (toolbarColor) toolbarColor.value = drawColor;
 document.querySelectorAll(".color-preset").forEach((b) => {
   b.classList.toggle("active", (b.dataset.color || "").toLowerCase() === drawColor.toLowerCase());
 });
