@@ -4,9 +4,16 @@
   "description": "Рисование жестами на рабочем столе",
   "main": "electron-main.js",
   "scripts": {
-    "start": "electron .",
-    "desktop": "node_modules/electron/dist/Electron.app/Contents/MacOS/Electron .",
-    "web": "npx --yes serve -l 8080"
+    "start": "serve . -l ${PORT:-3000}",
+    "desktop": "electron .",
+    "electron": "electron .",
+    "web": "serve -l 8080",
+    "dev": "serve -l 3457",
+    "tunnel": "npx --yes localtunnel --port 3457",
+    "share": "npx --yes concurrently -n dev,tunnel -c blue,green \"serve -l 3457\" \"npx --yes localtunnel --port 3457\""
+  },
+  "engines": {
+    "node": ">=18"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.3",
@@ -14,6 +21,7 @@
   },
   "dependencies": {
     "@nut-tree-fork/nut-js": "^4.2.6",
-    "robotjs": "^0.6.0"
+    "robotjs": "^0.6.0",
+    "serve": "^14.2.2"
   }
 }

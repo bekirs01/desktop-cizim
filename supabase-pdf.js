@@ -2,7 +2,7 @@
  * PDF'i Supabase Storage'a yükleyip veritabanına kaydeder
  * supabase-config.js'te URL ve KEY doldurulmalı
  */
-import { supabase } from "./supabase-config.js";
+import { supabase, getShareBaseUrl } from "./supabase-config.js";
 
 export async function uploadPdfToSupabase(file, onSuccess, onError) {
   if (!supabase) {
@@ -34,7 +34,7 @@ export async function uploadPdfToSupabase(file, onSuccess, onError) {
     });
     if (dbErr) throw new Error("Veritabanı: " + (dbErr.message || "Kayıt hatası"));
 
-    const link = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, "")}view.html?id=${shareId}`;
+    const link = `${getShareBaseUrl()}/index.html?id=${shareId}`;
     onSuccess?.(link);
     return { shareId, link };
   } catch (err) {

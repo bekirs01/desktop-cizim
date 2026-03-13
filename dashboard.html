@@ -79,10 +79,18 @@
       </div>
 
       <div class="link-open-section">
+        <label class="link-open-label">🌐 URL для друзей (без деплоя)</label>
+        <p class="link-open-hint">Запустите <code>npm run share</code> — появится публичный URL (например https://xxx.loca.lt). Вставьте его сюда. Или укажите IP (192.168.x.x) если друг в той же сети.</p>
+        <div class="link-open-row">
+          <input type="text" id="shareBaseUrlInput" class="link-open-input" placeholder="https://xxx.loca.lt или http://192.168.1.5:3457">
+          <button type="button" id="saveShareUrlBtn" class="btn btn-secondary">Сохранить</button>
+        </div>
+      </div>
+      <div class="link-open-section">
         <label class="link-open-label">🔗 Ссылка на PDF (совместное рисование)</label>
         <p class="link-open-hint">Вставьте ссылку — откроется PDF с камерой. Вы и ваш друг сможете рисовать вместе в реальном времени.</p>
         <div class="link-open-row">
-          <input type="text" id="pdfLinkInput" class="link-open-input" placeholder="https://...view.html?id=xxx или только id">
+          <input type="text" id="pdfLinkInput" class="link-open-input" placeholder="https://...index.html?id=xxx или только id">
           <button type="button" id="openLinkBtn" class="btn btn-primary">Открыть</button>
         </div>
       </div>

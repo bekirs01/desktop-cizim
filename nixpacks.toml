@@ -1,0 +1,9 @@
+# Railway / Nixpacks config for static site
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = ["npm install --ignore-scripts"]
+
+[start]
+cmd = "npx serve . -l ${PORT:-3000}"

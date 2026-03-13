@@ -28,6 +28,35 @@ const uploadZone = document.getElementById("uploadZone");
 const logoutBtn = document.getElementById("logoutBtn");
 const pdfLinkInput = document.getElementById("pdfLinkInput");
 const openLinkBtn = document.getElementById("openLinkBtn");
+const shareBaseUrlInput = document.getElementById("shareBaseUrlInput");
+const saveShareUrlBtn = document.getElementById("saveShareUrlBtn");
+
+// shareUrl query param ile otomatik kaydet (npm run share sonrası)
+const urlParams = new URLSearchParams(window.location.search);
+const shareUrlParam = urlParams.get("shareUrl");
+if (shareUrlParam && shareUrlParam.startsWith("http")) {
+  localStorage.setItem("shareBaseUrl", shareUrlParam.replace(/\/$/, ""));
+  window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+}
+// Tünel URL'inden açıldıysa (localhost değilse) otomatik kaydet
+if (!window.location.hostname.match(/^localhost$|^127\.0\.0\.1$/)) {
+  const origin = window.location.origin;
+  if (origin.startsWith("http")) {
+    localStorage.setItem("shareBaseUrl", origin);
+  }
+}
+
+if (shareBaseUrlInput) shareBaseUrlInput.value = localStorage.getItem("shareBaseUrl") || "";
+saveShareUrlBtn?.addEventListener("click", () => {
+  const url = shareBaseUrlInput?.value?.trim() || "";
+  if (url) {
+    localStorage.setItem("shareBaseUrl", url.replace(/\/$/, ""));
+    alert("Сохранено. Теперь скопированные ссылки будут использовать этот URL.");
+  } else {
+    localStorage.removeItem("shareBaseUrl");
+    alert("Сброшено. Будут использоваться текущий адрес (localhost).");
+  }
+});
 
 function extractShareIdFromLink(str) {
   if (!str || typeof str !== "string") return null;

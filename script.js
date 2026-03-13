@@ -13,7 +13,7 @@ import {
 import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4/build/pdf.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4/build/pdf.worker.mjs";
 
-import { supabase } from "./supabase-config.js";
+import { supabase, getShareBaseUrl } from "./supabase-config.js";
 import { uploadPdfToSupabase } from "./supabase-pdf.js";
 import { savePageStrokes, deleteStrokesForPage, fetchStrokes, subscribeStrokes } from "./supabase-strokes.js";
 
@@ -122,6 +122,9 @@ const pdfNextBtn = document.getElementById("pdfNextBtn");
 const pdfPageInfo = document.getElementById("pdfPageInfo");
 const pdfClearBtn = document.getElementById("pdfClearBtn");
 const pdfCopyLinkBtn = document.getElementById("pdfCopyLinkBtn");
+const shareUrlRow = document.getElementById("shareUrlRow");
+const shareUrlInput = document.getElementById("shareUrlInput");
+const shareUrlSaveBtn = document.getElementById("shareUrlSaveBtn");
 const pptxContainer = document.getElementById("pptxContainer");
 const pptxCanvas = document.getElementById("pptxCanvas");
 const pptxDrawCanvas = document.getElementById("pptxDrawCanvas");
@@ -1086,9 +1089,15 @@ async function loadPdfFromShareToken(shareToken) {
     if (drawBtn) drawBtn.disabled = false;
     if (clearDrawBtn) clearDrawBtn.disabled = false;
     if (pdfCopyLinkBtn) {
-      pdfCopyLinkBtn.dataset.link = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, "")}view.html?id=${shareToken}`;
+      const base = getShareBaseUrl();
+      pdfCopyLinkBtn.dataset.link = `${base}/index.html?id=${shareToken}`;
       pdfCopyLinkBtn.style.display = "inline-flex";
       pdfCopyLinkBtn.disabled = false;
+      const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(base);
+      if (shareUrlRow) {
+        shareUrlRow.style.display = isLocalhost ? "flex" : "none";
+        if (shareUrlInput) shareUrlInput.value = localStorage.getItem("shareBaseUrl") || "";
+      }
     }
     pdfMode = true;
     whiteSheetMode = false;
@@ -2355,6 +2364,11 @@ pdfFileInput?.addEventListener("change", async (e) => {
     pdfCopyLinkBtn.dataset.link = result.link;
     pdfCopyLinkBtn.style.display = "inline-flex";
     pdfCopyLinkBtn.disabled = false;
+    const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(result.link);
+    if (shareUrlRow && isLocalhost) {
+      shareUrlRow.style.display = "flex";
+      if (shareUrlInput) shareUrlInput.value = localStorage.getItem("shareBaseUrl") || "";
+    }
     if (errorMessage) {
       errorMessage.textContent = "PDF kaydedildi. Çizimler anlık kaydediliyor.";
       errorMessage.style.color = "var(--accent)";
@@ -2402,9 +2416,29 @@ document.getElementById("zoomOutBtn")?.addEventListener("click", () => {
   renderPdfPage();
 });
 
+shareUrlSaveBtn?.addEventListener("click", () => {
+  const url = shareUrlInput?.value?.trim() || "";
+  if (url && url.startsWith("http")) {
+    localStorage.setItem("shareBaseUrl", url.replace(/\/$/, ""));
+    if (pdfCopyLinkBtn?.dataset?.link) {
+      const id = (pdfCopyLinkBtn.dataset.link.match(/[?&]id=([^&]+)/) || [])[1];
+      if (id) pdfCopyLinkBtn.dataset.link = `${url.replace(/\/$/, "")}/index.html?id=${id}`;
+    }
+    if (shareUrlRow) shareUrlRow.style.display = "none";
+  } else {
+    localStorage.removeItem("shareBaseUrl");
+  }
+});
+
 pdfCopyLinkBtn?.addEventListener("click", async () => {
   const link = pdfCopyLinkBtn?.dataset?.link;
   if (!link) return;
+  const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(link);
+  if (isLocalhost) {
+    alert("Bu link localhost — arkadaşın açamaz.\n\nÖnce yukarıdaki alana tünel URL'ini gir (npm run share sonrası çıkan https://xxx.loca.lt) ve OK'a bas.");
+    if (shareUrlRow) shareUrlRow.style.display = "flex";
+    return;
+  }
   try {
     await navigator.clipboard.writeText(link);
     const orig = pdfCopyLinkBtn.textContent;

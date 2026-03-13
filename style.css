@@ -335,6 +335,26 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   text-align: center;
 }
 
+.share-url-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1;
+  min-width: 200px;
+}
+.share-url-input {
+  flex: 1;
+  min-width: 140px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+.share-url-input:focus { outline: none; border-color: var(--accent); }
+.share-url-input::placeholder { color: var(--text-secondary); opacity: 0.8; }
+
 /* ========== PPTX Modu ========== */
 .pptx-container {
   position: absolute;

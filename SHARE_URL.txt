@@ -1,0 +1,18 @@
+========================================
+  PAYLAŞIM AKTİF - Arkadaşın bu linki açabilir
+========================================
+
+Tünel URL: https://big-streets-juggle.loca.lt
+
+Dashboard (giriş yap): https://big-streets-juggle.loca.lt/dashboard.html
+Login: https://big-streets-juggle.loca.lt/login.html
+
+Bu sayfayı tünel URL'inden açtığında shareBaseUrl otomatik kaydedilir.
+PDF linklerini kopyaladığında arkadaşın erişebilir.
+
+Lokal: http://localhost:3457
+
+========================================
+Not: npm run share arka planda çalışıyor.
+Terminali kapatma - tünel açık kalmalı.
+========================================
