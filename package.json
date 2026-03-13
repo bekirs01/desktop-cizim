@@ -4,7 +4,7 @@
   "description": "Рисование жестами на рабочем столе",
   "main": "electron-main.js",
   "scripts": {
-    "start": "serve . -l ${PORT:-3000}",
+    "start": "node server.js",
     "desktop": "electron .",
     "electron": "electron .",
     "web": "serve -l 8080",

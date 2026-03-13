@@ -6,4 +6,4 @@ nixPkgs = ["nodejs_20"]
 cmds = ["npm install --ignore-scripts"]
 
 [start]
-cmd = "npx serve . -l ${PORT:-3000}"
+cmd = "node server.js"
