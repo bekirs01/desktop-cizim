@@ -100,20 +100,27 @@ export async function deleteStrokesForPage(shareToken, pageNum) {
   await supabase.from("pdf_page_strokes").delete().eq("share_token", shareToken).eq("page_num", pageNum);
 }
 
-/** Gerçek zamanlı: Sayfa güncellendiğinde tetiklenir - anlık senkron (sayfa yenilemeden) */
+/** Gerçek zamanlı: postgres_changes + broadcast (anlık senkron) */
 export function subscribeStrokes(shareToken, onUpdate) {
-  if (!supabase) return () => {};
-  const channel = supabase
-    .channel(`pdf_page_strokes:${shareToken}`)
+  if (!supabase) return { unsubscribe: () => {}, broadcast: () => {} };
+  const channel = supabase.channel(`pdf_page_strokes:${shareToken}`);
+  channel
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "pdf_page_strokes", filter: `share_token=eq.${shareToken}` },
-      (payload) => {
-        if (payload) onUpdate?.(payload);
-      }
+      (payload) => { if (payload) onUpdate?.(payload); }
     )
+    .on("broadcast", { event: "stroke" }, (msg) => {
+      const { pageNum, strokes } = msg?.payload || msg || {};
+      if (pageNum != null && strokes) onUpdate?.({ new: { page_num: pageNum, share_token: shareToken, strokes } });
+    })
     .subscribe((status) => {
       if (status === "CHANNEL_ERROR") console.warn("[Realtime] Bağlantı hatası - SUPABASE_REALTIME_ENABLE.sql çalıştırdın mı?");
     });
-  return () => supabase.removeChannel(channel);
+  return {
+    unsubscribe: () => supabase.removeChannel(channel),
+    broadcast: (pageNum, strokes) => {
+      channel.send({ type: "broadcast", event: "stroke", payload: { pageNum, strokes } });
+    },
+  };
 }

@@ -205,6 +205,7 @@ let pdfZoomScale = 1;
 let pdfIsDrawing = false;
 let currentPdfShareToken = null;
 let pdfRealtimeUnsubscribe = null;
+let pdfRealtimeBroadcast = null;
 
 // PPTX state
 let pptxMode = false;
@@ -244,6 +245,12 @@ function savePdfPageState() {
   const pageLayer = clonePageLayer(pdfStrokes, pdfShapes);
   if (pdfCurrentStroke.points.length > 1) pageLayer.strokes.push(cloneStroke(pdfCurrentStroke));
   pdfStrokesByPage[pdfPageNum] = pageLayer;
+}
+
+async function savePdfStrokesAndBroadcast(pageNum, strokes) {
+  if (!currentPdfShareToken) return;
+  const ok = await savePageStrokes(currentPdfShareToken, pageNum, strokes);
+  if (ok && pdfRealtimeBroadcast) pdfRealtimeBroadcast(pageNum, strokes);
 }
 
 function loadPdfPageState() {
@@ -1118,7 +1125,8 @@ async function loadPdfFromShareToken(shareToken) {
     await renderPdfPage();
     updateDocumentOverlays();
     pdfRealtimeUnsubscribe?.();
-    pdfRealtimeUnsubscribe = subscribeStrokes(shareToken, (payload) => {
+    pdfRealtimeBroadcast = null;
+    const sub = subscribeStrokes(shareToken, (payload) => {
       const row = payload?.new || payload?.newRecord || payload?.record;
       if (!row || row.share_token !== shareToken) return;
       const p = row.page_num;
@@ -1130,9 +1138,11 @@ async function loadPdfFromShareToken(shareToken) {
       }));
       if (p === pdfPageNum) {
         pdfStrokes = pdfStrokesByPage[p].strokes || [];
-        renderPdfPage();
+        drawStrokesToPdfCanvas(pdfDrawCanvas?.width || 1, pdfDrawCanvas?.height || 1);
       }
     });
+    pdfRealtimeUnsubscribe = sub?.unsubscribe || sub;
+    pdfRealtimeBroadcast = sub?.broadcast;
     return true;
   } catch (err) {
     console.error("PDF yükleme hatası:", err);
@@ -1202,7 +1212,7 @@ function setupPdfDrawing() {
     pdfIsDrawing = false;
     if (pdfCurrentStroke.points.length > 1) {
       pdfStrokes.push({ ...pdfCurrentStroke });
-      if (currentPdfShareToken) savePageStrokes(currentPdfShareToken, pdfPageNum, pdfStrokes);
+      if (currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
     }
     pdfCurrentStroke = { points: [], color: drawColor };
   };
@@ -1238,6 +1248,7 @@ function clearPdf() {
   pdfZoomScale = 1;
   pdfRealtimeUnsubscribe?.();
   pdfRealtimeUnsubscribe = null;
+  pdfRealtimeBroadcast = null;
   const pdfZoomGroup = document.getElementById("pdfZoomGroup");
   if (pdfZoomGroup) pdfZoomGroup.style.display = "none";
   if (pdfCanvas) {
@@ -1671,7 +1682,7 @@ function detectLoop() {
         const erased = eraseLayerAtPosition(activeStrokes, activeShapes, eraseX, twoFingerPos.y, 0.08);
         activeStrokes = erased.strokes;
         activeShapes = erased.shapes;
-        if (pdfMode && currentPdfShareToken) savePageStrokes(currentPdfShareToken, pdfPageNum, activeStrokes);
+        if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
         activeRedraw();
       } else if (cursorPos) {
         drawToolbar?.classList.remove("expanded");
@@ -1693,7 +1704,7 @@ function detectLoop() {
               if (activeCurrentStroke.points.length > 1) {
                 const stroke = { points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth };
                 activeStrokes.push(stroke);
-                if (pdfMode && currentPdfShareToken) savePageStrokes(currentPdfShareToken, pdfPageNum, activeStrokes);
+                if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
               }
               activeCurrentStroke = { points: [], color: drawColor };
               gestureState = "idle";
@@ -1795,7 +1806,7 @@ function detectLoop() {
           if (fingerLostFrames >= FINGER_LOST_THRESHOLD && activeCurrentStroke.points.length > 0) {
             const stroke = { points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth };
             activeStrokes.push(stroke);
-            if (pdfMode && currentPdfShareToken) savePageStrokes(currentPdfShareToken, pdfPageNum, activeStrokes);
+            if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
             activeCurrentStroke = { points: [], color: drawColor };
           }
         }
@@ -1809,7 +1820,7 @@ function detectLoop() {
         if (fingerLostFrames >= FINGER_LOST_THRESHOLD && activeCurrentStroke.points.length > 0) {
           const stroke = { points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth };
           activeStrokes.push(stroke);
-          if (pdfMode && currentPdfShareToken) savePageStrokes(currentPdfShareToken, pdfPageNum, activeStrokes);
+          if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
           activeCurrentStroke = { points: [], color: drawColor };
         }
       }
@@ -2267,7 +2278,7 @@ drawBtn.addEventListener("click", () => {
     if (pdfMode && pdfDoc && pdfCurrentStroke.points.length > 0) {
       const stroke = { points: [...pdfCurrentStroke.points], color: pdfCurrentStroke.color || drawColor, lineWidth: pdfCurrentStroke.lineWidth ?? drawLineWidth };
       pdfStrokes.push(stroke);
-      if (currentPdfShareToken) savePageStrokes(currentPdfShareToken, pdfPageNum, pdfStrokes);
+      if (currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
       pdfCurrentStroke = { points: [], color: drawColor };
       drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
     } else if (pptxMode && pptxViewer && pptxCurrentStroke.points.length > 0) {
