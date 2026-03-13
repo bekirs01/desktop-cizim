@@ -190,6 +190,7 @@ const MIN_STROKE_DIST = 0.003;         // min dist to add point (titremeyi filtr
 let cachedLm = null;
 let cachedEyesClosed = false;
 let cachedHandLandmarks = [];
+let preferredHand = (localStorage.getItem("preferredHand") || "right").toLowerCase(); // "left" | "right"
 let lastStrokesVersion = 0;
 let strokesVersion = 0;
 
@@ -1577,12 +1578,21 @@ function detectLoop() {
         } catch (_) {}
       }
 
-      // 4. El - 21 landmark
+      // 4. El - 21 landmark (sadece seçilen el: sol/sağ)
       handLandmarks = [];
       if (handLandmarker) {
         try {
           const handRes = handLandmarker.detectForVideo(video, t);
-          handLandmarks = handRes.landmarks || [];
+          const rawLm = handRes.landmarks || [];
+          const handedness = handRes.handedness || [];
+          handLandmarks = [];
+          for (let i = 0; i < rawLm.length; i++) {
+            const h = handedness[i];
+            const label = (h?.[0]?.categoryName || h?.[0]?.display_name || (typeof h === "string" ? h : "") || "").toLowerCase();
+            if (label === preferredHand) {
+              handLandmarks.push(rawLm[i]);
+            }
+          }
           cachedHandLandmarks = handLandmarks;
           if (showSkeleton && !drawModeHandOnly) drawHandLandmarks(ctx, handLandmarks, w, h);
         } catch (_) {}
@@ -2056,7 +2066,7 @@ async function startCamera() {
           handLandmarker = await HandLandmarker.createFromOptions(vision, {
             baseOptions: { modelAssetPath: HAND_MODEL, delegate: "GPU" },
             runningMode: "VIDEO",
-            numHands: 1,
+            numHands: 2,
             minHandDetectionConfidence: 0.3,
             minHandPresenceConfidence: 0.3,
             minTrackingConfidence: 0.3,
@@ -2163,6 +2173,25 @@ function toggleCanvasFullscreen() {
 }
 fullscreenBtn?.addEventListener("click", toggleCanvasFullscreen);
 exitFullscreenBtn?.addEventListener("click", toggleCanvasFullscreen);
+
+const handLeftBtn = document.getElementById("handLeftBtn");
+const handRightBtn = document.getElementById("handRightBtn");
+handLeftBtn?.addEventListener("click", () => {
+  preferredHand = "left";
+  localStorage.setItem("preferredHand", "left");
+  handLeftBtn?.classList.add("active");
+  handRightBtn?.classList.remove("active");
+});
+handRightBtn?.addEventListener("click", () => {
+  preferredHand = "right";
+  localStorage.setItem("preferredHand", "right");
+  handRightBtn?.classList.add("active");
+  handLeftBtn?.classList.remove("active");
+});
+if (handLeftBtn && handRightBtn) {
+  handLeftBtn.classList.toggle("active", preferredHand === "left");
+  handRightBtn.classList.toggle("active", preferredHand === "right");
+}
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (document.querySelector(".app.canvas-fullscreen")) toggleCanvasFullscreen();

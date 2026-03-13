@@ -658,6 +658,24 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   text-align: center;
 }
 
+.hand-preference {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.hand-pref-label {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+.hand-pref-btns {
+  display: flex;
+  gap: 0.25rem;
+}
+.hand-pref-btns .btn-mode {
+  padding: 0.5rem 0.9rem;
+}
+
 .mode-toggle {
   display: flex;
   gap: 0.5rem;
