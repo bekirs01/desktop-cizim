@@ -31,6 +31,26 @@ const pdfLinkInput = document.getElementById("pdfLinkInput");
 const openLinkBtn = document.getElementById("openLinkBtn");
 const shareBaseUrlInput = document.getElementById("shareBaseUrlInput");
 const saveShareUrlBtn = document.getElementById("saveShareUrlBtn");
+const handLeftBtn = document.getElementById("handLeftBtn");
+const handRightBtn = document.getElementById("handRightBtn");
+
+let preferredHand = (localStorage.getItem("preferredHand") || "right").toLowerCase();
+handLeftBtn?.addEventListener("click", () => {
+  preferredHand = "left";
+  localStorage.setItem("preferredHand", "left");
+  handLeftBtn?.classList.add("active");
+  handRightBtn?.classList.remove("active");
+});
+handRightBtn?.addEventListener("click", () => {
+  preferredHand = "right";
+  localStorage.setItem("preferredHand", "right");
+  handRightBtn?.classList.add("active");
+  handLeftBtn?.classList.remove("active");
+});
+if (handLeftBtn && handRightBtn) {
+  handLeftBtn.classList.toggle("active", preferredHand === "left");
+  handRightBtn.classList.toggle("active", preferredHand === "right");
+}
 
 // shareUrl query param ile otomatik kaydet (npm run share sonrası)
 const urlParams = new URLSearchParams(window.location.search);
