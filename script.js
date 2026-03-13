@@ -1119,7 +1119,7 @@ async function loadPdfFromShareToken(shareToken) {
     updateDocumentOverlays();
     pdfRealtimeUnsubscribe?.();
     pdfRealtimeUnsubscribe = subscribeStrokes(shareToken, (payload) => {
-      const row = payload?.new || payload?.record;
+      const row = payload?.new || payload?.newRecord || payload?.record;
       if (!row || row.share_token !== shareToken) return;
       const p = row.page_num;
       if (!pdfStrokesByPage[p]) pdfStrokesByPage[p] = { strokes: [], shapes: [] };

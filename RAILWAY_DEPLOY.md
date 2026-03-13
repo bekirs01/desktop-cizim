@@ -48,6 +48,14 @@ git push
 
 ---
 
+## Если рисунки не синхронизируются в реальном времени
+
+1. Открой [Supabase Dashboard](https://supabase.com/dashboard) → SQL Editor
+2. Выполни SQL из файла **SUPABASE_REALTIME_ENABLE.sql**
+3. После этого изменения будут отображаться у друга мгновенно, без обновления страницы
+
+---
+
 ## Если не загружается PDF или не открывается камера
 
 1. Открой [Supabase Dashboard](https://supabase.com/dashboard) → SQL Editor
