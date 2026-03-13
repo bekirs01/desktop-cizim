@@ -13,6 +13,10 @@ import {
 import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4/build/pdf.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4/build/pdf.worker.mjs";
 
+import { supabase } from "./supabase-config.js";
+import { uploadPdfToSupabase } from "./supabase-pdf.js";
+import { savePageStrokes, deleteStrokesForPage, fetchStrokes } from "./supabase-strokes.js";
+
 let PPTXViewer = null;
 (async () => {
   const urls = [
@@ -97,6 +101,7 @@ const addObjBtn = document.getElementById("addObjBtn");
 const removeObjBtn = document.getElementById("removeObjBtn");
 const showSkeletonCheck = document.getElementById("showSkeleton");
 const fpsEl = document.getElementById("fps");
+const modeToggle = document.getElementById("modeToggle");
 const modeCameraBtn = document.getElementById("modeCameraBtn");
 const modeWhiteSheetBtn = document.getElementById("modeWhiteSheetBtn");
 const modeBlackSheetBtn = document.getElementById("modeBlackSheetBtn");
@@ -116,6 +121,7 @@ const pdfPrevBtn = document.getElementById("pdfPrevBtn");
 const pdfNextBtn = document.getElementById("pdfNextBtn");
 const pdfPageInfo = document.getElementById("pdfPageInfo");
 const pdfClearBtn = document.getElementById("pdfClearBtn");
+const pdfCopyLinkBtn = document.getElementById("pdfCopyLinkBtn");
 const pptxContainer = document.getElementById("pptxContainer");
 const pptxCanvas = document.getElementById("pptxCanvas");
 const pptxDrawCanvas = document.getElementById("pptxDrawCanvas");
@@ -192,7 +198,9 @@ let pdfShapes = [];
 let pdfStrokesByPage = {};
 let pdfShapesByPage = {};
 let pdfCurrentStroke = { points: [], color: "#00ff9f" };
+let pdfZoomScale = 1;
 let pdfIsDrawing = false;
+let currentPdfShareToken = null;
 
 // PPTX state
 let pptxMode = false;
@@ -291,7 +299,7 @@ function eraseLayerAtPosition(strokesArr, shapesArr, eraseX, eraseY, radius = 0.
       }
     }
     if (seg.length > 1) segments.push({ points: seg, color, lineWidth: lw });
-    segments.forEach((s) => nextStrokes.push(s));
+    for (const s of segments) nextStrokes.push({ points: s.points, color: s.color, lineWidth: s.lineWidth });
   }
   return { strokes: nextStrokes, shapes: nextShapes };
 }
@@ -952,9 +960,10 @@ async function renderPdfPage() {
   const maxW = container.clientWidth || 800;
   const maxH = container.clientHeight || 600;
   const viewport = page.getViewport({ scale: 1 });
-  const scale = isCanvasFullscreenMode()
+  const baseScale = isCanvasFullscreenMode()
     ? Math.max(0.1, maxW / viewport.width)
     : Math.max(0.1, maxW / viewport.width);
+  const scale = baseScale * pdfZoomScale;
   const scaledViewport = page.getViewport({ scale });
   const w = Math.floor(scaledViewport.width);
   const h = Math.floor(scaledViewport.height);
@@ -1037,6 +1046,75 @@ function drawStrokesToPdfCanvas(w, h) {
   drawCursorDot(dctx, w, h, true);
 }
 
+async function loadPdfFromShareToken(shareToken) {
+  if (!shareToken || !supabase) return false;
+  try {
+    const { data, error } = await supabase.rpc("get_pdf_by_share_token", { token: shareToken });
+    if (error || !data?.[0]?.storage_path) throw new Error("PDF bulunamadı");
+    const { data: urlData } = supabase.storage.from("pdfs").getPublicUrl(data[0].storage_path);
+    const pdfUrl = urlData?.publicUrl;
+    if (!pdfUrl) throw new Error("PDF URL alınamadı");
+    pdfDoc = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
+    currentPdfShareToken = shareToken;
+    pdfTotalPages = pdfDoc.numPages;
+    pdfPageNum = 1;
+    pdfStrokesByPage = {};
+    pdfShapesByPage = {};
+    pdfStrokes = [];
+    pdfShapes = [];
+    pdfCurrentStroke = { points: [], color: drawColor };
+    const pages = await fetchStrokes(shareToken);
+    if (pages?.length) {
+      for (const row of pages) {
+        const p = row.page_num;
+        if (!pdfStrokesByPage[p]) pdfStrokesByPage[p] = { strokes: [], shapes: [] };
+        for (const s of row.strokes || []) {
+          pdfStrokesByPage[p].strokes.push({
+            points: s.points || [],
+            color: s.color || drawColor,
+            lineWidth: s.lineWidth ?? drawLineWidth,
+          });
+        }
+      }
+    }
+    if (cameraWrapper) cameraWrapper.classList.add("pdf-loaded");
+    if (pdfPageInfo) pdfPageInfo.textContent = `1 / ${pdfTotalPages}`;
+    if (pdfPrevBtn) pdfPrevBtn.disabled = pdfTotalPages <= 1;
+    if (pdfNextBtn) pdfNextBtn.disabled = pdfTotalPages <= 1;
+    if (pdfClearBtn) pdfClearBtn.disabled = false;
+    if (drawBtn) drawBtn.disabled = false;
+    if (clearDrawBtn) clearDrawBtn.disabled = false;
+    if (pdfCopyLinkBtn) {
+      pdfCopyLinkBtn.dataset.link = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, "")}view.html?id=${shareToken}`;
+      pdfCopyLinkBtn.style.display = "inline-flex";
+      pdfCopyLinkBtn.disabled = false;
+    }
+    pdfMode = true;
+    whiteSheetMode = false;
+    blackSheetMode = false;
+    pptxMode = false;
+    cameraWrapper?.classList.remove("white-sheet-mode", "black-sheet-mode", "pptx-mode", "pptx-loaded");
+    cameraWrapper?.classList.add("pdf-mode");
+    modeCameraBtn?.classList.remove("active");
+    modeWhiteSheetBtn?.classList.remove("active");
+    modeBlackSheetBtn?.classList.remove("active");
+    modePdfBtn?.classList.add("active");
+    modePptxBtn?.classList.remove("active");
+    if (pdfUploadGroup) pdfUploadGroup.style.display = "flex";
+    const pdfZoomGroup = document.getElementById("pdfZoomGroup");
+    if (pdfZoomGroup) pdfZoomGroup.style.display = "flex";
+    if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
+    loadPdfPageState();
+    await renderPdfPage();
+    updateDocumentOverlays();
+    return true;
+  } catch (err) {
+    console.error("PDF yükleme hatası:", err);
+    alert("PDF açılamadı: " + (err.message || "Bilinmeyen hata"));
+    return false;
+  }
+}
+
 async function loadPdfFromFile(file) {
   if (!file || file.type !== "application/pdf") return;
   try {
@@ -1098,6 +1176,7 @@ function setupPdfDrawing() {
     pdfIsDrawing = false;
     if (pdfCurrentStroke.points.length > 1) {
       pdfStrokes.push({ ...pdfCurrentStroke });
+      if (currentPdfShareToken) savePageStrokes(currentPdfShareToken, pdfPageNum, pdfStrokes);
     }
     pdfCurrentStroke = { points: [], color: drawColor };
   };
@@ -1124,6 +1203,15 @@ function clearPdf() {
   if (pdfPrevBtn) pdfPrevBtn.disabled = true;
   if (pdfNextBtn) pdfNextBtn.disabled = true;
   if (pdfClearBtn) pdfClearBtn.disabled = true;
+  if (pdfCopyLinkBtn) {
+    pdfCopyLinkBtn.style.display = "none";
+    pdfCopyLinkBtn.disabled = true;
+    delete pdfCopyLinkBtn.dataset.link;
+  }
+  currentPdfShareToken = null;
+  pdfZoomScale = 1;
+  const pdfZoomGroup = document.getElementById("pdfZoomGroup");
+  if (pdfZoomGroup) pdfZoomGroup.style.display = "none";
   if (pdfCanvas) {
     const ctx = pdfCanvas.getContext("2d");
     ctx.clearRect(0, 0, pdfCanvas.width, pdfCanvas.height);
@@ -1555,6 +1643,7 @@ function detectLoop() {
         const erased = eraseLayerAtPosition(activeStrokes, activeShapes, eraseX, twoFingerPos.y, 0.08);
         activeStrokes = erased.strokes;
         activeShapes = erased.shapes;
+        if (pdfMode && currentPdfShareToken) savePageStrokes(currentPdfShareToken, pdfPageNum, activeStrokes);
         activeRedraw();
       } else if (cursorPos) {
         drawToolbar?.classList.remove("expanded");
@@ -1573,6 +1662,12 @@ function detectLoop() {
           if (smoothedThumbIndexDist > PINCH_RELEASE_THRESHOLD) {
             pinchReleaseFrames++;
             if (pinchReleaseFrames >= PINCH_RELEASE_FRAMES) {
+              if (activeCurrentStroke.points.length > 1) {
+                const stroke = { points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth };
+                activeStrokes.push(stroke);
+                if (pdfMode && currentPdfShareToken) savePageStrokes(currentPdfShareToken, pdfPageNum, activeStrokes);
+              }
+              activeCurrentStroke = { points: [], color: drawColor };
               gestureState = "idle";
               pinchReleaseFrames = 0;
             }
@@ -1670,7 +1765,9 @@ function detectLoop() {
           wasPinching = false;
           fingerLostFrames++;
           if (fingerLostFrames >= FINGER_LOST_THRESHOLD && activeCurrentStroke.points.length > 0) {
-            activeStrokes.push({ points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth });
+            const stroke = { points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth };
+            activeStrokes.push(stroke);
+            if (pdfMode && currentPdfShareToken) savePageStrokes(currentPdfShareToken, pdfPageNum, activeStrokes);
             activeCurrentStroke = { points: [], color: drawColor };
           }
         }
@@ -1682,7 +1779,9 @@ function detectLoop() {
         pinchReleaseFrames = 0;
         fingerLostFrames++;
         if (fingerLostFrames >= FINGER_LOST_THRESHOLD && activeCurrentStroke.points.length > 0) {
-          activeStrokes.push({ points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth });
+          const stroke = { points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth };
+          activeStrokes.push(stroke);
+          if (pdfMode && currentPdfShareToken) savePageStrokes(currentPdfShareToken, pdfPageNum, activeStrokes);
           activeCurrentStroke = { points: [], color: drawColor };
         }
       }
@@ -2138,7 +2237,9 @@ drawBtn.addEventListener("click", () => {
   if (drawMode) drawToolbar?.classList.add("expanded");
   if (!drawMode) {
     if (pdfMode && pdfDoc && pdfCurrentStroke.points.length > 0) {
-      pdfStrokes.push({ points: [...pdfCurrentStroke.points], color: pdfCurrentStroke.color || drawColor, lineWidth: pdfCurrentStroke.lineWidth ?? drawLineWidth });
+      const stroke = { points: [...pdfCurrentStroke.points], color: pdfCurrentStroke.color || drawColor, lineWidth: pdfCurrentStroke.lineWidth ?? drawLineWidth };
+      pdfStrokes.push(stroke);
+      if (currentPdfShareToken) savePageStrokes(currentPdfShareToken, pdfPageNum, pdfStrokes);
       pdfCurrentStroke = { points: [], color: drawColor };
       drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
     } else if (pptxMode && pptxViewer && pptxCurrentStroke.points.length > 0) {
@@ -2154,6 +2255,9 @@ drawBtn.addEventListener("click", () => {
 
 clearDrawBtn.addEventListener("click", () => {
   if (pdfMode && pdfDrawCanvas) {
+    if (currentPdfShareToken) {
+      deleteStrokesForPage(currentPdfShareToken, pdfPageNum);
+    }
     pdfStrokes = [];
     pdfShapes = [];
     pdfStrokesByPage[pdfPageNum] = { strokes: [], shapes: [] };
@@ -2177,19 +2281,19 @@ clearDrawBtn.addEventListener("click", () => {
   syncCurrentDocumentPageState();
 });
 
-objectsBtn.addEventListener("click", () => {
+objectsBtn?.addEventListener("click", () => {
   objectsMode = !objectsMode;
   objectsBtn.classList.toggle("active", objectsMode);
   objectsBtn.textContent = objectsMode ? "🔮 Закрыть объекты" : "🔮 Объекты";
 });
 
-addObjBtn.addEventListener("click", () => {
+addObjBtn?.addEventListener("click", () => {
   const x = 0.2 + Math.random() * 0.6;
   const y = 0.25 + Math.random() * 0.4;
   VIRTUAL_OBJECTS.push(createObject(x, y));
 });
 
-removeObjBtn.addEventListener("click", () => {
+removeObjBtn?.addEventListener("click", () => {
   if (VIRTUAL_OBJECTS.length > 0) {
     const last = VIRTUAL_OBJECTS.pop();
     if (last?.grabbed) lastGrabPos = null;
@@ -2200,9 +2304,45 @@ startBtn.addEventListener("click", startCamera);
 stopBtn.addEventListener("click", stopCamera);
 
 // PDF event listeners
-pdfFileInput?.addEventListener("change", (e) => {
+pdfFileInput?.addEventListener("change", async (e) => {
   const file = e.target.files?.[0];
-  if (file) loadPdfFromFile(file);
+  if (!file) return;
+  await loadPdfFromFile(file);
+  let uploadError = null;
+  const result = await uploadPdfToSupabase(file, null, (err) => { uploadError = err; });
+  if (uploadError) {
+    alert("PDF veritabanına kaydedilemedi: " + uploadError);
+    console.error("PDF upload hatası:", uploadError);
+  }
+  if (result?.shareId) {
+    currentPdfShareToken = result.shareId;
+    const strokes = await fetchStrokes(result.shareId);
+    if (strokes?.length) {
+      for (const row of strokes) {
+        const p = row.page_num;
+        if (!pdfStrokesByPage[p]) pdfStrokesByPage[p] = { strokes: [], shapes: [] };
+        const sd = row.stroke_data || {};
+        pdfStrokesByPage[p].strokes.push({
+          points: sd.points || [],
+          color: sd.color || drawColor,
+          lineWidth: sd.lineWidth ?? drawLineWidth,
+        });
+      }
+      loadPdfPageState();
+      await renderPdfPage();
+    }
+  }
+  if (result?.link && pdfCopyLinkBtn) {
+    pdfCopyLinkBtn.dataset.link = result.link;
+    pdfCopyLinkBtn.style.display = "inline-flex";
+    pdfCopyLinkBtn.disabled = false;
+    if (errorMessage) {
+      errorMessage.textContent = "PDF kaydedildi. Çizimler anlık kaydediliyor.";
+      errorMessage.style.color = "var(--accent)";
+      errorMessage.classList.add("visible");
+      setTimeout(() => { errorMessage.textContent = ""; errorMessage.classList.remove("visible"); }, 3000);
+    }
+  }
   e.target.value = "";
 });
 
@@ -2230,6 +2370,30 @@ pdfNextBtn?.addEventListener("click", async () => {
 
 pdfClearBtn?.addEventListener("click", () => {
   clearPdf();
+});
+
+document.getElementById("zoomInBtn")?.addEventListener("click", () => {
+  pdfZoomScale = Math.min(3, pdfZoomScale + 0.25);
+  document.getElementById("zoomVal").textContent = Math.round(pdfZoomScale * 100) + "%";
+  renderPdfPage();
+});
+document.getElementById("zoomOutBtn")?.addEventListener("click", () => {
+  pdfZoomScale = Math.max(0.5, pdfZoomScale - 0.25);
+  document.getElementById("zoomVal").textContent = Math.round(pdfZoomScale * 100) + "%";
+  renderPdfPage();
+});
+
+pdfCopyLinkBtn?.addEventListener("click", async () => {
+  const link = pdfCopyLinkBtn?.dataset?.link;
+  if (!link) return;
+  try {
+    await navigator.clipboard.writeText(link);
+    const orig = pdfCopyLinkBtn.textContent;
+    pdfCopyLinkBtn.textContent = "Ссылка скопирована!";
+    setTimeout(() => { pdfCopyLinkBtn.textContent = orig; }, 1500);
+  } catch (e) {
+    console.warn("Kopyalama hatası:", e);
+  }
 });
 
 pptxFileInput?.addEventListener("change", (e) => {
@@ -2290,3 +2454,22 @@ if (window.ResizeObserver && cameraWrapper) {
 
 setupPdfDrawing();
 setupPptxDrawing();
+
+const urlParams = new URLSearchParams(window.location.search);
+const shareId = urlParams.get("id");
+const isCameraMode = urlParams.get("mode") === "camera";
+
+if (shareId) {
+  loadPdfFromShareToken(shareId);
+  modeCameraBtn?.classList.remove("active");
+  modePdfBtn?.classList.add("active");
+  modeToggle?.querySelectorAll(".btn-mode").forEach((b) => { if (b !== modePdfBtn) b.style.display = "none"; });
+} else if (isCameraMode) {
+  pdfOverlay?.classList.add("hidden");
+  modePdfBtn?.classList.remove("active");
+  modeCameraBtn?.classList.add("active");
+  modeToggle?.querySelectorAll(".btn-mode").forEach((b) => { if (b !== modeCameraBtn) b.style.display = "none"; });
+  startBtn.style.display = "none";
+  stopBtn.style.display = "";
+  startCamera();
+}

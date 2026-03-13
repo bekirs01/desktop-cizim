@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF Görüntüle</title>
+  <link rel="stylesheet" href="style.css?v=3">
+  <style>
+    .view-container { padding: 1rem; max-width: 900px; margin: 0 auto; }
+    .view-error { color: var(--error, #ff4757); padding: 2rem; text-align: center; }
+    .view-loading { text-align: center; padding: 3rem; color: var(--text-secondary); }
+    .view-toolbar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+    .view-toolbar span { color: var(--text-secondary); }
+    .view-pdf-wrap { background: #111; border-radius: var(--radius); overflow: auto; position: relative; }
+    .view-pdf-wrap { position: relative; }
+    .view-pdf-wrap #pdfCanvas { display: block; margin: 0 auto; max-width: 100%; }
+    .view-pdf-wrap #drawCanvas { margin: 0 auto; display: block; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>PDF Görüntüle</h1>
+      <div class="header-right">
+        <a href="index.html" class="btn btn-secondary">← Ana Sayfa</a>
+      </div>
+    </header>
+    <main class="main">
+      <div class="view-container">
+        <div id="viewError" class="view-error" style="display:none"></div>
+        <div id="viewLoading" class="view-loading">PDF yükleniyor…</div>
+        <div id="viewContent" style="display:none">
+          <div class="view-toolbar">
+            <button id="prevBtn" class="btn btn-secondary btn-small" disabled>◀</button>
+            <span id="pageInfo">-</span>
+            <button id="nextBtn" class="btn btn-secondary btn-small" disabled>▶</button>
+          </div>
+          <div class="view-pdf-wrap" id="pdfWrap">
+            <div class="view-pdf-canvas-wrap" style="position:relative;display:inline-block;margin:0 auto">
+              <canvas id="pdfCanvas"></canvas>
+              <canvas id="drawCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="view.js?v=1"></script>
+</body>
+</html>
