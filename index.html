@@ -19,7 +19,8 @@
       }
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        window.location.replace('login.html');
+        const redirect = encodeURIComponent(window.location.href);
+        window.location.replace('login.html?redirect=' + redirect);
         throw new Error('Auth required');
       }
       const urlParams = new URLSearchParams(window.location.search);

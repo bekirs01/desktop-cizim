@@ -15,7 +15,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 import { supabase } from "./supabase-config.js";
 import { uploadPdfToSupabase } from "./supabase-pdf.js";
-import { savePageStrokes, deleteStrokesForPage, fetchStrokes } from "./supabase-strokes.js";
+import { savePageStrokes, deleteStrokesForPage, fetchStrokes, subscribeStrokes } from "./supabase-strokes.js";
 
 let PPTXViewer = null;
 (async () => {
@@ -201,6 +201,7 @@ let pdfCurrentStroke = { points: [], color: "#00ff9f" };
 let pdfZoomScale = 1;
 let pdfIsDrawing = false;
 let currentPdfShareToken = null;
+let pdfRealtimeUnsubscribe = null;
 
 // PPTX state
 let pptxMode = false;
@@ -1107,6 +1108,22 @@ async function loadPdfFromShareToken(shareToken) {
     loadPdfPageState();
     await renderPdfPage();
     updateDocumentOverlays();
+    pdfRealtimeUnsubscribe?.();
+    pdfRealtimeUnsubscribe = subscribeStrokes(shareToken, (payload) => {
+      const row = payload?.new || payload?.record;
+      if (!row || row.share_token !== shareToken) return;
+      const p = row.page_num;
+      if (!pdfStrokesByPage[p]) pdfStrokesByPage[p] = { strokes: [], shapes: [] };
+      pdfStrokesByPage[p].strokes = (row.strokes || []).map((s) => ({
+        points: s.points || [],
+        color: s.color || drawColor,
+        lineWidth: s.lineWidth ?? drawLineWidth,
+      }));
+      if (p === pdfPageNum) {
+        pdfStrokes = pdfStrokesByPage[p].strokes || [];
+        renderPdfPage();
+      }
+    });
     return true;
   } catch (err) {
     console.error("PDF yükleme hatası:", err);
@@ -1210,6 +1227,8 @@ function clearPdf() {
   }
   currentPdfShareToken = null;
   pdfZoomScale = 1;
+  pdfRealtimeUnsubscribe?.();
+  pdfRealtimeUnsubscribe = null;
   const pdfZoomGroup = document.getElementById("pdfZoomGroup");
   if (pdfZoomGroup) pdfZoomGroup.style.display = "none";
   if (pdfCanvas) {
@@ -2460,10 +2479,16 @@ const shareId = urlParams.get("id");
 const isCameraMode = urlParams.get("mode") === "camera";
 
 if (shareId) {
-  loadPdfFromShareToken(shareId);
-  modeCameraBtn?.classList.remove("active");
-  modePdfBtn?.classList.add("active");
-  modeToggle?.querySelectorAll(".btn-mode").forEach((b) => { if (b !== modePdfBtn) b.style.display = "none"; });
+  loadPdfFromShareToken(shareId).then((ok) => {
+    if (ok) {
+      modeCameraBtn?.classList.remove("active");
+      modePdfBtn?.classList.add("active");
+      modeToggle?.querySelectorAll(".btn-mode").forEach((b) => { if (b !== modePdfBtn) b.style.display = "none"; });
+      startBtn.style.display = "none";
+      stopBtn.style.display = "";
+      startCamera();
+    }
+  });
 } else if (isCameraMode) {
   pdfOverlay?.classList.add("hidden");
   modePdfBtn?.classList.remove("active");

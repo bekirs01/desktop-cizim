@@ -38,6 +38,19 @@
     }
     .upload-zone:hover { border-color: var(--accent); background: rgba(0,255,159,0.05); }
     .upload-zone input { display: none; }
+    .link-open-section {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 1.25rem; margin-bottom: 1.5rem;
+    }
+    .link-open-label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
+    .link-open-hint { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; }
+    .link-open-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .link-open-input {
+      flex: 1; min-width: 200px; padding: 0.6rem 1rem; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-primary);
+      font-size: 0.95rem;
+    }
+    .link-open-input:focus { outline: none; border-color: var(--accent); }
   </style>
 </head>
 <body>
@@ -62,6 +75,15 @@
         <div class="dashboard-card" style="cursor:default;opacity:0.9">
           <h2>📄 PDF</h2>
           <p>Работа с документами ниже</p>
+        </div>
+      </div>
+
+      <div class="link-open-section">
+        <label class="link-open-label">🔗 Ссылка на PDF (совместное рисование)</label>
+        <p class="link-open-hint">Вставьте ссылку — откроется PDF с камерой. Вы и ваш друг сможете рисовать вместе в реальном времени.</p>
+        <div class="link-open-row">
+          <input type="text" id="pdfLinkInput" class="link-open-input" placeholder="https://...view.html?id=xxx или только id">
+          <button type="button" id="openLinkBtn" class="btn btn-primary">Открыть</button>
         </div>
       </div>
 

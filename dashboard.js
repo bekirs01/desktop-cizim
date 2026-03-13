@@ -26,6 +26,28 @@ const pdfEmpty = document.getElementById("pdfEmpty");
 const fileInput = document.getElementById("fileInput");
 const uploadZone = document.getElementById("uploadZone");
 const logoutBtn = document.getElementById("logoutBtn");
+const pdfLinkInput = document.getElementById("pdfLinkInput");
+const openLinkBtn = document.getElementById("openLinkBtn");
+
+function extractShareIdFromLink(str) {
+  if (!str || typeof str !== "string") return null;
+  const trimmed = str.trim();
+  const idMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (idMatch) return idMatch[1];
+  if (/^[a-zA-Z0-9_-]{6,20}$/.test(trimmed)) return trimmed;
+  return null;
+}
+
+function openPdfLink() {
+  const id = extractShareIdFromLink(pdfLinkInput?.value || "");
+  if (!id) {
+    alert("Вставьте ссылку на PDF (например: view.html?id=abc123) или только id");
+    return;
+  }
+  window.location.href = `index.html?id=${encodeURIComponent(id)}`;
+}
+openLinkBtn?.addEventListener("click", openPdfLink);
+pdfLinkInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); openPdfLink(); } });
 
 async function loadPdfs() {
   const { data: { user } } = await supabase.auth.getUser();

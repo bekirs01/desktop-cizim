@@ -72,7 +72,9 @@
       const refreshToken = params.get('refresh_token');
       if (accessToken) {
         await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken || '' });
-        window.location.replace('index.html');
+        const params = new URLSearchParams(window.location.search);
+        const redirect = params.get('redirect');
+        window.location.replace(redirect || 'dashboard.html');
       }
     }
 
@@ -99,7 +101,9 @@
           const { data, error } = await supabase.auth.signUp({ email, password });
           if (error) throw error;
           if (data?.session) {
-            window.location.href = 'dashboard.html';
+            const params = new URLSearchParams(window.location.search);
+            const redirect = params.get('redirect');
+            window.location.href = redirect || 'dashboard.html';
           } else {
             msgEl.textContent = 'Регистрация успешна! Можете войти.';
             msgEl.className = 'auth-success';
@@ -107,7 +111,9 @@
         } else {
           const { error } = await supabase.auth.signInWithPassword({ email, password });
           if (error) throw error;
-          window.location.href = 'dashboard.html';
+          const params = new URLSearchParams(window.location.search);
+          const redirect = params.get('redirect');
+          window.location.href = redirect || 'dashboard.html';
         }
       } catch (err) {
         msgEl.textContent = err.message || 'Произошла ошибка';
