@@ -99,6 +99,7 @@ const showSkeletonCheck = document.getElementById("showSkeleton");
 const fpsEl = document.getElementById("fps");
 const modeCameraBtn = document.getElementById("modeCameraBtn");
 const modeWhiteSheetBtn = document.getElementById("modeWhiteSheetBtn");
+const modeBlackSheetBtn = document.getElementById("modeBlackSheetBtn");
 const modePdfBtn = document.getElementById("modePdfBtn");
 const modePptxBtn = document.getElementById("modePptxBtn");
 const cameraWrapper = document.getElementById("cameraWrapper");
@@ -153,11 +154,28 @@ let wasPinching = false;
 let wasTwoFingersClick = false;
 let showSkeleton = true;
 let whiteSheetMode = false;
+let blackSheetMode = false;
 let wasToolbarPinch = false;
 let shapeInProgress = null;
 let smoothedCursor = null;
 let smoothedPinch = null;
 const CURSOR_SMOOTH = 0.55;
+const GESTURE_LOCK_FRAMES = 6; // Çizim ve silme aynı anda çalışmasın — kilit süresi
+let framesSinceDraw = 999;
+let framesSinceErase = 999;
+
+// Gesture state machine — smooth, stable drawing like a real board
+const GESTURE_STATE = { IDLE: "idle", DRAWING: "drawing", ERASING: "erasing" };
+let gestureState = GESTURE_STATE.IDLE;
+let smoothedThumbIndexDist = 0.5; // start high so we don't falsely trigger
+let pinchReleaseFrames = 0;       // frames with dist > release threshold
+let twoFingerHeldFrames = 0;      // frames with two-finger held (for erasing stability)
+const PINCH_START_THRESHOLD = 0.032;   // start drawing when fingers touch
+const PINCH_RELEASE_THRESHOLD = 0.055; // require wider separation to stop (hysteresis)
+const PINCH_RELEASE_FRAMES = 10;       // consecutive frames above release before ending stroke
+const DIST_SMOOTH_ALPHA = 0.35;        // lower = smoother, slower reaction
+const FINGER_LOST_THRESHOLD = 10;      // frames without pinch before ending stroke (was 2)
+const MIN_STROKE_DIST = 0.002;         // min dist to add point (smoother lines, was 0.006)
 let cachedLm = null;
 let cachedEyesClosed = false;
 let cachedHandLandmarks = [];
@@ -547,12 +565,16 @@ function getIndexFingerTip(hand, requireExtended = false) {
   return { x: tip.x, y: tip.y };
 }
 
-// İşaret + başparmak pinch - для рисования и фигур
-function isIndexThumbPinch(hand) {
-  if (!hand || hand.length < 9) return false;
+// Thumb-index distance (for hysteresis)
+function getThumbIndexDistance(hand) {
+  if (!hand || hand.length < 9) return Infinity;
   const idxTip = hand[8], thumbTip = hand[4];
-  const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-  return d(idxTip, thumbTip) < 0.05;
+  return Math.hypot(idxTip.x - thumbTip.x, idxTip.y - thumbTip.y);
+}
+
+// Legacy pinch check (toolbar etc.) — uses raw threshold
+function isIndexThumbPinch(hand) {
+  return getThumbIndexDistance(hand) < PINCH_START_THRESHOLD;
 }
 
 function getPinchCursorPosition(hand) {
@@ -1508,9 +1530,17 @@ function detectLoop() {
         updateGestureCursor(0, 0, false);
       }
 
+      // Önce framesSinceDraw/Erase artır (her frame)
+      framesSinceDraw++;
+      framesSinceErase++;
+
       if (overToolbar) {
         // пропускаем рисование/стирание — только панель
-      } else if (twoFingerPos && !cursorPos) {
+      } else if (twoFingerPos && !cursorPos && framesSinceDraw >= GESTURE_LOCK_FRAMES) {
+        /* Silgi: sadece son çizimden GESTURE_LOCK_FRAMES frame geçtiyse */
+        framesSinceErase = 0;
+        gestureState = "erasing";
+        pinchReleaseFrames = 0;
         drawToolbar?.classList.remove("expanded");
         fingerLostFrames = 0;
         wasPinching = false;
@@ -1528,14 +1558,36 @@ function detectLoop() {
         activeRedraw();
       } else if (cursorPos) {
         drawToolbar?.classList.remove("expanded");
+        if (gestureState === "erasing") gestureState = "idle";
         if (!smoothedCursor) smoothedCursor = { x: cursorPos.x, y: cursorPos.y };
         else {
           smoothedCursor.x = smoothedCursor.x * (1 - CURSOR_SMOOTH) + cursorPos.x * CURSOR_SMOOTH;
           smoothedCursor.y = smoothedCursor.y * (1 - CURSOR_SMOOTH) + cursorPos.y * CURSOR_SMOOTH;
         }
         window.drawCursor = smoothedCursor;
-        const isPinch = handLandmarks[handIdx] && isIndexThumbPinch(handLandmarks[handIdx]);
-        const tiCenter = handLandmarks[handIdx] && getThumbIndexSize(handLandmarks[handIdx])?.center;
+        const hand = handLandmarks[handIdx];
+        const rawDist = hand ? getThumbIndexDistance(hand) : 1;
+        smoothedThumbIndexDist = smoothedThumbIndexDist * (1 - DIST_SMOOTH_ALPHA) + rawDist * DIST_SMOOTH_ALPHA;
+        let isPinchActive = false;
+        if (gestureState === "drawing") {
+          if (smoothedThumbIndexDist > PINCH_RELEASE_THRESHOLD) {
+            pinchReleaseFrames++;
+            if (pinchReleaseFrames >= PINCH_RELEASE_FRAMES) {
+              gestureState = "idle";
+              pinchReleaseFrames = 0;
+            }
+          } else {
+            pinchReleaseFrames = 0;
+            isPinchActive = true;
+          }
+        } else {
+          pinchReleaseFrames = 0;
+          if (smoothedThumbIndexDist < PINCH_START_THRESHOLD && framesSinceErase >= GESTURE_LOCK_FRAMES) {
+            gestureState = "drawing";
+            isPinchActive = true;
+          }
+        }
+        const tiCenter = hand && getThumbIndexSize(hand)?.center;
         let pinchPos;
         if (tiCenter && tiCenter.x >= 0 && tiCenter.x <= 1 && tiCenter.y >= 0 && tiCenter.y <= 1) {
           if (!smoothedPinch) smoothedPinch = { x: tiCenter.x, y: tiCenter.y };
@@ -1548,7 +1600,8 @@ function detectLoop() {
           smoothedPinch = null;
           pinchPos = smoothedCursor;
         }
-        if (isPinch) {
+        if (isPinchActive && framesSinceErase >= GESTURE_LOCK_FRAMES) {
+          framesSinceDraw = 0;
           fingerLostFrames = 0;
           const drawCursorX = (pdfMode && pdfDoc) || (pptxMode && pptxViewer) ? toDocNormX(smoothedCursor.x) : smoothedCursor.x;
           const drawPinchX = (pdfMode && pdfDoc) || (pptxMode && pptxViewer) ? toDocNormX(pinchPos.x) : pinchPos.x;
@@ -1564,12 +1617,17 @@ function detectLoop() {
             const dy = last ? smoothedCursor.y - last.y : 0;
             const dist = Math.hypot(dx, dy);
             const maxJump = 0.15;
-            if (dist > maxJump && last) {
-              if (pts.length > 1) activeStrokes.push({ points: [...pts], color: activeCurrentStroke.color, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth });
-              activeCurrentStroke = { points: [], color: drawColor };
-            } else if (drawCursorX >= 0 && drawCursorX <= 1 && smoothedCursor.y >= 0 && smoothedCursor.y <= 1) {
-              if (!last || dist > 0.006) {
-                activeCurrentStroke.points.push({ x: drawCursorX, y: smoothedCursor.y });
+            if (drawCursorX >= 0 && drawCursorX <= 1 && smoothedCursor.y >= 0 && smoothedCursor.y <= 1) {
+              if (!last || dist > MIN_STROKE_DIST) {
+                if (dist > maxJump && last) {
+                  const n = Math.min(8, Math.ceil(dist / 0.02));
+                  for (let i = 1; i <= n; i++) {
+                    const t = i / n;
+                    activeCurrentStroke.points.push({ x: last.x + dx * t, y: last.y + dy * t });
+                  }
+                } else {
+                  activeCurrentStroke.points.push({ x: drawCursorX, y: smoothedCursor.y });
+                }
                 activeCurrentStroke.color = activeCurrentStroke.color || drawColor;
                 activeCurrentStroke.lineWidth = activeCurrentStroke.lineWidth ?? drawLineWidth;
               }
@@ -1611,7 +1669,7 @@ function detectLoop() {
           }
           wasPinching = false;
           fingerLostFrames++;
-          if (fingerLostFrames >= 2 && activeCurrentStroke.points.length > 0) {
+          if (fingerLostFrames >= FINGER_LOST_THRESHOLD && activeCurrentStroke.points.length > 0) {
             activeStrokes.push({ points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth });
             activeCurrentStroke = { points: [], color: drawColor };
           }
@@ -1620,8 +1678,10 @@ function detectLoop() {
         window.drawCursor = null;
         wasPinching = false;
         shapeInProgress = null;
+        gestureState = "idle";
+        pinchReleaseFrames = 0;
         fingerLostFrames++;
-        if (fingerLostFrames >= 2 && activeCurrentStroke.points.length > 0) {
+        if (fingerLostFrames >= FINGER_LOST_THRESHOLD && activeCurrentStroke.points.length > 0) {
           activeStrokes.push({ points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth });
           activeCurrentStroke = { points: [], color: drawColor };
         }
@@ -1919,11 +1979,13 @@ document.addEventListener("fullscreenchange", () => {
 
 modeCameraBtn?.addEventListener("click", () => {
   whiteSheetMode = false;
+  blackSheetMode = false;
   pdfMode = false;
   pptxMode = false;
-  cameraWrapper?.classList.remove("white-sheet-mode", "pdf-mode", "pdf-loaded", "pptx-mode", "pptx-loaded");
+  cameraWrapper?.classList.remove("white-sheet-mode", "black-sheet-mode", "pdf-mode", "pdf-loaded", "pptx-mode", "pptx-loaded");
   modeCameraBtn?.classList.add("active");
   modeWhiteSheetBtn?.classList.remove("active");
+  modeBlackSheetBtn?.classList.remove("active");
   modePdfBtn?.classList.remove("active");
   modePptxBtn?.classList.remove("active");
   if (pdfUploadGroup) pdfUploadGroup.style.display = "none";
@@ -1934,12 +1996,32 @@ modeCameraBtn?.addEventListener("click", () => {
 
 modeWhiteSheetBtn?.addEventListener("click", () => {
   whiteSheetMode = true;
+  blackSheetMode = false;
   pdfMode = false;
   pptxMode = false;
-  cameraWrapper?.classList.remove("pdf-mode", "pdf-loaded", "pptx-mode", "pptx-loaded");
+  cameraWrapper?.classList.remove("black-sheet-mode", "pdf-mode", "pdf-loaded", "pptx-mode", "pptx-loaded");
   cameraWrapper?.classList.add("white-sheet-mode");
   modeCameraBtn?.classList.remove("active");
   modeWhiteSheetBtn?.classList.add("active");
+  modeBlackSheetBtn?.classList.remove("active");
+  modePdfBtn?.classList.remove("active");
+  modePptxBtn?.classList.remove("active");
+  if (pdfUploadGroup) pdfUploadGroup.style.display = "none";
+  if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
+  restoreCameraAspect();
+  updateDocumentOverlays();
+});
+
+modeBlackSheetBtn?.addEventListener("click", () => {
+  whiteSheetMode = true;
+  blackSheetMode = true;
+  pdfMode = false;
+  pptxMode = false;
+  cameraWrapper?.classList.remove("pdf-mode", "pdf-loaded", "pptx-mode", "pptx-loaded");
+  cameraWrapper?.classList.add("white-sheet-mode", "black-sheet-mode");
+  modeCameraBtn?.classList.remove("active");
+  modeWhiteSheetBtn?.classList.remove("active");
+  modeBlackSheetBtn?.classList.add("active");
   modePdfBtn?.classList.remove("active");
   modePptxBtn?.classList.remove("active");
   if (pdfUploadGroup) pdfUploadGroup.style.display = "none";
@@ -1950,12 +2032,14 @@ modeWhiteSheetBtn?.addEventListener("click", () => {
 
 modePdfBtn?.addEventListener("click", () => {
   whiteSheetMode = false;
+  blackSheetMode = false;
   pdfMode = true;
   pptxMode = false;
-  cameraWrapper?.classList.remove("white-sheet-mode", "pptx-mode", "pptx-loaded");
+  cameraWrapper?.classList.remove("white-sheet-mode", "black-sheet-mode", "pptx-mode", "pptx-loaded");
   cameraWrapper?.classList.add("pdf-mode");
   modeCameraBtn?.classList.remove("active");
   modeWhiteSheetBtn?.classList.remove("active");
+  modeBlackSheetBtn?.classList.remove("active");
   modePdfBtn?.classList.add("active");
   modePptxBtn?.classList.remove("active");
   if (pdfUploadGroup) pdfUploadGroup.style.display = "flex";
@@ -1970,12 +2054,14 @@ modePdfBtn?.addEventListener("click", () => {
 
 modePptxBtn?.addEventListener("click", () => {
   whiteSheetMode = false;
+  blackSheetMode = false;
   pdfMode = false;
   pptxMode = true;
-  cameraWrapper?.classList.remove("white-sheet-mode", "pdf-mode", "pdf-loaded");
+  cameraWrapper?.classList.remove("white-sheet-mode", "black-sheet-mode", "pdf-mode", "pdf-loaded");
   cameraWrapper?.classList.add("pptx-mode");
   modeCameraBtn?.classList.remove("active");
   modeWhiteSheetBtn?.classList.remove("active");
+  modeBlackSheetBtn?.classList.remove("active");
   modePdfBtn?.classList.remove("active");
   modePptxBtn?.classList.add("active");
   if (pdfUploadGroup) pdfUploadGroup.style.display = "none";

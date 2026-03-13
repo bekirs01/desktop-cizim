@@ -31,6 +31,22 @@ let shapeInProgress = null;
 let smoothedCursor = null;
 let smoothedPinch = null;
 const CURSOR_SMOOTH = 0.55;
+// Gesture state machine for smooth, stable drawing (same as script.js)
+let gestureState = "idle";
+let pinchReleaseFrames = 0;
+let smoothedThumbIndexDist = 1;
+const PINCH_START_THRESHOLD = 0.032;
+const PINCH_RELEASE_THRESHOLD = 0.06;
+const PINCH_RELEASE_FRAMES = 10;
+const DIST_SMOOTH_ALPHA = 0.35;
+const FINGER_LOST_THRESHOLD = 10;
+const MIN_STROKE_DIST = 0.002;
+
+function getThumbIndexDistance(hand) {
+  if (!hand || hand.length < 9) return 1;
+  const idxTip = hand[8], thumbTip = hand[4];
+  return Math.hypot(idxTip.x - thumbTip.x, idxTip.y - thumbTip.y);
+}
 
 function toPx(p, w, h) {
   const x = MIRROR_CAMERA ? (1 - p.x) * w : p.x * w;
@@ -41,7 +57,7 @@ function isIndexThumbPinch(hand) {
   if (!hand || hand.length < 9) return false;
   const idxTip = hand[8], thumbTip = hand[4];
   const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-  return d(idxTip, thumbTip) < 0.05;
+  return d(idxTip, thumbTip) < 0.025;
 }
 
 
@@ -375,6 +391,7 @@ function detectLoop() {
     window.drawCursor = null;
   } else if (cursorPos) {
     wasTwoFingersClick = false;
+    if (gestureState === "erasing") gestureState = "idle";
     if (!smoothedCursor) smoothedCursor = { x: cursorPos.x, y: cursorPos.y };
     else {
       smoothedCursor.x = smoothedCursor.x * (1 - CURSOR_SMOOTH) + cursorPos.x * CURSOR_SMOOTH;
@@ -382,8 +399,30 @@ function detectLoop() {
     }
     window.drawCursor = smoothedCursor;
     const overToolbar = MIRROR_CAMERA ? cursorPos.x > 0.88 : cursorPos.x < 0.12;
-    const isPinch = handLandmarks[handIdx] && isIndexThumbPinch(handLandmarks[handIdx]);
-    const tiCenter = handLandmarks[handIdx] && getThumbIndexSize(handLandmarks[handIdx])?.center;
+    const hand = handLandmarks[handIdx];
+    const rawDist = hand ? getThumbIndexDistance(hand) : 1;
+    smoothedThumbIndexDist = smoothedThumbIndexDist * (1 - DIST_SMOOTH_ALPHA) + rawDist * DIST_SMOOTH_ALPHA;
+    let isPinchActive = false;
+    if (gestureState === "drawing") {
+      if (smoothedThumbIndexDist > PINCH_RELEASE_THRESHOLD) {
+        pinchReleaseFrames++;
+        if (pinchReleaseFrames >= PINCH_RELEASE_FRAMES) {
+          gestureState = "idle";
+          pinchReleaseFrames = 0;
+        }
+      } else {
+        pinchReleaseFrames = 0;
+        isPinchActive = true;
+      }
+    } else {
+      pinchReleaseFrames = 0;
+      if (smoothedThumbIndexDist < PINCH_START_THRESHOLD) {
+        gestureState = "drawing";
+        isPinchActive = true;
+      }
+    }
+    const isPinch = hand && isIndexThumbPinch(hand);
+    const tiCenter = hand && getThumbIndexSize(hand)?.center;
     let pinchPos;
     if (tiCenter && tiCenter.x >= 0 && tiCenter.x <= 1 && tiCenter.y >= 0 && tiCenter.y <= 1) {
       if (!smoothedPinch) smoothedPinch = { x: tiCenter.x, y: tiCenter.y };
@@ -399,7 +438,7 @@ function detectLoop() {
     if (isPinch && overToolbar) {
       if (!wasToolbarPinch) { wasToolbarPinch = true; simulateClickAtPosition(cursorPos.x, cursorPos.y, w, h); }
     } else { wasToolbarPinch = false; }
-    if (isPinch && !overToolbar) {
+    if (isPinchActive && !overToolbar) {
       fingerLostFrames = 0;
       if (["circle","rect","line","ellipse","triangle","arrow"].includes(drawShape)) {
         if (pinchPos && pinchPos.x >= 0 && pinchPos.x <= 1 && pinchPos.y >= 0 && pinchPos.y <= 1) {
@@ -414,10 +453,18 @@ function detectLoop() {
         const dist = Math.hypot(dx, dy);
         const maxJump = 0.15;
         if (dist > maxJump && last) {
-          if (pts.length > 1) strokes.push({ points: [...pts], color: currentStroke.color, lineWidth: currentStroke.lineWidth ?? drawLineWidth });
-          currentStroke = { points: [], color: drawColor };
+          const n = Math.min(6, Math.ceil(dist / 0.025));
+          for (let i = 1; i <= n; i++) {
+            const t = i / n;
+            currentStroke.points.push({
+              x: last.x + (smoothedCursor.x - last.x) * t,
+              y: last.y + (smoothedCursor.y - last.y) * t
+            });
+          }
+          currentStroke.color = currentStroke.color || drawColor;
+          currentStroke.lineWidth = currentStroke.lineWidth ?? drawLineWidth;
         } else if (smoothedCursor.x >= 0 && smoothedCursor.x <= 1 && smoothedCursor.y >= 0 && smoothedCursor.y <= 1) {
-          if (!last || dist > 0.006) {
+          if (!last || dist > MIN_STROKE_DIST) {
             currentStroke.points.push({ x: smoothedCursor.x, y: smoothedCursor.y });
             currentStroke.color = currentStroke.color || drawColor;
             currentStroke.lineWidth = currentStroke.lineWidth ?? drawLineWidth;
@@ -430,14 +477,14 @@ function detectLoop() {
         const s = shapeInProgress.start, e = shapeInProgress.end;
         let x1 = Math.min(s.x, e.x), x2 = Math.max(s.x, e.x);
         let y1 = Math.min(s.y, e.y), y2 = Math.max(s.y, e.y);
-        let w = x2 - x1, h = y2 - y1;
-        const diag = Math.hypot(w, h);
+        let segW = x2 - x1, segH = y2 - y1;
+        const diag = Math.hypot(segW, segH);
         const minSize = 0.03;
         if (diag < minSize) {
           const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
           const half = minSize / 2;
           x1 = cx - half; x2 = cx + half; y1 = cy - half; y2 = cy + half;
-          w = minSize; h = minSize;
+          segW = minSize; segH = minSize;
         }
         {
           const lw = drawLineWidth;
@@ -445,11 +492,11 @@ function detectLoop() {
           if (shapeInProgress.type === "circle") {
             shapes.push({ type: "circle", cx, cy, r: Math.max(diag / 2, minSize / 2), color: drawColor, lineWidth: lw });
           } else if (shapeInProgress.type === "rect") {
-            shapes.push({ type: "rect", x: x1, y: y1, w, h, color: drawColor, lineWidth: lw });
+            shapes.push({ type: "rect", x: x1, y: y1, w: segW, h: segH, color: drawColor, lineWidth: lw });
           } else if (shapeInProgress.type === "line") {
             shapes.push({ type: "line", x1: s.x, y1: s.y, x2: e.x, y2: e.y, color: drawColor, lineWidth: lw });
           } else if (shapeInProgress.type === "ellipse") {
-            shapes.push({ type: "ellipse", x: x1, y: y1, w, h, color: drawColor, lineWidth: lw });
+            shapes.push({ type: "ellipse", x: x1, y: y1, w: segW, h: segH, color: drawColor, lineWidth: lw });
           } else if (shapeInProgress.type === "triangle") {
             shapes.push({ type: "triangle", x1: s.x, y1: s.y, x2: e.x, y2: e.y, x3: s.x, y3: e.y, color: drawColor, lineWidth: lw });
           } else if (shapeInProgress.type === "arrow") {
@@ -460,7 +507,7 @@ function detectLoop() {
       }
       wasPinching = false;
       fingerLostFrames++;
-      if (fingerLostFrames >= 2 && currentStroke.points.length > 0) {
+      if (fingerLostFrames >= FINGER_LOST_THRESHOLD && currentStroke.points.length > 0) {
         strokes.push({ points: [...currentStroke.points], color: currentStroke.color || drawColor, lineWidth: currentStroke.lineWidth ?? drawLineWidth });
         currentStroke = { points: [], color: drawColor };
       }
@@ -473,8 +520,10 @@ function detectLoop() {
     wasToolbarPinch = false;
     shapeInProgress = null;
     wasTwoFingersClick = false;
+    gestureState = "idle";
+    pinchReleaseFrames = 0;
     fingerLostFrames++;
-    if (fingerLostFrames >= 2 && currentStroke.points.length > 0) {
+    if (fingerLostFrames >= FINGER_LOST_THRESHOLD && currentStroke.points.length > 0) {
       strokes.push({ points: [...currentStroke.points], color: currentStroke.color || drawColor, lineWidth: currentStroke.lineWidth ?? drawLineWidth });
       currentStroke = { points: [], color: drawColor };
     }
