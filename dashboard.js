@@ -17,7 +17,7 @@ if (!supabase) {
   }
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
-    window.location.replace("login.html");
+    window.location.replace("/login.html");
   }
 }
 
@@ -73,7 +73,7 @@ function openPdfLink() {
     alert("Вставьте ссылку на PDF (например: view.html?id=abc123) или только id");
     return;
   }
-  window.location.href = `index.html?id=${encodeURIComponent(id)}`;
+  window.location.href = `/index.html?id=${encodeURIComponent(id)}`;
 }
 openLinkBtn?.addEventListener("click", openPdfLink);
 pdfLinkInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); openPdfLink(); } });
@@ -106,7 +106,7 @@ async function loadPdfs() {
         <div class="pdf-item-meta">${date}</div>
       </div>
       <div class="pdf-item-actions">
-        <a href="index.html?id=${row.share_token}" class="btn btn-primary">Открыть PDF</a>
+        <a href="/index.html?id=${row.share_token}" class="btn btn-primary">Открыть PDF</a>
         <button type="button" class="btn btn-danger pdf-delete-btn" data-id="${row.id}" data-share="${row.share_token}" data-path="${escapeHtml(row.storage_path || "")}" title="Удалить">🗑️ Удалить</button>
       </div>
     `;
@@ -137,7 +137,7 @@ fileInput.addEventListener("change", async (e) => {
 
 logoutBtn.addEventListener("click", async () => {
   await supabase.auth.signOut();
-  window.location.replace("login.html");
+  window.location.replace("/login.html");
 });
 
 pdfList.addEventListener("click", async (e) => {

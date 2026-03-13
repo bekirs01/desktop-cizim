@@ -56,7 +56,7 @@
         <button type="submit" class="auth-btn auth-btn-primary" id="submitBtn">Войти</button>
       </form>
       <div class="auth-footer">
-        <a href="index.html">← Вернуться в приложение</a>
+        <a href="/index.html">← Вернуться в приложение</a>
       </div>
     </div>
   </div>
@@ -74,7 +74,7 @@
         await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken || '' });
         const params = new URLSearchParams(window.location.search);
         const redirect = params.get('redirect');
-        window.location.replace(redirect || 'dashboard.html');
+        window.location.replace(redirect || '/dashboard.html');
       }
     }
 
@@ -103,7 +103,7 @@
           if (data?.session) {
             const params = new URLSearchParams(window.location.search);
             const redirect = params.get('redirect');
-            window.location.href = redirect || 'dashboard.html';
+            window.location.href = redirect || '/dashboard.html';
           } else {
             msgEl.textContent = 'Регистрация успешна! Можете войти.';
             msgEl.className = 'auth-success';
@@ -113,7 +113,7 @@
           if (error) throw error;
           const params = new URLSearchParams(window.location.search);
           const redirect = params.get('redirect');
-          window.location.href = redirect || 'dashboard.html';
+          window.location.href = redirect || '/dashboard.html';
         }
       } catch (err) {
         msgEl.textContent = err.message || 'Произошла ошибка';

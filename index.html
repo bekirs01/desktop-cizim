@@ -20,12 +20,12 @@
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         const redirect = encodeURIComponent(window.location.href);
-        window.location.replace('login.html?redirect=' + redirect);
+        window.location.replace('/login.html?redirect=' + redirect);
         throw new Error('Auth required');
       }
       const urlParams = new URLSearchParams(window.location.search);
       if (!urlParams.get('id') && urlParams.get('mode') !== 'camera') {
-        window.location.replace('dashboard.html');
+        window.location.replace('/dashboard.html');
         throw new Error('Redirect');
       }
       window.supabase = supabase;
@@ -37,7 +37,7 @@
     <header class="header">
       <h1>Система отслеживания движений в реальном времени</h1>
       <div class="header-right">
-        <a href="dashboard.html" class="btn btn-secondary btn-small" style="margin-right:0.5rem">← Мои PDF</a>
+        <a href="/dashboard.html" class="btn btn-secondary btn-small" style="margin-right:0.5rem">← Мои PDF</a>
         <button id="fullscreenBtn" class="btn-icon" title="Полный экран">⛶</button>
         <div class="fps-badge" id="fps">0 FPS</div>
       </div>
