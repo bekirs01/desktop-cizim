@@ -114,6 +114,10 @@ export function subscribeStrokes(shareToken, onUpdate) {
       const { pageNum, strokes } = msg?.payload || msg || {};
       if (pageNum != null && strokes) onUpdate?.({ new: { page_num: pageNum, share_token: shareToken, strokes } });
     })
+    .on("broadcast", { event: "stroke_progress" }, (msg) => {
+      const { pageNum, stroke } = msg?.payload || msg || {};
+      if (pageNum != null && stroke?.points?.length >= 2) onUpdate?.({ type: "progress", pageNum, stroke });
+    })
     .subscribe((status) => {
       if (status === "CHANNEL_ERROR") console.warn("[Realtime] Bağlantı hatası - SUPABASE_REALTIME_ENABLE.sql çalıştırdın mı?");
     });
@@ -121,6 +125,9 @@ export function subscribeStrokes(shareToken, onUpdate) {
     unsubscribe: () => supabase.removeChannel(channel),
     broadcast: (pageNum, strokes) => {
       channel.send({ type: "broadcast", event: "stroke", payload: { pageNum, strokes } });
+    },
+    broadcastProgress: (pageNum, stroke) => {
+      if (stroke?.points?.length >= 2) channel.send({ type: "broadcast", event: "stroke_progress", payload: { pageNum, stroke } });
     },
   };
 }

@@ -206,6 +206,8 @@ let pdfIsDrawing = false;
 let currentPdfShareToken = null;
 let pdfRealtimeUnsubscribe = null;
 let pdfRealtimeBroadcast = null;
+let pdfRealtimeBroadcastProgress = null;
+let pdfRemoteCurrentStroke = null;
 
 // PPTX state
 let pptxMode = false;
@@ -1054,6 +1056,20 @@ function drawStrokesToPdfCanvas(w, h) {
     dctx.lineWidth = lw;
     dctx.stroke();
   });
+  if (pdfRemoteCurrentStroke?.points?.length >= 2) {
+    const pts = pdfRemoteCurrentStroke.points;
+    const color = pdfRemoteCurrentStroke.color || drawColor;
+    const lw = pdfRemoteCurrentStroke.lineWidth ?? defLw;
+    dctx.beginPath();
+    dctx.moveTo(pts[0].x * w, pts[0].y * h);
+    for (let i = 1; i < pts.length; i++) dctx.lineTo(pts[i].x * w, pts[i].y * h);
+    dctx.strokeStyle = hexToRgba(color, 0.25);
+    dctx.lineWidth = Math.max(lw * 2.5, 12);
+    dctx.stroke();
+    dctx.strokeStyle = color;
+    dctx.lineWidth = lw;
+    dctx.stroke();
+  }
   drawCursorDot(dctx, w, h, true);
 }
 
@@ -1126,10 +1142,19 @@ async function loadPdfFromShareToken(shareToken) {
     updateDocumentOverlays();
     pdfRealtimeUnsubscribe?.();
     pdfRealtimeBroadcast = null;
+    pdfRealtimeBroadcastProgress = null;
     const sub = subscribeStrokes(shareToken, (payload) => {
+      if (payload?.type === "progress") {
+        if (payload.pageNum === pdfPageNum) {
+          pdfRemoteCurrentStroke = payload.stroke;
+          drawStrokesToPdfCanvas(pdfDrawCanvas?.width || 1, pdfDrawCanvas?.height || 1);
+        }
+        return;
+      }
       const row = payload?.new || payload?.newRecord || payload?.record;
       if (!row || row.share_token !== shareToken) return;
       const p = row.page_num;
+      pdfRemoteCurrentStroke = null;
       if (!pdfStrokesByPage[p]) pdfStrokesByPage[p] = { strokes: [], shapes: [] };
       pdfStrokesByPage[p].strokes = (row.strokes || []).map((s) => ({
         points: s.points || [],
@@ -1143,6 +1168,7 @@ async function loadPdfFromShareToken(shareToken) {
     });
     pdfRealtimeUnsubscribe = sub?.unsubscribe || sub;
     pdfRealtimeBroadcast = sub?.broadcast;
+    pdfRealtimeBroadcastProgress = sub?.broadcastProgress;
     return true;
   } catch (err) {
     console.error("PDF yükleme hatası:", err);
@@ -1197,6 +1223,7 @@ function setupPdfDrawing() {
     const p = getNorm(e);
     pdfCurrentStroke = { points: [{ x: p.x, y: p.y }], color: drawColor, lineWidth: drawLineWidth };
   };
+  let lastBroadcastProgress = 0;
   const onMove = (e) => {
     if (!pdfIsDrawing || !pdfCurrentStroke.points.length) return;
     e.preventDefault();
@@ -1204,6 +1231,11 @@ function setupPdfDrawing() {
     if (p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1) {
       pdfCurrentStroke.points.push({ x: p.x, y: p.y });
       drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+      const now = Date.now();
+      if (currentPdfShareToken && pdfRealtimeBroadcastProgress && (now - lastBroadcastProgress >= 50 || pdfCurrentStroke.points.length % 5 === 0)) {
+        lastBroadcastProgress = now;
+        pdfRealtimeBroadcastProgress(pdfPageNum, pdfCurrentStroke);
+      }
     }
   };
   const onEnd = (e) => {
@@ -1214,6 +1246,7 @@ function setupPdfDrawing() {
       pdfStrokes.push({ ...pdfCurrentStroke });
       if (currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
     }
+    pdfRemoteCurrentStroke = null;
     pdfCurrentStroke = { points: [], color: drawColor };
   };
   pdfDrawCanvas.addEventListener("mousedown", onStart);
@@ -1249,6 +1282,8 @@ function clearPdf() {
   pdfRealtimeUnsubscribe?.();
   pdfRealtimeUnsubscribe = null;
   pdfRealtimeBroadcast = null;
+  pdfRealtimeBroadcastProgress = null;
+  pdfRemoteCurrentStroke = null;
   const pdfZoomGroup = document.getElementById("pdfZoomGroup");
   if (pdfZoomGroup) pdfZoomGroup.style.display = "none";
   if (pdfCanvas) {
