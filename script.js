@@ -213,6 +213,7 @@ let pdfRealtimeBroadcastProgress = null;
 let pdfRemoteCurrentStroke = null;
 let lastGestureBroadcastProgress = 0;
 let lastEraseSaveTime = 0;
+let lastEraseEndTime = 0;
 
 // PPTX state
 let pptxMode = false;
@@ -254,10 +255,10 @@ function savePdfPageState() {
   pdfStrokesByPage[pdfPageNum] = pageLayer;
 }
 
-async function savePdfStrokesAndBroadcast(pageNum, strokes) {
+async function savePdfStrokesAndBroadcast(pageNum, strokes, skipBroadcast = false) {
   if (!currentPdfShareToken) return;
   const ok = await savePageStrokes(currentPdfShareToken, pageNum, strokes);
-  if (ok && pdfRealtimeBroadcast) pdfRealtimeBroadcast(pageNum, strokes);
+  if (ok && pdfRealtimeBroadcast && !skipBroadcast) pdfRealtimeBroadcast(pageNum, strokes);
 }
 
 function loadPdfPageState() {
@@ -1155,16 +1156,20 @@ async function loadPdfFromShareToken(shareToken) {
         }
         return;
       }
+      if (gestureState === "erasing") return;
       const row = payload?.new || payload?.newRecord || payload?.record;
       if (!row || row.share_token !== shareToken) return;
       const p = row.page_num;
-      pdfRemoteCurrentStroke = null;
-      if (!pdfStrokesByPage[p]) pdfStrokesByPage[p] = { strokes: [], shapes: [] };
-      pdfStrokesByPage[p].strokes = (row.strokes || []).map((s) => ({
+      const incomingStrokes = (row.strokes || []).map((s) => ({
         points: s.points || [],
         color: s.color || drawColor,
         lineWidth: s.lineWidth ?? drawLineWidth,
       }));
+      const recentlyErased = lastEraseEndTime > 0 && Date.now() - lastEraseEndTime < 1200;
+      if (p === pdfPageNum && recentlyErased) return;
+      pdfRemoteCurrentStroke = null;
+      if (!pdfStrokesByPage[p]) pdfStrokesByPage[p] = { strokes: [], shapes: [] };
+      pdfStrokesByPage[p].strokes = incomingStrokes;
       if (p === pdfPageNum) {
         pdfStrokes = pdfStrokesByPage[p].strokes || [];
         drawStrokesToPdfCanvas(pdfDrawCanvas?.width || 1, pdfDrawCanvas?.height || 1);
@@ -1741,15 +1746,16 @@ function detectLoop() {
         const now = Date.now();
         if (pdfMode && currentPdfShareToken && (now - lastEraseSaveTime >= 200)) {
           lastEraseSaveTime = now;
-          savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
+          savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes, true);
         }
         activeRedraw();
       } else if (cursorPos) {
         drawToolbar?.classList.remove("expanded");
         if (gestureState === "erasing") {
-          if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
+          if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes, true);
           gestureState = "idle";
           smoothedErasePos = null;
+          lastEraseEndTime = Date.now();
         }
         if (!smoothedCursor) smoothedCursor = { x: cursorPos.x, y: cursorPos.y };
         else {
@@ -1880,7 +1886,8 @@ function detectLoop() {
           }
         }
       } else {
-        if (gestureState === "erasing" && pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
+        if (gestureState === "erasing" && pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes, true);
+        if (gestureState === "erasing") lastEraseEndTime = Date.now();
         window.drawCursor = null;
         wasPinching = false;
         shapeInProgress = null;
