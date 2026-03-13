@@ -23,6 +23,7 @@ if (!supabase) {
 
 const pdfList = document.getElementById("pdfList");
 const pdfEmpty = document.getElementById("pdfEmpty");
+const uploadError = document.getElementById("uploadError");
 const fileInput = document.getElementById("fileInput");
 const uploadZone = document.getElementById("uploadZone");
 const logoutBtn = document.getElementById("logoutBtn");
@@ -88,8 +89,10 @@ async function loadPdfs() {
     .order("created_at", { ascending: false });
   if (error) {
     console.error("PDF listesi alınamadı:", error);
+    showUploadError("Не удалось загрузить список: " + (error.message || "ошибка"));
     return;
   }
+  showUploadError("");
   pdfList.innerHTML = "";
   if (!data?.length) {
     pdfEmpty.style.display = "block";
@@ -120,19 +123,33 @@ function escapeHtml(s) {
   return d.innerHTML;
 }
 
+function showUploadError(msg) {
+  if (uploadError) {
+    uploadError.textContent = msg || "";
+    uploadError.style.display = msg ? "block" : "none";
+  }
+}
+
 fileInput.addEventListener("change", async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
+  showUploadError("");
   uploadZone.querySelector("span").textContent = "Загрузка…";
   let err = null;
-  const result = await uploadPdfToSupabase(file, null, (e) => { err = e; });
-  uploadZone.querySelector("span").textContent = "📤 Загрузить PDF";
-  e.target.value = "";
-  if (err) {
-    alert("Ошибка загрузки: " + err);
-    return;
+  try {
+    const result = await uploadPdfToSupabase(file, null, (e) => { err = e; });
+    uploadZone.querySelector("span").textContent = "📤 Загрузить PDF";
+    e.target.value = "";
+    if (err) {
+      showUploadError("Ошибка загрузки: " + err);
+      return;
+    }
+    if (result) await loadPdfs();
+  } catch (ex) {
+    uploadZone.querySelector("span").textContent = "📤 Загрузить PDF";
+    e.target.value = "";
+    showUploadError("Ошибка: " + (ex?.message || ex));
   }
-  if (result) await loadPdfs();
 });
 
 logoutBtn.addEventListener("click", async () => {

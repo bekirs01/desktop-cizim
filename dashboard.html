@@ -51,6 +51,11 @@
       font-size: 0.95rem;
     }
     .link-open-input:focus { outline: none; border-color: var(--accent); }
+    .upload-error {
+      background: rgba(255,71,87,0.15); border: 1px solid var(--error);
+      border-radius: var(--radius-sm); padding: 0.75rem 1rem;
+      margin-bottom: 1rem; color: var(--error); font-size: 0.9rem;
+    }
   </style>
 </head>
 <body>
@@ -95,6 +100,7 @@
         </div>
       </div>
 
+      <div id="uploadError" class="upload-error" style="display:none"></div>
       <div id="pdfList" class="pdf-list"></div>
       <div id="pdfEmpty" class="pdf-empty" style="display:none">
         Пока нет PDF. Загрузите выше.

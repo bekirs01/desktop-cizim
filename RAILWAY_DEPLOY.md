@@ -48,6 +48,14 @@ git push
 
 ---
 
+## Если не загружается PDF или не открывается камера
+
+1. Открой [Supabase Dashboard](https://supabase.com/dashboard) → SQL Editor
+2. Скопируй и выполни SQL из файла **SUPABASE_FULL_SETUP.sql** в проекте
+3. Если загрузка PDF всё ещё не работает — выполни **SUPABASE_STORAGE_RLS_FIX.sql**
+
+---
+
 ## Если сборка падает с ошибкой
 
 1. В Railway открой проект → **Settings** → **Build**
