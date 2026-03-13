@@ -168,7 +168,9 @@ let wasToolbarPinch = false;
 let shapeInProgress = null;
 let smoothedCursor = null;
 let smoothedPinch = null;
-const CURSOR_SMOOTH = 0.55;
+let smoothedErasePos = null;  // Silme pozisyonu için yumuşatma (titremeyi azaltır)
+const CURSOR_SMOOTH = 0.35;   // Daha düşük = daha akıcı çizim (titreme azalır)
+const ERASE_SMOOTH = 0.4;    // Silme pozisyonu yumuşatma
 const GESTURE_LOCK_FRAMES = 6; // Çizim ve silme aynı anda çalışmasın — kilit süresi
 let framesSinceDraw = 999;
 let framesSinceErase = 999;
@@ -182,9 +184,9 @@ let twoFingerHeldFrames = 0;      // frames with two-finger held (for erasing st
 const PINCH_START_THRESHOLD = 0.032;   // start drawing when fingers touch
 const PINCH_RELEASE_THRESHOLD = 0.055; // require wider separation to stop (hysteresis)
 const PINCH_RELEASE_FRAMES = 10;       // consecutive frames above release before ending stroke
-const DIST_SMOOTH_ALPHA = 0.35;        // lower = smoother, slower reaction
+const DIST_SMOOTH_ALPHA = 0.25;        // lower = smoother, pinch daha stabil
 const FINGER_LOST_THRESHOLD = 10;      // frames without pinch before ending stroke (was 2)
-const MIN_STROKE_DIST = 0.002;         // min dist to add point (smoother lines, was 0.006)
+const MIN_STROKE_DIST = 0.003;         // min dist to add point (titremeyi filtreler)
 let cachedLm = null;
 let cachedEyesClosed = false;
 let cachedHandLandmarks = [];
@@ -208,6 +210,8 @@ let pdfRealtimeUnsubscribe = null;
 let pdfRealtimeBroadcast = null;
 let pdfRealtimeBroadcastProgress = null;
 let pdfRemoteCurrentStroke = null;
+let lastGestureBroadcastProgress = 0;
+let lastEraseSaveTime = 0;
 
 // PPTX state
 let pptxMode = false;
@@ -383,7 +387,7 @@ function drawHandLandmarks(ctx, hands, w, h) {
   });
 }
 
-// İki parmak (işaret + orta) - ТОЛЬКО полностью выпрямлены (ластик)
+// İki parmak (işaret + orta) uzatılmış — silme için (daha toleranslı algılama)
 function isTwoFingersExtended(hand) {
   if (!hand || hand.length < 21) return false;
   const idxTip = hand[8], midTip = hand[12], idxPip = hand[6], midPip = hand[10];
@@ -394,16 +398,15 @@ function isTwoFingersExtended(hand) {
   const lenRing = d(ringTip, hand[13]);
   const lenPinky = d(pinkyTip, hand[17]);
   const distIdxMid = d(idxTip, midTip);
-  // Минимум 0.07 — при согнутых пальцах tip ближе к MCP
-  const minExtended = 0.07;
-  // Проверка "прямоты": tip далеко от PIP — при согнутом пальце tip ближе к суставу
+  const minExtended = 0.055;  // Biraz gevşetildi — daha kolay tetiklenir
   const tipToPipIdx = d(idxTip, idxPip);
   const tipToPipMid = d(midTip, midPip);
+  // İşaret ve orta parmak uzun, ring/pinky kapalı (1.1x yeterli)
   return lenIdx >= minExtended && lenMid >= minExtended &&
-         tipToPipIdx > 0.03 && tipToPipMid > 0.03 &&
-         lenIdx > lenRing * 1.2 && lenMid > lenRing * 1.2 &&
-         lenIdx > lenPinky * 1.2 && lenMid > lenPinky * 1.2 &&
-         distIdxMid > 0.03 && distIdxMid < 0.22;
+         tipToPipIdx > 0.025 && tipToPipMid > 0.025 &&
+         lenIdx > lenRing * 1.1 && lenMid > lenRing * 1.1 &&
+         lenIdx > lenPinky * 1.1 && lenMid > lenPinky * 1.1 &&
+         distIdxMid > 0.025 && distIdxMid < 0.28;  // Daha geniş aralık
 }
 
 function getTwoFingerPosition(hand) {
@@ -1698,30 +1701,46 @@ function detectLoop() {
 
       if (overToolbar) {
         // пропускаем рисование/стирание — только панель
-      } else if (twoFingerPos && !cursorPos && framesSinceDraw >= GESTURE_LOCK_FRAMES) {
-        /* Silgi: sadece son çizimden GESTURE_LOCK_FRAMES frame geçtiyse */
+      } else if ((gestureState === "erasing" && twoFingerPos) || (twoFingerPos && !cursorPos && framesSinceDraw >= GESTURE_LOCK_FRAMES)) {
+        /* Silgi: erasing modunda twoFingerPos varsa öncelik ver (ekran sıçramasını önler); yoksa yeni silme moduna gir */
+        if (gestureState !== "erasing") {
+          gestureState = "erasing";
+          drawToolbar?.classList.remove("expanded");
+          fingerLostFrames = 0;
+          wasPinching = false;
+          shapeInProgress = null;
+          activeCurrentStroke = { points: [], color: drawColor };
+          smoothedCursor = null;
+          smoothedPinch = null;
+          smoothedErasePos = { x: twoFingerPos.x, y: twoFingerPos.y };
+        }
         framesSinceErase = 0;
-        gestureState = "erasing";
         pinchReleaseFrames = 0;
-        drawToolbar?.classList.remove("expanded");
-        fingerLostFrames = 0;
-        wasPinching = false;
-        shapeInProgress = null;
-        activeCurrentStroke = { points: [], color: drawColor };
+        if (!smoothedErasePos) smoothedErasePos = { x: twoFingerPos.x, y: twoFingerPos.y };
+        else {
+          smoothedErasePos.x = smoothedErasePos.x * (1 - ERASE_SMOOTH) + twoFingerPos.x * ERASE_SMOOTH;
+          smoothedErasePos.y = smoothedErasePos.y * (1 - ERASE_SMOOTH) + twoFingerPos.y * ERASE_SMOOTH;
+        }
         const eraseHand = handLandmarks[twoFingerHandIdx];
         const eraseTip = eraseHand && eraseHand[8];
-        window.drawCursor = eraseTip ? { x: eraseTip.x, y: eraseTip.y } : { x: twoFingerPos.x, y: twoFingerPos.y };
-        smoothedCursor = null;
-        smoothedPinch = null;
-        const eraseX = (pdfMode && pdfDoc) || (pptxMode && pptxViewer) ? toDocNormX(twoFingerPos.x) : twoFingerPos.x;
-        const erased = eraseLayerAtPosition(activeStrokes, activeShapes, eraseX, twoFingerPos.y, 0.08);
+        window.drawCursor = { x: smoothedErasePos.x, y: smoothedErasePos.y };
+        const eraseX = (pdfMode && pdfDoc) || (pptxMode && pptxViewer) ? toDocNormX(smoothedErasePos.x) : smoothedErasePos.x;
+        const erased = eraseLayerAtPosition(activeStrokes, activeShapes, eraseX, smoothedErasePos.y, 0.09);
         activeStrokes = erased.strokes;
         activeShapes = erased.shapes;
-        if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
+        const now = Date.now();
+        if (pdfMode && currentPdfShareToken && (now - lastEraseSaveTime >= 200)) {
+          lastEraseSaveTime = now;
+          savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
+        }
         activeRedraw();
       } else if (cursorPos) {
         drawToolbar?.classList.remove("expanded");
-        if (gestureState === "erasing") gestureState = "idle";
+        if (gestureState === "erasing") {
+          if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
+          gestureState = "idle";
+          smoothedErasePos = null;
+        }
         if (!smoothedCursor) smoothedCursor = { x: cursorPos.x, y: cursorPos.y };
         else {
           smoothedCursor.x = smoothedCursor.x * (1 - CURSOR_SMOOTH) + cursorPos.x * CURSOR_SMOOTH;
@@ -1799,6 +1818,11 @@ function detectLoop() {
                 }
                 activeCurrentStroke.color = activeCurrentStroke.color || drawColor;
                 activeCurrentStroke.lineWidth = activeCurrentStroke.lineWidth ?? drawLineWidth;
+                const now = Date.now();
+                if (pdfMode && currentPdfShareToken && pdfRealtimeBroadcastProgress && activeCurrentStroke.points.length >= 2 && (now - lastGestureBroadcastProgress >= 50 || activeCurrentStroke.points.length % 5 === 0)) {
+                  lastGestureBroadcastProgress = now;
+                  pdfRealtimeBroadcastProgress(pdfPageNum, activeCurrentStroke);
+                }
               }
             }
           }
@@ -1846,10 +1870,12 @@ function detectLoop() {
           }
         }
       } else {
+        if (gestureState === "erasing" && pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
         window.drawCursor = null;
         wasPinching = false;
         shapeInProgress = null;
         gestureState = "idle";
+        smoothedErasePos = null;
         pinchReleaseFrames = 0;
         fingerLostFrames++;
         if (fingerLostFrames >= FINGER_LOST_THRESHOLD && activeCurrentStroke.points.length > 0) {
