@@ -310,6 +310,10 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   gap: 0.5rem;
   flex-wrap: wrap;
 }
+.pdf-upload-group .pdf-upload-zone,
+.pdf-upload-group #pdfClearBtn {
+  display: none !important;
+}
 
 .pdf-upload-zone {
   display: inline-flex;
