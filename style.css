@@ -314,11 +314,6 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
 .pdf-upload-group #pdfClearBtn {
   display: none !important;
 }
-.camera-section:has(.camera-wrapper.pdf-mode) #stopBtn,
-.camera-section:has(.camera-wrapper.pdf-mode) #modePdfBtn {
-  display: none !important;
-}
-
 .pdf-upload-zone {
   display: inline-flex;
   align-items: center;

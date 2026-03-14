@@ -1157,6 +1157,8 @@ async function loadPdfFromShareToken(shareToken) {
     modePdfBtn?.classList.add("active");
     modePptxBtn?.classList.remove("active");
     if (pdfUploadGroup) pdfUploadGroup.style.display = "flex";
+    if (stopBtn) stopBtn.style.display = "none";
+    if (modePdfBtn) modePdfBtn.style.display = "none";
     const pdfZoomGroup = document.getElementById("pdfZoomGroup");
     if (pdfZoomGroup) pdfZoomGroup.style.display = "flex";
     if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
@@ -2288,6 +2290,8 @@ modeCameraBtn?.addEventListener("click", (e) => {
   modePptxBtn?.classList.remove("active");
   if (pdfUploadGroup) pdfUploadGroup.style.display = "none";
   if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
+  if (stopBtn) stopBtn.style.display = "";
+  if (modePdfBtn) modePdfBtn.style.display = "";
   restoreCameraAspect();
   updateDocumentOverlays();
 });
@@ -2306,6 +2310,8 @@ modeWhiteSheetBtn?.addEventListener("click", () => {
   modePptxBtn?.classList.remove("active");
   if (pdfUploadGroup) pdfUploadGroup.style.display = "none";
   if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
+  if (stopBtn) stopBtn.style.display = "";
+  if (modePdfBtn) modePdfBtn.style.display = "";
   restoreCameraAspect();
   updateDocumentOverlays();
 });
@@ -2324,6 +2330,8 @@ modeBlackSheetBtn?.addEventListener("click", () => {
   modePptxBtn?.classList.remove("active");
   if (pdfUploadGroup) pdfUploadGroup.style.display = "none";
   if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
+  if (stopBtn) stopBtn.style.display = "";
+  if (modePdfBtn) modePdfBtn.style.display = "";
   restoreCameraAspect();
   updateDocumentOverlays();
 });
@@ -2342,6 +2350,8 @@ modePdfBtn?.addEventListener("click", () => {
   modePptxBtn?.classList.remove("active");
   if (pdfUploadGroup) pdfUploadGroup.style.display = "flex";
   if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
+  if (stopBtn) stopBtn.style.display = "none";
+  if (modePdfBtn) modePdfBtn.style.display = "none";
   if (pdfDoc) {
     loadPdfPageState();
     cameraWrapper?.classList.add("pdf-loaded");
@@ -2364,6 +2374,8 @@ modePptxBtn?.addEventListener("click", () => {
   modePptxBtn?.classList.add("active");
   if (pdfUploadGroup) pdfUploadGroup.style.display = "none";
   if (pptxUploadGroup) pptxUploadGroup.style.display = "flex";
+  if (stopBtn) stopBtn.style.display = "";
+  if (modePdfBtn) modePdfBtn.style.display = "none";
   if (pptxViewer) {
     loadPptxPageState();
     cameraWrapper?.classList.add("pptx-loaded");
@@ -2691,7 +2703,8 @@ if (shareId) {
       modePdfBtn?.classList.add("active");
       modeToggle?.querySelectorAll(".btn-mode").forEach((b) => { if (b !== modePdfBtn) b.style.display = "none"; });
       startBtn.style.display = "none";
-      stopBtn.style.display = "";
+      stopBtn.style.display = "none";
+      modePdfBtn.style.display = "none";
       startCamera();
     }
   });
