@@ -2231,7 +2231,9 @@ document.addEventListener("fullscreenchange", () => {
   scheduleDocRefitStable();
 });
 
-modeCameraBtn?.addEventListener("click", () => {
+modeCameraBtn?.addEventListener("click", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
   whiteSheetMode = false;
   blackSheetMode = false;
   pdfMode = false;

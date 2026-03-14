@@ -13,7 +13,7 @@ if (!supabase) {
   const refreshToken = params.get("refresh_token");
   if (accessToken) {
     await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken || "" });
-    window.history.replaceState(null, "", window.location.pathname);
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
@@ -98,6 +98,12 @@ function openPdfLink() {
 }
 openLinkBtn?.addEventListener("click", openPdfLink);
 pdfLinkInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); openPdfLink(); } });
+
+document.getElementById("goCameraBtn")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  window.location.href = "/index.html?mode=camera";
+});
 
 async function loadPdfs() {
   const { data: { user } } = await supabase.auth.getUser();
