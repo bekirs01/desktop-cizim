@@ -743,6 +743,21 @@ function drawObjects(ctx, w, h) {
   });
 }
 
+/** Stroke noktalarına hafif yumuşatma — çizim daha düzgün görünsün */
+function smoothStrokePoints(pts, alpha = 0.25) {
+  if (!pts || pts.length < 3) return pts;
+  const out = [];
+  for (let i = 0; i < pts.length; i++) {
+    if (i === 0 || i === pts.length - 1) { out.push({ x: pts[i].x, y: pts[i].y }); continue; }
+    const prev = pts[i - 1], curr = pts[i], next = pts[i + 1];
+    out.push({
+      x: (1 - alpha) * curr.x + (alpha / 2) * (prev.x + next.x),
+      y: (1 - alpha) * curr.y + (alpha / 2) * (prev.y + next.y)
+    });
+  }
+  return out;
+}
+
 // Renk hex -> rgba
 function hexToRgba(hex, a) {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -883,7 +898,8 @@ function drawStrokesToCanvas(w, h) {
   dctx.lineCap = "round";
   dctx.lineJoin = "round";
   allStrokes.forEach((stroke) => {
-    const pts = stroke.points || stroke;
+    const rawPts = stroke.points || stroke;
+    const pts = smoothStrokePoints(rawPts);
     const color = stroke.color || drawColor;
     const lw = stroke.lineWidth ?? defLw;
     if (pts.length < 2) return;
@@ -1047,7 +1063,8 @@ function drawStrokesToPdfCanvas(w, h) {
   });
   const allStrokes = [...pdfStrokes, pdfCurrentStroke.points.length > 0 ? pdfCurrentStroke : null].filter(Boolean);
   allStrokes.forEach((stroke) => {
-    const pts = stroke.points || stroke;
+    const rawPts = stroke.points || stroke;
+    const pts = smoothStrokePoints(rawPts);
     const color = stroke.color || drawColor;
     const lw = stroke.lineWidth ?? defLw;
     if (pts.length < 2) return;
@@ -1062,7 +1079,8 @@ function drawStrokesToPdfCanvas(w, h) {
     dctx.stroke();
   });
   if (pdfRemoteCurrentStroke?.points?.length >= 2) {
-    const pts = pdfRemoteCurrentStroke.points;
+    const rawPts = pdfRemoteCurrentStroke.points;
+    const pts = smoothStrokePoints(rawPts);
     const color = pdfRemoteCurrentStroke.color || drawColor;
     const lw = pdfRemoteCurrentStroke.lineWidth ?? defLw;
     dctx.beginPath();
@@ -1361,7 +1379,8 @@ function drawStrokesToPptxCanvas(w, h) {
   });
   const allStrokes = [...pptxStrokes, pptxCurrentStroke.points.length > 0 ? pptxCurrentStroke : null].filter(Boolean);
   allStrokes.forEach((stroke) => {
-    const pts = stroke.points || stroke;
+    const rawPts = stroke.points || stroke;
+    const pts = smoothStrokePoints(rawPts);
     const color = stroke.color || drawColor;
     const lw = stroke.lineWidth ?? defLw;
     if (pts.length < 2) return;
