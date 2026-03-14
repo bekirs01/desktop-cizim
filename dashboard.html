@@ -56,22 +56,6 @@
       border-radius: var(--radius-sm); padding: 0.75rem 1rem;
       margin-bottom: 1rem; color: var(--error); font-size: 0.9rem;
     }
-    .hand-preference-dashboard {
-      display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
-      margin-bottom: 1.5rem; padding: 1rem 1.25rem;
-      background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
-    }
-    .hand-preference-dashboard .hand-pref-label { font-size: 0.95rem; color: var(--text-primary); }
-    .hand-preference-dashboard .hand-pref-btns { display: flex; gap: 0.25rem; }
-    .hand-preference-dashboard .btn-mode {
-      padding: 0.5rem 1rem; font-size: 0.9rem; border-radius: var(--radius-sm);
-      border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-secondary);
-      cursor: pointer; transition: 0.2s;
-    }
-    .hand-preference-dashboard .btn-mode:hover { border-color: var(--accent); color: var(--accent); }
-    .hand-preference-dashboard .btn-mode.active {
-      background: var(--accent); color: var(--bg-primary); border-color: var(--accent);
-    }
   </style>
 </head>
 <body>
@@ -88,14 +72,6 @@
         </div>
       </header>
 
-      <div class="hand-preference-dashboard">
-        <span class="hand-pref-label">✋ El seçimi (çizim/silme için):</span>
-        <div class="hand-pref-btns">
-          <button type="button" id="handLeftBtn" class="btn btn-mode" title="Sol el ile çizim/silme">Sol el</button>
-          <button type="button" id="handRightBtn" class="btn btn-mode active" title="Sağ el ile çizim/silme">Sağ el</button>
-        </div>
-      </div>
-
       <div class="dashboard-cards">
         <a href="/index.html?mode=camera" class="dashboard-card">
           <h2>📷 Камера</h2>
@@ -107,14 +83,6 @@
         </div>
       </div>
 
-      <div class="link-open-section">
-        <label class="link-open-label">🌐 URL для друзей (без деплоя)</label>
-        <p class="link-open-hint">Запустите <code>npm run share</code> — появится публичный URL (например https://xxx.loca.lt). Вставьте его сюда. Или укажите IP (192.168.x.x) если друг в той же сети.</p>
-        <div class="link-open-row">
-          <input type="text" id="shareBaseUrlInput" class="link-open-input" placeholder="https://xxx.loca.lt или http://192.168.1.5:3457">
-          <button type="button" id="saveShareUrlBtn" class="btn btn-secondary">Сохранить</button>
-        </div>
-      </div>
       <div class="link-open-section">
         <label class="link-open-label">🔗 Ссылка на PDF (совместное рисование)</label>
         <p class="link-open-hint">Вставьте ссылку — откроется PDF с камерой. Вы и ваш друг сможете рисовать вместе в реальном времени.</p>
