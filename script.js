@@ -1886,19 +1886,9 @@ function detectLoop() {
             const dx = last ? drawCursorX - last.x : 0;
             const dy = last ? smoothedCursor.y - last.y : 0;
             const dist = Math.hypot(dx, dy);
-            const maxJump = 0.15;
             if (drawCursorX >= 0 && drawCursorX <= 1 && smoothedCursor.y >= 0 && smoothedCursor.y <= 1) {
               if (!last || dist > MIN_STROKE_DIST) {
-                const inMiddleOfStroke = pts.length >= 2;
-                if (inMiddleOfStroke && dist > maxJump && last) {
-                  const n = Math.min(8, Math.ceil(dist / 0.02));
-                  for (let i = 1; i <= n; i++) {
-                    const t = i / n;
-                    activeCurrentStroke.points.push({ x: last.x + dx * t, y: last.y + dy * t });
-                  }
-                } else {
-                  activeCurrentStroke.points.push({ x: drawCursorX, y: smoothedCursor.y });
-                }
+                activeCurrentStroke.points.push({ x: drawCursorX, y: smoothedCursor.y });
                 activeCurrentStroke.color = activeCurrentStroke.color || drawColor;
                 activeCurrentStroke.lineWidth = activeCurrentStroke.lineWidth ?? drawLineWidth;
                 const now = Date.now();
