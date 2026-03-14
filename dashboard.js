@@ -102,6 +102,7 @@ pdfLinkInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.pr
 document.getElementById("goCameraBtn")?.addEventListener("click", (e) => {
   e.preventDefault();
   e.stopPropagation();
+  sessionStorage.setItem("pendingCameraMode", "1");
   window.location.href = "/index.html?mode=camera";
 });
 

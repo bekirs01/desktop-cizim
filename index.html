@@ -24,9 +24,18 @@
         throw new Error('Auth required');
       }
       const urlParams = new URLSearchParams(window.location.search);
-      if (!urlParams.get('id') && urlParams.get('mode') !== 'camera') {
+      const hasId = !!urlParams.get('id');
+      const hasCameraMode = urlParams.get('mode') === 'camera' || sessionStorage.getItem('pendingCameraMode') === '1';
+      if (!hasId && !hasCameraMode) {
         window.location.replace('/dashboard.html');
         throw new Error('Redirect');
+      }
+      if (sessionStorage.getItem('pendingCameraMode') === '1') {
+        sessionStorage.removeItem('pendingCameraMode');
+        if (urlParams.get('mode') !== 'camera') {
+          const base = window.location.pathname + window.location.search;
+          window.history.replaceState(null, '', base + (base.includes('?') ? '&' : '?') + 'mode=camera');
+        }
       }
       window.supabase = supabase;
     }
