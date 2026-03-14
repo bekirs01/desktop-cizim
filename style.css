@@ -179,6 +179,10 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   pointer-events: none;
   z-index: 10;
 }
+.camera-wrapper:not(.pdf-mode):not(.pptx-mode) #drawCanvas {
+  pointer-events: auto;
+  cursor: crosshair;
+}
 
 #output {
   pointer-events: none;

@@ -1285,6 +1285,51 @@ function setupPdfDrawing() {
   pdfDrawCanvas.addEventListener("touchend", onEnd, { passive: false });
 }
 
+function setupCanvasDrawing() {
+  if (!drawCanvas) return;
+  const getNorm = (e) => {
+    const rect = drawCanvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const nx = (clientX - rect.left) / rect.width;
+    const ny = (clientY - rect.top) / rect.height;
+    return { x: MIRROR_CAMERA ? 1 - nx : nx, y: ny };
+  };
+  let canvasIsDrawing = false;
+  const onStart = (e) => {
+    if (pdfMode || pptxMode) return;
+    e.preventDefault();
+    canvasIsDrawing = true;
+    const p = getNorm(e);
+    currentStroke = { points: [{ x: p.x, y: p.y }], color: drawColor, lineWidth: drawLineWidth };
+  };
+  const onMove = (e) => {
+    if (!canvasIsDrawing || !currentStroke.points.length) return;
+    e.preventDefault();
+    const p = getNorm(e);
+    if (p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1) {
+      currentStroke.points.push({ x: p.x, y: p.y });
+      drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+    }
+  };
+  const onEnd = (e) => {
+    if (!canvasIsDrawing) return;
+    e.preventDefault();
+    canvasIsDrawing = false;
+    if (currentStroke.points.length > 1) {
+      strokes.push({ ...currentStroke });
+    }
+    currentStroke = { points: [], color: drawColor };
+  };
+  drawCanvas.addEventListener("mousedown", onStart);
+  drawCanvas.addEventListener("mousemove", onMove);
+  drawCanvas.addEventListener("mouseup", onEnd);
+  drawCanvas.addEventListener("mouseleave", onEnd);
+  drawCanvas.addEventListener("touchstart", onStart, { passive: false });
+  drawCanvas.addEventListener("touchmove", onMove, { passive: false });
+  drawCanvas.addEventListener("touchend", onEnd, { passive: false });
+}
+
 function clearPdf() {
   pdfDoc = null;
   pdfPageNum = 1;
@@ -2636,6 +2681,7 @@ if (window.ResizeObserver && cameraWrapper) {
 
 setupPdfDrawing();
 setupPptxDrawing();
+setupCanvasDrawing();
 
 const urlParams = new URLSearchParams(window.location.search);
 const shareId = urlParams.get("id");
@@ -2656,7 +2702,8 @@ if (shareId) {
   pdfOverlay?.classList.add("hidden");
   modePdfBtn?.classList.remove("active");
   modeCameraBtn?.classList.add("active");
-  modeToggle?.querySelectorAll(".btn-mode").forEach((b) => { if (b !== modeCameraBtn) b.style.display = "none"; });
+  [modePdfBtn, modePptxBtn].forEach((b) => { if (b) b.style.display = "none"; });
+  [modeCameraBtn, modeWhiteSheetBtn, modeBlackSheetBtn].forEach((b) => { if (b) b.style.display = ""; });
   startBtn.style.display = "none";
   stopBtn.style.display = "";
   startCamera();
