@@ -1843,6 +1843,8 @@ function detectLoop() {
               activeCurrentStroke = { points: [], color: drawColor };
               gestureState = "idle";
               pinchReleaseFrames = 0;
+              smoothedCursor = null;
+              smoothedPinch = null;
             }
           } else {
             pinchReleaseFrames = 0;
@@ -1887,7 +1889,8 @@ function detectLoop() {
             const maxJump = 0.15;
             if (drawCursorX >= 0 && drawCursorX <= 1 && smoothedCursor.y >= 0 && smoothedCursor.y <= 1) {
               if (!last || dist > MIN_STROKE_DIST) {
-                if (dist > maxJump && last) {
+                const inMiddleOfStroke = pts.length >= 2;
+                if (inMiddleOfStroke && dist > maxJump && last) {
                   const n = Math.min(8, Math.ceil(dist / 0.02));
                   for (let i = 1; i <= n; i++) {
                     const t = i / n;
@@ -1947,6 +1950,8 @@ function detectLoop() {
             activeStrokes.push(stroke);
             if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
             activeCurrentStroke = { points: [], color: drawColor };
+            smoothedCursor = null;
+            smoothedPinch = null;
           }
         }
       } else {
@@ -1964,6 +1969,8 @@ function detectLoop() {
           activeStrokes.push(stroke);
           if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
           activeCurrentStroke = { points: [], color: drawColor };
+          smoothedCursor = null;
+          smoothedPinch = null;
         }
       }
 

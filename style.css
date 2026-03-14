@@ -194,8 +194,7 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   left: 0;
   width: 100%;
   height: 100%;
-  /* Beyaz sayfa: yarı saydam koyu katman, kamera görünür */
-  background: rgba(0, 0, 0, 0.62);
+  background: #ffffff;
   z-index: 1;
   display: none;
   border-radius: inherit;
@@ -206,13 +205,11 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   display: block;
 }
 
-/* Beyaz sayfa: kamera arkada görünsün */
 .camera-wrapper.white-sheet-mode #output {
-  opacity: 1;
+  opacity: 0;
   pointer-events: none;
 }
 
-/* Siyah liste: tamamen siyah, kamera gizli */
 .camera-wrapper.white-sheet-mode.black-sheet-mode .white-sheet-bg {
   background: #000000;
 }
