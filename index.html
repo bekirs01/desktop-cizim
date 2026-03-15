@@ -25,8 +25,9 @@
       }
       const urlParams = new URLSearchParams(window.location.search);
       const hasId = !!urlParams.get('id');
+      const hasCanvas = !!urlParams.get('canvas');
       const hasCameraMode = urlParams.get('mode') === 'camera' || sessionStorage.getItem('pendingCameraMode') === '1';
-      if (!hasId && !hasCameraMode) {
+      if (!hasId && !hasCanvas && !hasCameraMode) {
         window.location.replace('/dashboard.html');
         throw new Error('Redirect');
       }
@@ -177,6 +178,10 @@
             <span id="pptxPageInfo" class="pptx-page-info">-</span>
             <button id="pptxNextBtn" class="btn btn-secondary btn-small" disabled>▶</button>
             <button id="pptxClearBtn" class="btn btn-draw btn-small" disabled>−</button>
+          </div>
+          <div class="controls-group" id="canvasShareGroup" style="display:none">
+            <button type="button" id="canvasShareBtn" class="btn btn-draw btn-small" title="Создать общий холст и скопировать ссылку">🔗 Общий холст</button>
+            <button type="button" id="canvasCopyLinkBtn" class="btn btn-draw btn-small" disabled title="Копировать ссылку" style="display:none">📋 Копировать ссылку</button>
           </div>
           <div class="controls-group">
             <button type="button" id="drawBtn" class="btn btn-draw" disabled>Рисование</button>

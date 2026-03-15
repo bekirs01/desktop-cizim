@@ -85,7 +85,11 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   justify-content: center;
   background: transparent;
 }
-.app.canvas-fullscreen .camera-wrapper.pdf-mode .pdf-page-wrap,
+.app.canvas-fullscreen .camera-wrapper.pdf-mode .pdf-page-wrap {
+  width: auto;
+  max-width: 100%;
+  margin: 0 auto;
+}
 .app.canvas-fullscreen .camera-wrapper.pptx-mode .pptx-slide-wrap {
   width: 100%;
 }

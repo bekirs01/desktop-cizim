@@ -16,7 +16,7 @@ export async function uploadPdfToSupabase(file, onSuccess, onError) {
       return null;
     }
     const user = session.user;
-    const shareId = crypto.randomUUID().slice(0, 8);
+    const shareId = crypto.randomUUID().replace(/-/g, "");
     const ext = file.name.split(".").pop() || "pdf";
     const path = `${user.id}/${shareId}.${ext}`;
 

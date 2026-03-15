@@ -82,19 +82,22 @@ saveShareUrlBtn?.addEventListener("click", () => {
 function extractShareIdFromLink(str) {
   if (!str || typeof str !== "string") return null;
   const trimmed = str.trim();
+  const canvasMatch = trimmed.match(/[?&]canvas=([a-zA-Z0-9_-]+)/);
+  if (canvasMatch) return { type: "canvas", id: canvasMatch[1] };
   const idMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-  if (idMatch) return idMatch[1];
-  if (/^[a-zA-Z0-9_-]{6,64}$/.test(trimmed)) return trimmed;
+  if (idMatch) return { type: "pdf", id: idMatch[1] };
+  if (/^[a-zA-Z0-9_-]{6,64}$/.test(trimmed)) return { type: "pdf", id: trimmed };
   return null;
 }
 
 function openPdfLink() {
-  const id = extractShareIdFromLink(pdfLinkInput?.value || "");
-  if (!id) {
-    alert("Вставьте ссылку на PDF (например: view.html?id=abc123) или только id");
+  const parsed = extractShareIdFromLink(pdfLinkInput?.value || "");
+  if (!parsed) {
+    alert("Вставьте ссылку на PDF или общий холст (например: ...index.html?id=xxx или ...index.html?canvas=xxx)");
     return;
   }
-  window.location.href = `/index.html?id=${encodeURIComponent(id)}`;
+  const param = parsed.type === "canvas" ? "canvas" : "id";
+  window.location.href = `/index.html?${param}=${encodeURIComponent(parsed.id)}`;
 }
 openLinkBtn?.addEventListener("click", openPdfLink);
 pdfLinkInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); openPdfLink(); } });
