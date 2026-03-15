@@ -69,7 +69,7 @@ const POSE_CONNECTIONS = [
   [15, 17], [15, 19], [15, 21], [16, 18], [16, 20], [16, 22]
 ];
 
-const MIN_VIS = 0.25;
+const MIN_VIS = 0.15;
 const MIRROR_CAMERA = true;
 
 const PERFORMANCE_MODE = true;
@@ -168,25 +168,24 @@ let wasToolbarPinch = false;
 let shapeInProgress = null;
 let smoothedCursor = null;
 let smoothedPinch = null;
-let smoothedErasePos = null;  // Silme pozisyonu için yumuşatma (titremeyi azaltır)
-const CURSOR_SMOOTH = 0.35;   // Daha düşük = daha akıcı çizim (titreme azalır)
-const ERASE_SMOOTH = 0.4;    // Silme pozisyonu yumuşatma
-const GESTURE_LOCK_FRAMES = 6; // Çizim ve silme aynı anda çalışmasın — kilit süresi
+let smoothedErasePos = null;
+const CURSOR_SMOOTH = 0.45;
+const ERASE_SMOOTH = 0.5;
+const GESTURE_LOCK_FRAMES = 3;
 let framesSinceDraw = 999;
 let framesSinceErase = 999;
 
-// Gesture state machine — smooth, stable drawing like a real board
 const GESTURE_STATE = { IDLE: "idle", DRAWING: "drawing", ERASING: "erasing" };
 let gestureState = GESTURE_STATE.IDLE;
-let smoothedThumbIndexDist = 0.5; // start high so we don't falsely trigger
-let pinchReleaseFrames = 0;       // frames with dist > release threshold
-let twoFingerHeldFrames = 0;      // frames with two-finger held (for erasing stability)
-const PINCH_START_THRESHOLD = 0.032;   // start drawing when fingers touch
-const PINCH_RELEASE_THRESHOLD = 0.055; // require wider separation to stop (hysteresis)
-const PINCH_RELEASE_FRAMES = 10;       // consecutive frames above release before ending stroke
-const DIST_SMOOTH_ALPHA = 0.25;        // lower = smoother, pinch daha stabil
-const FINGER_LOST_THRESHOLD = 10;      // frames without pinch before ending stroke (was 2)
-const MIN_STROKE_DIST = 0.003;         // min dist to add point (titremeyi filtreler)
+let smoothedThumbIndexDist = 0.2;
+let pinchReleaseFrames = 0;
+let twoFingerHeldFrames = 0;
+const PINCH_START_THRESHOLD = 0.07;
+const PINCH_RELEASE_THRESHOLD = 0.1;
+const PINCH_RELEASE_FRAMES = 4;
+const DIST_SMOOTH_ALPHA = 0.6;
+const FINGER_LOST_THRESHOLD = 6;
+const MIN_STROKE_DIST = 0.002;
 let cachedLm = null;
 let cachedEyesClosed = false;
 let cachedHandLandmarks = [];
@@ -389,7 +388,6 @@ function drawHandLandmarks(ctx, hands, w, h) {
   });
 }
 
-// İki parmak (işaret + orta) uzatılmış — silme için (daha toleranslı algılama)
 function isTwoFingersExtended(hand) {
   if (!hand || hand.length < 21) return false;
   const idxTip = hand[8], midTip = hand[12], idxPip = hand[6], midPip = hand[10];
@@ -400,15 +398,14 @@ function isTwoFingersExtended(hand) {
   const lenRing = d(ringTip, hand[13]);
   const lenPinky = d(pinkyTip, hand[17]);
   const distIdxMid = d(idxTip, midTip);
-  const minExtended = 0.055;  // Biraz gevşetildi — daha kolay tetiklenir
+  const minExtended = 0.04;
   const tipToPipIdx = d(idxTip, idxPip);
   const tipToPipMid = d(midTip, midPip);
-  // İşaret ve orta parmak uzun, ring/pinky kapalı (1.1x yeterli)
   return lenIdx >= minExtended && lenMid >= minExtended &&
-         tipToPipIdx > 0.025 && tipToPipMid > 0.025 &&
-         lenIdx > lenRing * 1.1 && lenMid > lenRing * 1.1 &&
-         lenIdx > lenPinky * 1.1 && lenMid > lenPinky * 1.1 &&
-         distIdxMid > 0.025 && distIdxMid < 0.28;  // Daha geniş aralık
+         tipToPipIdx > 0.02 && tipToPipMid > 0.02 &&
+         lenIdx > lenRing * 1.05 && lenMid > lenRing * 1.05 &&
+         lenIdx > lenPinky * 1.05 && lenMid > lenPinky * 1.05 &&
+         distIdxMid > 0.02 && distIdxMid < 0.32;
 }
 
 function getTwoFingerPosition(hand) {
@@ -1790,7 +1787,8 @@ function detectLoop() {
           fingerLostFrames = 0;
           wasPinching = false;
           shapeInProgress = null;
-          activeCurrentStroke = { points: [], color: drawColor };
+          activeCurrentStroke.points = [];
+          activeCurrentStroke.color = drawColor;
           smoothedCursor = null;
           smoothedPinch = null;
           smoothedErasePos = { x: twoFingerPos.x, y: twoFingerPos.y };
@@ -1831,7 +1829,11 @@ function detectLoop() {
         window.drawCursor = smoothedCursor;
         const hand = handLandmarks[handIdx];
         const rawDist = hand ? getThumbIndexDistance(hand) : 1;
-        smoothedThumbIndexDist = smoothedThumbIndexDist * (1 - DIST_SMOOTH_ALPHA) + rawDist * DIST_SMOOTH_ALPHA;
+        if (gestureState === "idle" && rawDist < PINCH_START_THRESHOLD) {
+          smoothedThumbIndexDist = rawDist;
+        } else {
+          smoothedThumbIndexDist = smoothedThumbIndexDist * (1 - DIST_SMOOTH_ALPHA) + rawDist * DIST_SMOOTH_ALPHA;
+        }
         let isPinchActive = false;
         if (gestureState === "drawing") {
           if (smoothedThumbIndexDist > PINCH_RELEASE_THRESHOLD) {
@@ -1842,7 +1844,9 @@ function detectLoop() {
                 activeStrokes.push(stroke);
                 if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
               }
-              activeCurrentStroke = { points: [], color: drawColor };
+              activeCurrentStroke.points = [];
+              activeCurrentStroke.color = drawColor;
+              activeCurrentStroke.lineWidth = drawLineWidth;
               gestureState = "idle";
               pinchReleaseFrames = 0;
               smoothedCursor = null;
@@ -1856,12 +1860,14 @@ function detectLoop() {
           pinchReleaseFrames = 0;
           if (smoothedThumbIndexDist < PINCH_START_THRESHOLD && framesSinceErase >= GESTURE_LOCK_FRAMES) {
             gestureState = "drawing";
+            activeCurrentStroke.points = [];
             isPinchActive = true;
           }
         }
         const tiCenter = hand && getThumbIndexSize(hand)?.center;
         let pinchPos;
-        if (tiCenter && tiCenter.x >= 0 && tiCenter.x <= 1 && tiCenter.y >= 0 && tiCenter.y <= 1) {
+        const clamp01 = (v) => Math.max(0, Math.min(1, v));
+        if (tiCenter && tiCenter.x >= -0.05 && tiCenter.x <= 1.05 && tiCenter.y >= -0.05 && tiCenter.y <= 1.05) {
           if (!smoothedPinch) smoothedPinch = { x: tiCenter.x, y: tiCenter.y };
           else {
             smoothedPinch.x = smoothedPinch.x * (1 - CURSOR_SMOOTH) + tiCenter.x * CURSOR_SMOOTH;
@@ -1878,9 +1884,10 @@ function detectLoop() {
           const drawCursorX = (pdfMode && pdfDoc) || (pptxMode && pptxViewer) ? toDocNormX(smoothedCursor.x) : smoothedCursor.x;
           const drawPinchX = (pdfMode && pdfDoc) || (pptxMode && pptxViewer) ? toDocNormX(pinchPos.x) : pinchPos.x;
           if (["circle","rect","line","ellipse","triangle","arrow"].includes(drawShape)) {
-            if (pinchPos && drawPinchX >= 0 && drawPinchX <= 1 && pinchPos.y >= 0 && pinchPos.y <= 1) {
-              if (!shapeInProgress) shapeInProgress = { start: { x: drawPinchX, y: pinchPos.y }, end: { x: drawPinchX, y: pinchPos.y }, type: drawShape };
-              else shapeInProgress.end = { x: drawPinchX, y: pinchPos.y };
+            if (pinchPos) {
+              const px = clamp01(drawPinchX), py = clamp01(pinchPos.y);
+              if (!shapeInProgress) shapeInProgress = { start: { x: px, y: py }, end: { x: px, y: py }, type: drawShape };
+              else shapeInProgress.end = { x: px, y: py };
             }
           } else {
             const pts = activeCurrentStroke.points;
@@ -1888,16 +1895,15 @@ function detectLoop() {
             const dx = last ? drawCursorX - last.x : 0;
             const dy = last ? smoothedCursor.y - last.y : 0;
             const dist = Math.hypot(dx, dy);
-            if (drawCursorX >= 0 && drawCursorX <= 1 && smoothedCursor.y >= 0 && smoothedCursor.y <= 1) {
-              if (!last || dist > MIN_STROKE_DIST) {
-                activeCurrentStroke.points.push({ x: drawCursorX, y: smoothedCursor.y });
-                activeCurrentStroke.color = activeCurrentStroke.color || drawColor;
-                activeCurrentStroke.lineWidth = activeCurrentStroke.lineWidth ?? drawLineWidth;
-                const now = Date.now();
-                if (pdfMode && currentPdfShareToken && pdfRealtimeBroadcastProgress && activeCurrentStroke.points.length >= 2 && (now - lastGestureBroadcastProgress >= 50 || activeCurrentStroke.points.length % 5 === 0)) {
-                  lastGestureBroadcastProgress = now;
-                  pdfRealtimeBroadcastProgress(pdfPageNum, activeCurrentStroke);
-                }
+            const cx = clamp01(drawCursorX), cy = clamp01(smoothedCursor.y);
+            if (!last || dist > MIN_STROKE_DIST) {
+              activeCurrentStroke.points.push({ x: cx, y: cy });
+              activeCurrentStroke.color = activeCurrentStroke.color || drawColor;
+              activeCurrentStroke.lineWidth = activeCurrentStroke.lineWidth ?? drawLineWidth;
+              const now = Date.now();
+              if (pdfMode && currentPdfShareToken && pdfRealtimeBroadcastProgress && activeCurrentStroke.points.length >= 2 && (now - lastGestureBroadcastProgress >= 50 || activeCurrentStroke.points.length % 5 === 0)) {
+                lastGestureBroadcastProgress = now;
+                pdfRealtimeBroadcastProgress(pdfPageNum, activeCurrentStroke);
               }
             }
           }
@@ -1941,7 +1947,8 @@ function detectLoop() {
             const stroke = { points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth };
             activeStrokes.push(stroke);
             if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
-            activeCurrentStroke = { points: [], color: drawColor };
+            activeCurrentStroke.points = [];
+            activeCurrentStroke.color = drawColor;
             smoothedCursor = null;
             smoothedPinch = null;
           }
@@ -1960,7 +1967,8 @@ function detectLoop() {
           const stroke = { points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth };
           activeStrokes.push(stroke);
           if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
-          activeCurrentStroke = { points: [], color: drawColor };
+          activeCurrentStroke.points = [];
+          activeCurrentStroke.color = drawColor;
           smoothedCursor = null;
           smoothedPinch = null;
         }
@@ -2137,9 +2145,9 @@ async function startCamera() {
             baseOptions: { modelAssetPath: HAND_MODEL, delegate: "GPU" },
             runningMode: "VIDEO",
             numHands: 2,
-            minHandDetectionConfidence: 0.3,
-            minHandPresenceConfidence: 0.3,
-            minTrackingConfidence: 0.3,
+            minHandDetectionConfidence: 0.2,
+            minHandPresenceConfidence: 0.2,
+            minTrackingConfidence: 0.2,
           });
         } catch (modelErr) {
           console.error("Ошибка загрузки модели:", modelErr);

@@ -84,7 +84,7 @@ function extractShareIdFromLink(str) {
   const trimmed = str.trim();
   const idMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if (idMatch) return idMatch[1];
-  if (/^[a-zA-Z0-9_-]{6,20}$/.test(trimmed)) return trimmed;
+  if (/^[a-zA-Z0-9_-]{6,64}$/.test(trimmed)) return trimmed;
   return null;
 }
 

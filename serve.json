@@ -1,6 +1,7 @@
 {
   "directoryListing": false,
   "rewrites": [
+    { "source": "/", "destination": "/index.html" },
     { "source": "/dashboard", "destination": "/dashboard.html" },
     { "source": "/login", "destination": "/login.html" }
   ],
