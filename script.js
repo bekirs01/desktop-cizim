@@ -3627,23 +3627,38 @@ if (shareId) {
     } else alert("Не удалось загрузить общий холст");
   });
 } else if (isCameraMode) {
+  const isEmbed = urlParams.get("embed") === "1";
   pdfOverlay?.classList.add("hidden");
   whiteSheetMode = true;
   blackSheetMode = false;
   cameraWrapper?.classList.remove("black-sheet-mode", "pdf-mode", "pptx-mode", "pptx-loaded");
-  cameraWrapper?.classList.add("white-sheet-mode", "camera-feed-mode");
+  if (isEmbed) {
+    cameraWrapper?.classList.add("white-sheet-mode", "camera-feed-mode");
+    document.querySelector(".app")?.classList.add("embed-camera");
+    drawMode = false;
+    showSkeleton = true;
+    startCamera();
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) stopCamera();
+      else startCamera();
+    });
+    window.addEventListener("message", (e) => {
+      if (e.data?.type === "camera-section-collapsed") stopCamera();
+    });
+  } else {
+    cameraWrapper?.classList.add("white-sheet-mode");
+  }
   applyCanvasBackground();
-  drawingControlsGroup.style.display = "flex";
+  drawingControlsGroup.style.display = isEmbed ? "none" : "flex";
   cameraControlsGroup.style.display = "none";
-  if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "inline-flex";
+  if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = isEmbed ? "none" : "inline-flex";
   if (pdfLinkBtn) pdfLinkBtn.style.display = "none";
   cameraOverlay?.classList.add("hidden");
-  drawMode = true;
+  if (!isEmbed) drawMode = true;
   updateDocumentOverlays();
-  updateCanvasSharedUI();
+  if (!isEmbed) updateCanvasSharedUI();
   updateHeaderTitle();
   scheduleDocRefit();
-  startCamera();
 }
 
 if (urlParams.get("embed") === "1") {

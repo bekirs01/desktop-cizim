@@ -68,6 +68,15 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
 .app.canvas-fullscreen .header,
 .app.canvas-fullscreen .controls,
 .app.canvas-fullscreen .main > .camera-section > .controls { display: none !important; visibility: hidden !important; }
+
+.app.embed-camera .header,
+.app.embed-camera .controls,
+.app.embed-camera .draw-toolbar,
+.app.embed-camera #drawCanvas { display: none !important; visibility: hidden !important; }
+.app.embed-camera { padding: 0; }
+.app.embed-camera .main { padding: 0; flex: 1; min-height: 0; }
+.app.embed-camera .camera-section { flex: 1; min-height: 0; }
+.app.embed-camera .camera-wrapper { flex: 1; min-height: 300px; }
 .app.canvas-fullscreen .camera-section { flex: 1; min-height: 0; overflow: hidden; gap: 0; display: flex; flex-direction: column; }
 .app.canvas-fullscreen .camera-wrapper {
   border-radius: 0;
