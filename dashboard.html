@@ -3,134 +3,681 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Мои PDF | Система рисования</title>
+  <title>DrawFlow | Мои документы</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css?v=3">
   <style>
-    .dashboard-page { min-height: 100vh; padding: 1.5rem; max-width: 900px; margin: 0 auto; }
-    .dashboard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
-    .dashboard-header h1 { font-size: 1.5rem; }
-    .dashboard-actions { display: flex; gap: 0.75rem; align-items: center; }
-    .dashboard-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem; }
-    @media (max-width: 600px) { .dashboard-cards { grid-template-columns: 1fr; } }
-    .dashboard-card {
-      background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 1.5rem; text-align: center; cursor: pointer; transition: all 0.2s;
-      text-decoration: none; color: inherit; display: block;
+    :root {
+      --dash-bg: #07070a;
+      --dash-surface: #111118;
+      --dash-surface-hover: #181822;
+      --dash-border: #1f1f2e;
+      --dash-border-hover: #2d2d44;
+      --dash-accent: #6c5ce7;
+      --dash-accent-light: #a29bfe;
+      --dash-accent-glow: rgba(108, 92, 231, 0.25);
+      --dash-green: #00cec9;
+      --dash-green-glow: rgba(0, 206, 201, 0.2);
+      --dash-red: #ff6b6b;
+      --dash-text: #e8e8f0;
+      --dash-text-dim: #6c6c88;
+      --dash-text-mid: #9999b0;
+      --dash-radius: 16px;
+      --dash-radius-sm: 10px;
+      --dash-font: 'Inter', -apple-system, system-ui, sans-serif;
     }
-    .dashboard-card:hover { border-color: var(--accent); background: rgba(0,255,159,0.08); }
-    .dashboard-card h2 { font-size: 1.1rem; margin-bottom: 0.5rem; }
-    .dashboard-card p { font-size: 0.85rem; color: var(--text-secondary); }
-    .pdf-list { display: flex; flex-direction: column; gap: 0.75rem; }
-    .pdf-item {
-      display: flex; align-items: center; justify-content: space-between;
-      background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 1rem 1.25rem; gap: 1rem; flex-wrap: wrap;
+
+    body {
+      font-family: var(--dash-font);
+      background: var(--dash-bg);
+      color: var(--dash-text);
+      min-height: 100vh;
+      margin: 0;
+      overflow-x: hidden;
     }
-    .pdf-item-info { flex: 1; min-width: 0; }
-    .pdf-item-name { font-weight: 600; margin-bottom: 0.25rem; }
-    .pdf-item-meta { font-size: 0.85rem; color: var(--text-secondary); }
-    .pdf-item-actions { display: flex; gap: 0.5rem; }
-    .pdf-empty { text-align: center; padding: 3rem 1rem; color: var(--text-secondary); }
-    .upload-zone {
-      border: 2px dashed var(--border); border-radius: var(--radius);
-      padding: 2rem; text-align: center; cursor: pointer;
-      transition: border-color 0.2s, background 0.2s;
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background:
+        radial-gradient(ellipse at 25% 25%, rgba(108, 92, 231, 0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 75% 75%, rgba(0, 206, 201, 0.04) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+      animation: bgDrift 20s ease-in-out infinite alternate;
     }
-    .upload-zone:hover { border-color: var(--accent); background: rgba(0,255,159,0.05); }
-    .upload-zone input { display: none; }
-    .link-open-section {
-      background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 1.25rem; margin-bottom: 1.5rem;
+
+    @keyframes bgDrift {
+      0% { transform: translate(0, 0); }
+      100% { transform: translate(-3%, -3%); }
     }
-    .link-open-label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
-    .link-open-hint { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; }
-    .link-open-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-    .link-open-input {
-      flex: 1; min-width: 200px; padding: 0.6rem 1rem; border-radius: var(--radius-sm);
-      border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-primary);
-      font-size: 0.95rem;
+
+    .dash-app {
+      position: relative;
+      z-index: 1;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
     }
-    .link-open-input:focus { outline: none; border-color: var(--accent); }
-    .upload-error {
-      background: rgba(255,71,87,0.15); border: 1px solid var(--error);
-      border-radius: var(--radius-sm); padding: 0.75rem 1rem;
-      margin-bottom: 1rem; color: var(--error); font-size: 0.9rem;
+
+    /* ===== NAV ===== */
+    .dash-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 0;
+      margin-bottom: 2.5rem;
     }
-    .camera-section {
-      background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
-      margin-bottom: 1.5rem; overflow: hidden;
+
+    .dash-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
     }
-    .camera-section-header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 1rem 1.25rem; cursor: pointer;
+
+    .dash-brand-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--dash-accent), var(--dash-green));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      box-shadow: 0 4px 20px var(--dash-accent-glow);
+    }
+
+    .dash-brand-text {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, var(--dash-accent-light), var(--dash-green));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .dash-nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .dash-btn {
+      padding: 0.6rem 1.2rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      font-family: var(--dash-font);
+      border: none;
+      border-radius: var(--dash-radius-sm);
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      text-decoration: none;
+    }
+
+    .dash-btn-primary {
+      background: var(--dash-accent);
+      color: #fff;
+      box-shadow: 0 2px 12px var(--dash-accent-glow);
+    }
+
+    .dash-btn-primary:hover {
+      background: #7c6df0;
+      box-shadow: 0 4px 24px var(--dash-accent-glow);
+      transform: translateY(-1px);
+    }
+
+    .dash-btn-ghost {
+      background: transparent;
+      color: var(--dash-text-mid);
+      border: 1px solid var(--dash-border);
+    }
+
+    .dash-btn-ghost:hover {
+      color: var(--dash-text);
+      border-color: var(--dash-border-hover);
+      background: var(--dash-surface);
+    }
+
+    .dash-btn-danger-ghost {
+      background: transparent;
+      color: var(--dash-red);
+      border: 1px solid rgba(255, 107, 107, 0.2);
+    }
+
+    .dash-btn-danger-ghost:hover {
+      background: rgba(255, 107, 107, 0.08);
+      border-color: rgba(255, 107, 107, 0.4);
+    }
+
+    /* ===== HERO CARDS ===== */
+    .dash-hero {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 2.5rem;
+    }
+
+    @media (max-width: 600px) {
+      .dash-hero { grid-template-columns: 1fr; }
+    }
+
+    .dash-hero-card {
+      position: relative;
+      padding: 2rem;
+      border-radius: var(--dash-radius);
+      border: 1px solid var(--dash-border);
+      background: var(--dash-surface);
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow: hidden;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+    }
+
+    .dash-hero-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      border-radius: var(--dash-radius) var(--dash-radius) 0 0;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .dash-hero-card:hover::before { opacity: 1; }
+
+    .dash-hero-card:hover {
+      border-color: var(--dash-border-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .dash-hero-card--draw::before {
+      background: linear-gradient(90deg, var(--dash-accent), var(--dash-accent-light));
+    }
+
+    .dash-hero-card--draw:hover {
+      border-color: rgba(108, 92, 231, 0.3);
+      box-shadow: 0 8px 40px var(--dash-accent-glow);
+    }
+
+    .dash-hero-card--pdf::before {
+      background: linear-gradient(90deg, var(--dash-green), #55efc4);
+    }
+
+    .dash-hero-card--pdf:hover {
+      border-color: rgba(0, 206, 201, 0.3);
+      box-shadow: 0 8px 40px var(--dash-green-glow);
+    }
+
+    .dash-hero-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      margin-bottom: 1rem;
+    }
+
+    .dash-hero-card--draw .dash-hero-icon {
+      background: rgba(108, 92, 231, 0.12);
+    }
+
+    .dash-hero-card--pdf .dash-hero-icon {
+      background: rgba(0, 206, 201, 0.12);
+    }
+
+    .dash-hero-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.35rem;
+      letter-spacing: -0.01em;
+    }
+
+    .dash-hero-desc {
+      font-size: 0.85rem;
+      color: var(--dash-text-dim);
+      line-height: 1.5;
+    }
+
+    .dash-hero-arrow {
+      position: absolute;
+      top: 1.5rem;
+      right: 1.5rem;
+      font-size: 1.2rem;
+      color: var(--dash-text-dim);
+      transition: all 0.3s;
+      opacity: 0;
+      transform: translateX(-4px);
+    }
+
+    .dash-hero-card:hover .dash-hero-arrow {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    /* ===== CAMERA SECTION ===== */
+    .dash-camera-section {
+      background: var(--dash-surface);
+      border: 1px solid var(--dash-border);
+      border-radius: var(--dash-radius);
+      margin-bottom: 1.5rem;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+
+    .dash-camera-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.5rem;
+      cursor: pointer;
       transition: background 0.2s;
     }
-    .camera-section-header:hover { background: rgba(0,255,159,0.06); }
-    .camera-section-header h2 { font-size: 1.1rem; margin: 0; display: flex; align-items: center; gap: 0.5rem; }
-    .camera-section-header .toggle-icon { transition: transform 0.2s; font-size: 1rem; }
-    .camera-section.expanded .toggle-icon { transform: rotate(180deg); }
-    .camera-section-body { display: none; padding: 0 1rem 1rem; }
-    .camera-section.expanded .camera-section-body { display: block; }
-    .camera-iframe-wrap {
-      border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border);
-      background: var(--bg-secondary); min-height: 400px;
+
+    .dash-camera-header:hover {
+      background: var(--dash-surface-hover);
     }
-    .camera-iframe-wrap iframe { width: 100%; height: 500px; border: none; display: block; }
-    .camera-hint { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; }
+
+    .dash-camera-header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .dash-camera-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(108, 92, 231, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+    }
+
+    .dash-camera-label {
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    .dash-camera-toggle {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: var(--dash-surface-hover);
+      border: 1px solid var(--dash-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s;
+      font-size: 0.7rem;
+      color: var(--dash-text-dim);
+    }
+
+    .dash-camera-section.expanded .dash-camera-toggle {
+      transform: rotate(180deg);
+      background: var(--dash-accent);
+      border-color: var(--dash-accent);
+      color: #fff;
+    }
+
+    .dash-camera-body {
+      display: none;
+      padding: 0 1.5rem 1.5rem;
+    }
+
+    .dash-camera-section.expanded .dash-camera-body {
+      display: block;
+      animation: fadeSlideDown 0.3s ease;
+    }
+
+    @keyframes fadeSlideDown {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .dash-camera-frame {
+      border-radius: var(--dash-radius-sm);
+      overflow: hidden;
+      border: 1px solid var(--dash-border);
+      background: var(--dash-bg);
+      min-height: 400px;
+    }
+
+    .dash-camera-frame iframe {
+      width: 100%;
+      height: 500px;
+      border: none;
+      display: block;
+    }
+
+    .dash-camera-hint {
+      font-size: 0.8rem;
+      color: var(--dash-text-dim);
+      margin-top: 0.75rem;
+      line-height: 1.5;
+    }
+
+    /* ===== LINK SECTION ===== */
+    .dash-link-section {
+      background: var(--dash-surface);
+      border: 1px solid var(--dash-border);
+      border-radius: var(--dash-radius);
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .dash-link-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .dash-link-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(0, 206, 201, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+    }
+
+    .dash-link-title {
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    .dash-link-desc {
+      font-size: 0.82rem;
+      color: var(--dash-text-dim);
+      margin-bottom: 1rem;
+      line-height: 1.5;
+      padding-left: 2.5rem;
+    }
+
+    .dash-link-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .dash-link-input {
+      flex: 1;
+      min-width: 0;
+      padding: 0.65rem 1rem;
+      border-radius: var(--dash-radius-sm);
+      border: 1px solid var(--dash-border);
+      background: var(--dash-bg);
+      color: var(--dash-text);
+      font-size: 0.9rem;
+      font-family: var(--dash-font);
+      transition: all 0.2s;
+    }
+
+    .dash-link-input:focus {
+      outline: none;
+      border-color: var(--dash-accent);
+      box-shadow: 0 0 0 3px var(--dash-accent-glow);
+    }
+
+    .dash-link-input::placeholder {
+      color: var(--dash-text-dim);
+    }
+
+    /* ===== PDF LIST ===== */
+    .dash-section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+
+    .dash-section-title h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .dash-section-title .dash-count {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.15rem 0.6rem;
+      background: var(--dash-surface);
+      border: 1px solid var(--dash-border);
+      border-radius: 20px;
+      color: var(--dash-text-dim);
+    }
+
+    .dash-pdf-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .dash-pdf-item {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem 1.25rem;
+      background: var(--dash-surface);
+      border: 1px solid var(--dash-border);
+      border-radius: var(--dash-radius);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .dash-pdf-item:hover {
+      border-color: var(--dash-border-hover);
+      background: var(--dash-surface-hover);
+    }
+
+    .dash-pdf-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: rgba(0, 206, 201, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+
+    .dash-pdf-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .dash-pdf-name {
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-bottom: 0.2rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .dash-pdf-meta {
+      font-size: 0.8rem;
+      color: var(--dash-text-dim);
+    }
+
+    .dash-pdf-actions {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .dash-pdf-empty {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--dash-text-dim);
+    }
+
+    .dash-pdf-empty-icon {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+      opacity: 0.4;
+    }
+
+    .dash-pdf-empty-text {
+      font-size: 0.95rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .dash-pdf-empty-hint {
+      font-size: 0.82rem;
+      color: var(--dash-text-dim);
+    }
+
+    /* ===== UPLOAD ===== */
+    .dash-upload-zone {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .dash-upload-zone input { display: none; }
+
+    .dash-upload-error {
+      background: rgba(255, 107, 107, 0.1);
+      border: 1px solid rgba(255, 107, 107, 0.25);
+      border-radius: var(--dash-radius-sm);
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      color: var(--dash-red);
+      font-size: 0.85rem;
+      animation: fadeSlideDown 0.3s ease;
+    }
+
+    /* ===== ANIMATIONS ===== */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .dash-hero { animation: fadeIn 0.5s ease 0.1s both; }
+    .dash-camera-section { animation: fadeIn 0.5s ease 0.2s both; }
+    .dash-link-section { animation: fadeIn 0.5s ease 0.3s both; }
+    .dash-section-title { animation: fadeIn 0.5s ease 0.35s both; }
+    .dash-pdf-list, .dash-pdf-empty { animation: fadeIn 0.5s ease 0.4s both; }
+
+    .dash-pdf-item {
+      animation: fadeIn 0.4s ease both;
+    }
+
+    /* ===== SCROLLBAR ===== */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--dash-border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--dash-border-hover); }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 600px) {
+      .dash-app { padding: 1rem 1rem 3rem; }
+      .dash-nav { margin-bottom: 1.5rem; }
+      .dash-brand-text { font-size: 1.1rem; }
+      .dash-hero-card { padding: 1.5rem; }
+      .dash-pdf-item { flex-wrap: wrap; }
+      .dash-pdf-actions { width: 100%; justify-content: flex-end; }
+    }
   </style>
 </head>
 <body>
-  <div class="app">
-    <div class="dashboard-page">
-      <header class="dashboard-header">
-        <h1>📄 Мои PDF</h1>
-        <div class="dashboard-actions">
-          <label class="upload-zone" id="uploadZone">
-            <input type="file" id="fileInput" accept="application/pdf">
-            <span>📤 Загрузить PDF</span>
-          </label>
-          <button id="logoutBtn" class="btn btn-secondary">Выйти</button>
-        </div>
-      </header>
-
-      <div class="dashboard-cards">
-        <button type="button" class="dashboard-card" id="goCameraBtn" style="border:none;font:inherit;cursor:pointer;width:100%">
-          <h2>✏️ Режим рисования</h2>
-          <p>Рисование поверх видео с камеры</p>
-        </button>
-        <div class="dashboard-card" style="cursor:default;opacity:0.9">
-          <h2>📄 PDF</h2>
-          <p>Работа с документами ниже</p>
-        </div>
+  <div class="dash-app">
+    <nav class="dash-nav">
+      <div class="dash-brand">
+        <div class="dash-brand-icon">&#x270D;</div>
+        <span class="dash-brand-text">DrawFlow</span>
       </div>
-
-      <div class="camera-section" id="cameraSection">
-        <div class="camera-section-header" id="cameraSectionToggle">
-          <h2>📷 Kamera</h2>
-          <span class="toggle-icon">▼</span>
-        </div>
-        <div class="camera-section-body">
-          <div class="camera-iframe-wrap">
-            <iframe id="cameraIframe" src="about:blank" title="Kamera ve çizim"></iframe>
-          </div>
-          <p class="camera-hint">Kamera açıldığında el hareketleriniz takip edilir. Parmak ile hareket ettirerek çizim yapabilirsiniz.</p>
-        </div>
+      <div class="dash-nav-actions">
+        <label class="dash-upload-zone" id="uploadZone">
+          <input type="file" id="fileInput" accept="application/pdf">
+          <button type="button" class="dash-btn dash-btn-primary" onclick="this.parentElement.querySelector('input').click()">
+            <span>+</span> Загрузить PDF
+          </button>
+        </label>
+        <button id="logoutBtn" class="dash-btn dash-btn-ghost">Выйти</button>
       </div>
+    </nav>
 
-      <div class="link-open-section">
-        <label class="link-open-label">🔗 Ссылка на PDF или общий холст</label>
-        <p class="link-open-hint">Вставьте ссылку — откроется PDF или общий холст. Вы и ваш друг сможете рисовать вместе в реальном времени.</p>
-        <div class="link-open-row">
-          <input type="text" id="pdfLinkInput" class="link-open-input" placeholder="...index.html?id=xxx или ...index.html?canvas=xxx">
-          <button type="button" id="openLinkBtn" class="btn btn-primary">Открыть</button>
+    <div class="dash-hero">
+      <button type="button" class="dash-hero-card dash-hero-card--draw" id="goCameraBtn">
+        <div class="dash-hero-icon">&#x270F;&#xFE0F;</div>
+        <div class="dash-hero-title">Режим рисования</div>
+        <div class="dash-hero-desc">Рисуйте жестами поверх камеры в реальном времени</div>
+        <div class="dash-hero-arrow">&rarr;</div>
+      </button>
+      <div class="dash-hero-card dash-hero-card--pdf" style="cursor:default;">
+        <div class="dash-hero-icon">&#x1F4C4;</div>
+        <div class="dash-hero-title">Документы PDF</div>
+        <div class="dash-hero-desc">Загружайте PDF и рисуйте поверх страниц</div>
+      </div>
+    </div>
+
+    <div class="dash-camera-section" id="cameraSection">
+      <div class="dash-camera-header" id="cameraSectionToggle">
+        <div class="dash-camera-header-left">
+          <div class="dash-camera-icon">&#x1F3A5;</div>
+          <span class="dash-camera-label">Камера</span>
         </div>
+        <div class="dash-camera-toggle">&#x25BC;</div>
       </div>
+      <div class="dash-camera-body">
+        <div class="dash-camera-frame">
+          <iframe id="cameraIframe" src="about:blank" title="Kamera ve çizim"></iframe>
+        </div>
+        <p class="dash-camera-hint">Камера отслеживает движения рук. Рисуйте пальцем в воздухе.</p>
+      </div>
+    </div>
 
-      <div id="uploadError" class="upload-error" style="display:none"></div>
-      <div id="pdfList" class="pdf-list"></div>
-      <div id="pdfEmpty" class="pdf-empty" style="display:none">
-        Пока нет PDF. Загрузите выше.
+    <div class="dash-link-section">
+      <div class="dash-link-header">
+        <div class="dash-link-icon">&#x1F517;</div>
+        <span class="dash-link-title">Открыть по ссылке</span>
       </div>
+      <p class="dash-link-desc">Вставьте ссылку на PDF или общий холст. Рисуйте вместе с друзьями в реальном времени.</p>
+      <div class="dash-link-row">
+        <input type="text" id="pdfLinkInput" class="dash-link-input" placeholder="...index.html?id=xxx или ...index.html?canvas=xxx">
+        <button type="button" id="openLinkBtn" class="dash-btn dash-btn-primary">Открыть</button>
+      </div>
+    </div>
+
+    <div id="uploadError" class="dash-upload-error" style="display:none"></div>
+
+    <div class="dash-section-title">
+      <h2>Мои документы <span id="pdfCount" class="dash-count" style="display:none">0</span></h2>
+    </div>
+    <div id="pdfList" class="dash-pdf-list"></div>
+    <div id="pdfEmpty" class="dash-pdf-empty" style="display:none">
+      <div class="dash-pdf-empty-icon">&#x1F4C2;</div>
+      <div class="dash-pdf-empty-text">Документов пока нет</div>
+      <div class="dash-pdf-empty-hint">Загрузите PDF, чтобы начать рисовать поверх документа</div>
     </div>
   </div>
   <script type="module" src="dashboard.js"></script>

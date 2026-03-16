@@ -5,7 +5,7 @@ import { supabase } from "./supabase-config.js";
 import { uploadPdfToSupabase, deletePdfFromSupabase } from "./supabase-pdf.js";
 
 if (!supabase) {
-  document.body.innerHTML = '<div class="dashboard-page"><p style="color:var(--error)">Supabase не настроен.</p></div>';
+  document.body.innerHTML = '<div class="dash-app"><p style="color:var(--dash-red);padding:3rem;text-align:center;">Supabase не настроен.</p></div>';
 } else {
   const hash = window.location.hash.substring(1);
   const params = new URLSearchParams(hash);
@@ -23,6 +23,7 @@ if (!supabase) {
 
 const pdfList = document.getElementById("pdfList");
 const pdfEmpty = document.getElementById("pdfEmpty");
+const pdfCount = document.getElementById("pdfCount");
 const uploadError = document.getElementById("uploadError");
 const fileInput = document.getElementById("fileInput");
 const uploadZone = document.getElementById("uploadZone");
@@ -52,14 +53,12 @@ if (handLeftBtn && handRightBtn) {
   handRightBtn.classList.toggle("active", preferredHand === "right");
 }
 
-// shareUrl query param ile otomatik kaydet (npm run share sonrası)
 const urlParams = new URLSearchParams(window.location.search);
 const shareUrlParam = urlParams.get("shareUrl");
 if (shareUrlParam && shareUrlParam.startsWith("http")) {
   localStorage.setItem("shareBaseUrl", shareUrlParam.replace(/\/$/, ""));
   window.history.replaceState(null, "", window.location.pathname + window.location.hash);
 }
-// Tünel URL'inden açıldıysa (localhost değilse) otomatik kaydet
 if (!window.location.hostname.match(/^localhost$|^127\.0\.0\.1$/)) {
   const origin = window.location.origin;
   if (origin.startsWith("http")) {
@@ -109,7 +108,6 @@ document.getElementById("goCameraBtn")?.addEventListener("click", (e) => {
   window.location.href = "/index.html?mode=camera";
 });
 
-// Kamera bölümü - aç/kapa ve iframe yükle
 const cameraSection = document.getElementById("cameraSection");
 const cameraSectionToggle = document.getElementById("cameraSectionToggle");
 const cameraIframe = document.getElementById("cameraIframe");
@@ -141,21 +139,29 @@ async function loadPdfs() {
   pdfList.innerHTML = "";
   if (!data?.length) {
     pdfEmpty.style.display = "block";
+    if (pdfCount) pdfCount.style.display = "none";
     return;
   }
   pdfEmpty.style.display = "none";
-  for (const row of data) {
+  if (pdfCount) {
+    pdfCount.textContent = data.length;
+    pdfCount.style.display = "inline";
+  }
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
     const div = document.createElement("div");
-    div.className = "pdf-item";
+    div.className = "dash-pdf-item";
+    div.style.animationDelay = `${0.05 * i}s`;
     const date = row.created_at ? new Date(row.created_at).toLocaleDateString("tr-TR") : "";
     div.innerHTML = `
-      <div class="pdf-item-info">
-        <div class="pdf-item-name">${escapeHtml(row.file_name || "PDF")}</div>
-        <div class="pdf-item-meta">${date}</div>
+      <div class="dash-pdf-icon">&#x1F4C4;</div>
+      <div class="dash-pdf-info">
+        <div class="dash-pdf-name">${escapeHtml(row.file_name || "PDF")}</div>
+        <div class="dash-pdf-meta">${date}</div>
       </div>
-      <div class="pdf-item-actions">
-        <a href="/index.html?id=${row.share_token}" class="btn btn-primary">Открыть PDF</a>
-        <button type="button" class="btn btn-danger pdf-delete-btn" data-id="${row.id}" data-share="${row.share_token}" data-path="${escapeHtml(row.storage_path || "")}" title="Удалить">🗑️ Удалить</button>
+      <div class="dash-pdf-actions">
+        <a href="/index.html?id=${row.share_token}" class="dash-btn dash-btn-primary" style="font-size:0.8rem;padding:0.5rem 1rem;">Открыть</a>
+        <button type="button" class="dash-btn dash-btn-danger-ghost pdf-delete-btn" style="font-size:0.8rem;padding:0.5rem 0.8rem;" data-id="${row.id}" data-share="${row.share_token}" data-path="${escapeHtml(row.storage_path || "")}" title="Удалить">Удалить</button>
       </div>
     `;
     pdfList.appendChild(div);
@@ -179,11 +185,15 @@ fileInput.addEventListener("change", async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   showUploadError("");
-  uploadZone.querySelector("span").textContent = "Загрузка…";
+  const btnSpan = uploadZone.querySelector("button span");
+  const btnText = uploadZone.querySelector("button");
+  if (btnText) btnText.style.opacity = "0.6";
+  if (btnSpan) btnSpan.textContent = "...";
   let err = null;
   try {
     const result = await uploadPdfToSupabase(file, null, (e) => { err = e; });
-    uploadZone.querySelector("span").textContent = "📤 Загрузить PDF";
+    if (btnText) btnText.style.opacity = "1";
+    if (btnSpan) btnSpan.textContent = "+";
     e.target.value = "";
     if (err) {
       showUploadError("Ошибка загрузки: " + err);
@@ -191,7 +201,8 @@ fileInput.addEventListener("change", async (e) => {
     }
     if (result) await loadPdfs();
   } catch (ex) {
-    uploadZone.querySelector("span").textContent = "📤 Загрузить PDF";
+    if (btnText) btnText.style.opacity = "1";
+    if (btnSpan) btnSpan.textContent = "+";
     e.target.value = "";
     showUploadError("Ошибка: " + (ex?.message || ex));
   }
@@ -212,10 +223,10 @@ pdfList.addEventListener("click", async (e) => {
   if (!id || !share_token) return;
   if (!confirm("Удалить этот PDF и все рисунки навсегда?")) return;
   btn.disabled = true;
-  btn.textContent = "…";
+  btn.textContent = "...";
   const ok = await deletePdfFromSupabase({ id, share_token, storage_path }, (err) => alert(err));
   if (ok) await loadPdfs();
-  else { btn.disabled = false; btn.textContent = "🗑️ Sil"; }
+  else { btn.disabled = false; btn.textContent = "Удалить"; }
 });
 
 loadPdfs();

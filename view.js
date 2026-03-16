@@ -43,7 +43,7 @@ function drawStrokesToCanvas(w, h) {
     const sd = row.stroke_data || {};
     const pts = sd.points || [];
     if (pts.length < 2) continue;
-    dctx.strokeStyle = sd.color || "#00ff9f";
+    dctx.strokeStyle = sd.color || "#6c5ce7";
     dctx.lineWidth = sd.lineWidth ?? 4;
     dctx.lineCap = "round";
     dctx.lineJoin = "round";

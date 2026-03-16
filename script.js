@@ -156,11 +156,12 @@ let eyesClosedFrames = 0;
 let eyesOpenFrames = 0;
 let drawMode = false;
 let objectsMode = false;
-let drawColor = "#00ff9f";
+let drawColor = "#6c5ce7";
 let drawLineWidth = 4;
 let drawShape = "free";
 let drawToolType = "pen";
 let eraserMode = false;
+let canvasFadeEnabled = false;
 let shapeFill = false;
 let canvasBackgroundColor = "#ffffff";
 let strokeOpacity = 1;
@@ -169,7 +170,7 @@ let strokes = [];
 let historyStack = [];
 let historyIndex = -1;
 let shapes = [];
-let currentStroke = { points: [], color: "#00ff9f" };
+let currentStroke = { points: [], color: "#6c5ce7" };
 let fingerLostFrames = 0;
 let lastDrawHandId = null;
 let wasPinching = false;
@@ -218,7 +219,7 @@ let pdfHistoryStack = [];
 let pdfHistoryIndex = -1;
 let pdfStrokesByPage = {};
 let pdfShapesByPage = {};
-let pdfCurrentStroke = { points: [], color: "#00ff9f" };
+let pdfCurrentStroke = { points: [], color: "#6c5ce7" };
 let pdfZoomScale = 1;
 let pdfIsDrawing = false;
 let currentPdfShareToken = null;
@@ -249,11 +250,11 @@ let pptxHistoryStack = [];
 let pptxHistoryIndex = -1;
 let pptxStrokesByPage = {};
 let pptxShapesByPage = {};
-let pptxCurrentStroke = { points: [], color: "#00ff9f" };
+let pptxCurrentStroke = { points: [], color: "#6c5ce7" };
 let pptxIsDrawing = false;
 let pptxAspectRatio = 16 / 9;
 
-const OBJECT_COLORS = ["#00ff9f", "#ff6b9d", "#6b9dff", "#ffd93d", "#6bcb77", "#4d96ff"];
+const OBJECT_COLORS = ["#6c5ce7", "#00cec9", "#ff6b6b", "#ffd93d", "#55efc4", "#74b9ff"];
 let objectIdCounter = 0;
 
 function cloneStroke(stroke) {
@@ -642,7 +643,7 @@ function isIndexFingerExtended(hand) {
 // ========== POSE İSKELET ==========
 function drawPoseSkeleton(ctx, lm, w, h) {
   if (!lm || lm.length < 29) return;
-  ctx.strokeStyle = "#00ff9f";
+  ctx.strokeStyle = "#6c5ce7";
   ctx.lineWidth = 3;
   ctx.lineCap = "round";
   POSE_CONNECTIONS.forEach(([i, j]) => {
@@ -656,7 +657,7 @@ function drawPoseSkeleton(ctx, lm, w, h) {
       ctx.stroke();
     }
   });
-  ctx.fillStyle = "#00ff9f";
+  ctx.fillStyle = "#6c5ce7";
   lm.forEach((p) => {
     if ((p?.visibility ?? 1) > MIN_VIS) {
       const pt = toPx(p, w, h);
@@ -1331,10 +1332,27 @@ function drawStrokesToCanvas(w, h) {
     dctx.setLineDash([]);
   }
 
+  const FADE_DURATION = 3000;
+  const now = Date.now();
   const allStrokes = [...strokes, currentStroke.points.length > 0 ? currentStroke : null].filter(Boolean);
-  allStrokes.forEach((stroke) => drawStrokeWithTool(dctx, stroke, sx, h));
+  allStrokes.forEach((stroke) => {
+    if (stroke._ts && canvasFadeEnabled) {
+      const age = now - stroke._ts;
+      if (age > FADE_DURATION) return;
+      const fadeAlpha = Math.max(0, 1 - age / FADE_DURATION);
+      dctx.save();
+      dctx.globalAlpha = fadeAlpha;
+      drawStrokeWithTool(dctx, stroke, sx, h);
+      dctx.restore();
+    } else {
+      drawStrokeWithTool(dctx, stroke, sx, h);
+    }
+  });
 
-  // İmleç: маленькая красивая точка
+  if (canvasFadeEnabled) {
+    strokes = strokes.filter(s => !s._ts || (now - s._ts) <= FADE_DURATION);
+  }
+
   if (window.drawCursor && drawMode) {
     const cx = MIRROR_CAMERA ? (1 - window.drawCursor.x) * w : window.drawCursor.x * w;
     const cy = window.drawCursor.y * h;
@@ -1390,7 +1408,7 @@ function updateDocumentOverlays() {
 }
 
 function updateHeaderTitle() {
-  const text = pdfMode ? "Рисование на PDF" : "Режим рисования";
+  const text = pdfMode ? "DrawFlow — PDF" : "DrawFlow";
   if (appHeaderTitle) appHeaderTitle.textContent = text;
   document.title = text;
 }
@@ -1996,7 +2014,7 @@ function setupCanvasDrawing() {
     e.preventDefault();
     canvasIsDrawing = false;
     if (currentStroke.points.length > 1) {
-      strokes.push({ ...currentStroke });
+      strokes.push({ ...currentStroke, _ts: Date.now() });
       pushCanvasHistory();
       if (currentCanvasShareToken && supabase) {
         savePageStrokes(currentCanvasShareToken, CANVAS_PAGE, strokes);
@@ -3511,7 +3529,7 @@ redoBtn?.addEventListener("click", () => {
 
 document.querySelectorAll(".color-preset").forEach((btn) => {
   btn.addEventListener("click", () => {
-    const c = btn.dataset.color || "#00ff9f";
+    const c = btn.dataset.color || "#6c5ce7";
     drawColor = c;
     const hv = hexToHsv(c);
     colorWheelHue = hv.h;
@@ -3622,7 +3640,7 @@ drawBtn?.addEventListener("click", () => {
       pptxCurrentStroke = { points: [], color: drawColor };
       drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
     } else if (currentStroke.points.length > 0) {
-      strokes.push({ points: [...currentStroke.points], color: currentStroke.color || drawColor, lineWidth: currentStroke.lineWidth ?? drawLineWidth, opacity: currentStroke.opacity ?? 1 });
+      strokes.push({ points: [...currentStroke.points], color: currentStroke.color || drawColor, lineWidth: currentStroke.lineWidth ?? drawLineWidth, opacity: currentStroke.opacity ?? 1, _ts: Date.now() });
       pushCanvasHistory();
       currentStroke = { points: [], color: drawColor };
     }
@@ -3971,6 +3989,7 @@ if (shareId) {
   pdfOverlay?.classList.add("hidden");
   whiteSheetMode = true;
   blackSheetMode = false;
+  canvasFadeEnabled = true;
   cameraWrapper?.classList.remove("black-sheet-mode", "pdf-mode", "pptx-mode", "pptx-loaded");
   if (isEmbed) {
     cameraWrapper?.classList.add("white-sheet-mode", "camera-feed-mode");
@@ -4005,3 +4024,17 @@ if (urlParams.get("embed") === "1") {
   const dashLink = document.querySelector('a[href="/dashboard.html"]');
   if (dashLink) dashLink.target = "_top";
 }
+
+(function startFadeLoop() {
+  let lastTick = 0;
+  function fadeTick(ts) {
+    if (canvasFadeEnabled && strokes.some(s => s._ts) && drawCanvas) {
+      if (ts - lastTick > 50) {
+        lastTick = ts;
+        drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+      }
+    }
+    requestAnimationFrame(fadeTick);
+  }
+  requestAnimationFrame(fadeTick);
+})();

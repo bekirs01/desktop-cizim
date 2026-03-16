@@ -3,47 +3,219 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Вход | Система рисования</title>
-  <link rel="stylesheet" href="style.css?v=3">
+  <title>DrawFlow | Вход</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=4">
   <style>
-    .auth-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+    :root {
+      --login-accent: #6c5ce7;
+      --login-accent-light: #a29bfe;
+      --login-accent-glow: rgba(108, 92, 231, 0.25);
+      --login-teal: #00cec9;
+      --login-bg: #07070a;
+      --login-surface: #111118;
+      --login-border: #1f1f2e;
+      --login-text: #e8e8f0;
+      --login-text-dim: #6c6c88;
+      --login-font: 'Inter', -apple-system, system-ui, sans-serif;
+    }
+
+    body {
+      font-family: var(--login-font);
+      background: var(--login-bg);
+      color: var(--login-text);
+      margin: 0;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: -50%; left: -50%;
+      width: 200%; height: 200%;
+      background:
+        radial-gradient(ellipse at 30% 30%, rgba(108, 92, 231, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 70% 70%, rgba(0, 206, 201, 0.05) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+      animation: bgFloat 15s ease-in-out infinite alternate;
+    }
+
+    @keyframes bgFloat {
+      0% { transform: translate(0, 0) rotate(0deg); }
+      100% { transform: translate(-2%, -2%) rotate(1deg); }
+    }
+
+    .auth-page {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      position: relative;
+      z-index: 1;
+    }
+
     .auth-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 2rem;
-      max-width: 400px;
+      background: var(--login-surface);
+      border: 1px solid var(--login-border);
+      border-radius: 20px;
+      padding: 2.5rem;
+      max-width: 420px;
       width: 100%;
-      box-shadow: var(--shadow);
+      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4);
+      animation: cardIn 0.5s ease;
     }
-    .auth-card h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
-    .auth-card p { color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.9rem; }
+
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(20px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .auth-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .auth-brand-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--login-accent), var(--login-teal));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      box-shadow: 0 4px 20px var(--login-accent-glow);
+    }
+
+    .auth-brand-text {
+      font-size: 1.4rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, var(--login-accent-light), var(--login-teal));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .auth-card > p {
+      color: var(--login-text-dim);
+      margin-bottom: 1.75rem;
+      font-size: 0.9rem;
+    }
+
+    .auth-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.75rem;
+      background: var(--login-bg);
+      border-radius: 12px;
+      padding: 4px;
+    }
+
+    .auth-tab {
+      flex: 1;
+      padding: 0.6rem 1rem;
+      border-radius: 10px;
+      cursor: pointer;
+      background: transparent;
+      border: none;
+      color: var(--login-text-dim);
+      font-family: var(--login-font);
+      font-size: 0.9rem;
+      font-weight: 600;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      text-align: center;
+    }
+
+    .auth-tab.active {
+      background: var(--login-accent);
+      color: #fff;
+      box-shadow: 0 2px 12px var(--login-accent-glow);
+    }
+
+    .auth-tab:not(.active):hover {
+      color: var(--login-text);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
     .auth-form { display: flex; flex-direction: column; gap: 1rem; }
+
     .auth-form input {
-      width: 100%; padding: 0.75rem 1rem; border-radius: var(--radius-sm);
-      border: 1px solid var(--border); background: var(--bg-secondary);
-      color: var(--text-primary); font-size: 1rem; box-sizing: border-box;
+      width: 100%;
+      padding: 0.8rem 1rem;
+      border-radius: 12px;
+      border: 1px solid var(--login-border);
+      background: var(--login-bg);
+      color: var(--login-text);
+      font-size: 0.95rem;
+      font-family: var(--login-font);
+      box-sizing: border-box;
+      transition: all 0.2s;
     }
-    .auth-form input:focus { outline: none; border-color: var(--accent); }
-    .auth-btn { padding: 0.75rem 1.5rem; border-radius: var(--radius-sm); font-size: 1rem; cursor: pointer; font-weight: 600; border: none; }
-    .auth-btn-primary { background: var(--accent); color: #0d0d0f; }
-    .auth-btn-primary:hover { background: var(--accent-dim); }
-    .auth-btn-secondary { background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border); }
-    .auth-btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
-    .auth-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
-    .auth-tab { padding: 0.5rem 1rem; border-radius: var(--radius-sm); cursor: pointer; background: var(--bg-secondary); border: 1px solid transparent; color: var(--text-secondary); }
-    .auth-tab.active { background: rgba(0,255,159,0.15); color: var(--accent); border-color: var(--accent); }
-    .auth-error { color: var(--error); font-size: 0.85rem; margin-top: -0.5rem; }
-    .auth-success { color: var(--accent); font-size: 0.85rem; margin-top: -0.5rem; }
-    .auth-footer { margin-top: 1.5rem; text-align: center; }
-    .auth-footer a { color: var(--accent); text-decoration: none; }
-    .auth-footer a:hover { text-decoration: underline; }
+
+    .auth-form input:focus {
+      outline: none;
+      border-color: var(--login-accent);
+      box-shadow: 0 0 0 3px var(--login-accent-glow);
+    }
+
+    .auth-form input::placeholder { color: var(--login-text-dim); }
+
+    .auth-btn {
+      padding: 0.8rem 1.5rem;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      font-weight: 700;
+      font-family: var(--login-font);
+      border: none;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .auth-btn-primary {
+      background: var(--login-accent);
+      color: #fff;
+      box-shadow: 0 2px 12px var(--login-accent-glow);
+    }
+
+    .auth-btn-primary:hover {
+      background: #7c6df0;
+      box-shadow: 0 4px 24px var(--login-accent-glow);
+      transform: translateY(-1px);
+    }
+
+    .auth-btn-primary:disabled { opacity: 0.5; transform: none; }
+
+    .auth-error { color: #ff6b6b; font-size: 0.85rem; margin-top: -0.25rem; }
+    .auth-success { color: var(--login-teal); font-size: 0.85rem; margin-top: -0.25rem; }
+
+    .auth-footer {
+      margin-top: 2rem;
+      text-align: center;
+    }
+
+    .auth-footer a {
+      color: var(--login-text-dim);
+      text-decoration: none;
+      font-size: 0.85rem;
+      transition: color 0.2s;
+    }
+
+    .auth-footer a:hover { color: var(--login-accent-light); }
   </style>
 </head>
 <body>
   <div class="auth-page">
     <div class="auth-card">
-      <h1>✋ Система рисования</h1>
+      <div class="auth-brand">
+        <div class="auth-brand-icon">&#x270D;</div>
+        <span class="auth-brand-text">DrawFlow</span>
+      </div>
       <p>Войдите или создайте аккаунт</p>
       <div class="auth-tabs">
         <button class="auth-tab active" id="tabLogin">Вход</button>
@@ -56,7 +228,7 @@
         <button type="submit" class="auth-btn auth-btn-primary" id="submitBtn">Войти</button>
       </form>
       <div class="auth-footer">
-        <a href="/index.html">← Вернуться в приложение</a>
+        <a href="/dashboard.html">&larr; Вернуться на главную</a>
       </div>
     </div>
   </div>
