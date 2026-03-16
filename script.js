@@ -245,6 +245,9 @@ let pdfRealtimeUnsubscribe = null;
 let pdfRealtimeBroadcast = null;
 let pdfRealtimeBroadcastProgress = null;
 let pdfRemoteCurrentStroke = null;
+let canvasRealtimeBroadcastProgress = null;
+let canvasRemoteCurrentStroke = null;
+let lastCanvasBroadcastProgress = 0;
 let lastGestureBroadcastProgress = 0;
 let lastEraseSaveTime = 0;
 let lastEraseEndTime = 0;
@@ -1359,6 +1362,22 @@ function drawStrokesToCanvas(w, h) {
     }
   });
 
+  if (currentCanvasShareToken && canvasRemoteCurrentStroke?.points?.length >= 2) {
+    const rawPts = canvasRemoteCurrentStroke.points;
+    const pts = smoothStrokePoints(rawPts);
+    const color = canvasRemoteCurrentStroke.color || drawColor;
+    const lw = canvasRemoteCurrentStroke.lineWidth ?? defLw;
+    dctx.beginPath();
+    dctx.moveTo(sx(pts[0].x), pts[0].y * h);
+    for (let i = 1; i < pts.length; i++) dctx.lineTo(sx(pts[i].x), pts[i].y * h);
+    dctx.strokeStyle = hexToRgba(color, 0.25);
+    dctx.lineWidth = Math.max(lw * 2.5, 12);
+    dctx.stroke();
+    dctx.strokeStyle = hexToRgba(color, canvasRemoteCurrentStroke.opacity ?? 1);
+    dctx.lineWidth = lw;
+    dctx.stroke();
+  }
+
   if (canvasFadeEnabled) {
     strokes = strokes.filter(s => !s._ts || (now - s._ts) <= FADE_DURATION);
   }
@@ -1995,6 +2014,11 @@ function setupCanvasDrawing() {
     if (p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1) {
       currentStroke.points.push({ x: p.x, y: p.y });
       drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+      const now = Date.now();
+      if (currentCanvasShareToken && canvasRealtimeBroadcastProgress && (now - lastCanvasBroadcastProgress >= 50 || currentStroke.points.length % 5 === 0)) {
+        lastCanvasBroadcastProgress = now;
+        canvasRealtimeBroadcastProgress(getCurrentCanvasPageNum(), currentStroke);
+      }
     }
   };
   const onEnd = (e) => {
@@ -2037,6 +2061,7 @@ function setupCanvasDrawing() {
         savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes);
       }
     }
+    canvasRemoteCurrentStroke = null;
     currentStroke = { points: [], color: drawColor };
   };
   drawCanvas.addEventListener("mousedown", onStart);
@@ -2108,6 +2133,7 @@ function getCurrentCanvasPageNum() {
 
 async function loadCanvasFromShareToken(shareToken) {
   if (!shareToken || !supabase) return false;
+  canvasRemoteCurrentStroke = null;
   isCanvasDocument = false;
   canvasPageNum = 1;
   canvasTotalPages = 1;
@@ -2145,9 +2171,16 @@ async function loadCanvasFromShareToken(shareToken) {
     if (modePdfBtn) modePdfBtn.style.display = "";
     if (canvasLinkBtn) canvasLinkBtn.dataset.link = `${getShareBaseUrl()}/index.html?canvas=${shareToken}`;
     canvasRealtimeUnsubscribe?.();
+    canvasRealtimeBroadcastProgress = null;
     const sub = subscribeStrokes(shareToken, (payload) => {
+      if (payload?.type === "progress" && payload.pageNum === CANVAS_PAGE) {
+        canvasRemoteCurrentStroke = payload.stroke;
+        if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+        return;
+      }
       const row = payload?.new || payload?.newRecord || payload?.record;
       if (!row || row.share_token !== shareToken || row.page_num !== CANVAS_PAGE) return;
+      canvasRemoteCurrentStroke = null;
       const incoming = (row.strokes || []).map((s) => ({
         points: s.points || [],
         color: s.color || drawColor,
@@ -2157,6 +2190,7 @@ async function loadCanvasFromShareToken(shareToken) {
       if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
     });
     canvasRealtimeUnsubscribe = sub?.unsubscribe || sub;
+    canvasRealtimeBroadcastProgress = sub?.broadcastProgress || null;
     if (canvasPageNavGroup) canvasPageNavGroup.style.display = "none";
     if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
     updateDocumentOverlays();
@@ -2180,6 +2214,7 @@ async function saveCurrentCanvasPageToStorage() {
 
 function switchToCanvasPage(pageNum) {
   if (!isCanvasDocument || pageNum < 1 || pageNum > canvasTotalPages) return;
+  canvasRemoteCurrentStroke = null;
   saveCurrentCanvasPageToStorage().then(() => {
     canvasPageNum = pageNum;
     const layer = canvasStrokesByPage[canvasPageNum];
@@ -2204,6 +2239,7 @@ function switchToCanvasPage(pageNum) {
 
 async function loadCanvasDocumentWithPages(shareToken) {
   if (!shareToken || !supabase) return false;
+  canvasRemoteCurrentStroke = null;
   isCanvasDocument = true;
   try {
     const pages = await fetchStrokes(shareToken);
@@ -2250,9 +2286,16 @@ async function loadCanvasDocumentWithPages(shareToken) {
     if (canvasPrevBtn) canvasPrevBtn.disabled = true;
     if (canvasNextBtn) canvasNextBtn.disabled = canvasTotalPages <= 1;
     canvasRealtimeUnsubscribe?.();
+    canvasRealtimeBroadcastProgress = null;
     const sub = subscribeStrokes(shareToken, (payload) => {
+      if (payload?.type === "progress" && payload.pageNum === canvasPageNum) {
+        canvasRemoteCurrentStroke = payload.stroke;
+        if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+        return;
+      }
       const row = payload?.new || payload?.newRecord || payload?.record;
       if (!row || row.share_token !== shareToken || row.page_num < 1) return;
+      canvasRemoteCurrentStroke = null;
       const incoming = (row.strokes || []).map((s) => ({
         points: s.points || [],
         color: s.color || drawColor,
@@ -2265,6 +2308,7 @@ async function loadCanvasDocumentWithPages(shareToken) {
       }
     });
     canvasRealtimeUnsubscribe = sub?.unsubscribe || sub;
+    canvasRealtimeBroadcastProgress = sub?.broadcastProgress || null;
     if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
     updateDocumentOverlays();
     updateHeaderTitle();
@@ -2314,9 +2358,16 @@ async function createSharedCanvas() {
   const link = `${getShareBaseUrl()}/index.html?canvas=${token}`;
   if (canvasLinkBtn) canvasLinkBtn.dataset.link = link;
   canvasRealtimeUnsubscribe?.();
+  canvasRealtimeBroadcastProgress = null;
   const sub = subscribeStrokes(token, (payload) => {
+    if (payload?.type === "progress" && payload.pageNum === CANVAS_PAGE) {
+      canvasRemoteCurrentStroke = payload.stroke;
+      if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+      return;
+    }
     const row = payload?.new || payload?.newRecord || payload?.record;
     if (!row || row.share_token !== token || row.page_num !== CANVAS_PAGE) return;
+    canvasRemoteCurrentStroke = null;
     const incoming = (row.strokes || []).map((s) => ({
       points: s.points || [],
       color: s.color || drawColor,
@@ -2326,6 +2377,7 @@ async function createSharedCanvas() {
     if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
   });
   canvasRealtimeUnsubscribe = sub?.unsubscribe || sub;
+  canvasRealtimeBroadcastProgress = sub?.broadcastProgress || null;
   if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
   updateCanvasSharedUI();
 }
@@ -2334,6 +2386,8 @@ function deleteSharedCanvas() {
   currentCanvasShareToken = null;
   canvasRealtimeUnsubscribe?.();
   canvasRealtimeUnsubscribe = null;
+  canvasRealtimeBroadcastProgress = null;
+  canvasRemoteCurrentStroke = null;
   if (canvasLinkBtn) canvasLinkBtn.dataset.link = "";
   strokes = localStrokes.map(cloneStroke);
   shapes = localShapes.map(cloneShape);
@@ -2936,6 +2990,10 @@ function detectLoop() {
               if (pdfMode && currentPdfShareToken && pdfRealtimeBroadcastProgress && activeCurrentStroke.points.length >= 2 && (now - lastGestureBroadcastProgress >= 50 || activeCurrentStroke.points.length % 5 === 0)) {
                 lastGestureBroadcastProgress = now;
                 pdfRealtimeBroadcastProgress(pdfPageNum, activeCurrentStroke);
+              }
+              if (!pdfMode && currentCanvasShareToken && canvasRealtimeBroadcastProgress && activeCurrentStroke.points.length >= 2 && (now - lastGestureBroadcastProgress >= 50 || activeCurrentStroke.points.length % 5 === 0)) {
+                lastGestureBroadcastProgress = now;
+                canvasRealtimeBroadcastProgress(getCurrentCanvasPageNum(), activeCurrentStroke);
               }
             }
           }
