@@ -149,8 +149,8 @@
           </div>
           <div id="pdfPasswordOverlay" class="pdf-password-overlay" style="display:none">
             <div class="pdf-password-box">
-              <h3>&#x1F512; Пароль для доступа</h3>
-              <p>Этот PDF защищён паролем. Введите пароль, чтобы открыть.</p>
+              <h3 id="passwordOverlayTitle">&#x1F512; Пароль для доступа</h3>
+              <p id="passwordOverlayDesc">Этот документ защищён паролем. Введите пароль, чтобы открыть.</p>
               <input type="password" id="pdfPasswordInput" placeholder="Пароль" autocomplete="current-password">
               <p id="pdfPasswordError" class="pdf-password-error" style="display:none">Неверный пароль</p>
               <button type="button" id="pdfPasswordSubmit" class="btn btn-primary">Открыть</button>
@@ -216,6 +216,12 @@
             <button id="pdfPrevBtn" class="btn btn-secondary btn-small" disabled>◀</button>
             <span id="pdfPageInfo" class="pdf-page-info">-</span>
             <button id="pdfNextBtn" class="btn btn-secondary btn-small" disabled>▶</button>
+          </div>
+          <div class="controls-group pdf-nav-group" id="canvasPageNavGroup" style="display:none">
+            <button id="canvasPrevBtn" class="btn btn-secondary btn-small" disabled>◀</button>
+            <span id="canvasPageInfo" class="pdf-page-info">1/1</span>
+            <button id="canvasNextBtn" class="btn btn-secondary btn-small" disabled>▶</button>
+            <button id="canvasAddPageBtn" class="btn btn-draw btn-small" title="Добавить страницу">+</button>
           </div>
           <div class="controls-group" id="pdfZoomGroup" style="display:none">
             <button id="zoomOutBtn" class="btn btn-draw btn-small" title="Уменьшить">−</button>

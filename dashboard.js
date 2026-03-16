@@ -1,8 +1,9 @@
 /**
- * Dashboard - PDF listesi ve yükleme
+ * Dashboard - PDF ve çizim belgeleri
  */
 import { supabase } from "./supabase-config.js";
 import { uploadPdfToSupabase, deletePdfFromSupabase, setPdfSharePassword } from "./supabase-pdf.js";
+import { createCanvas, deleteCanvas, listCanvases, setCanvasSharePassword } from "./supabase-canvas.js";
 
 if (!supabase) {
   document.body.innerHTML = '<div class="dash-app"><p style="color:var(--dash-red);padding:3rem;text-align:center;">Supabase не настроен.</p></div>';
@@ -108,6 +109,41 @@ document.getElementById("goCameraBtn")?.addEventListener("click", (e) => {
   window.location.href = "/index.html?mode=camera";
 });
 
+document.getElementById("newCanvasBtn")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  const modal = document.getElementById("newCanvasModal");
+  const nameInput = document.getElementById("newCanvasNameInput");
+  const pwdInput = document.getElementById("newCanvasPasswordInput");
+  if (modal && nameInput) {
+    nameInput.value = "";
+    if (pwdInput) pwdInput.value = "";
+    modal.style.display = "flex";
+    nameInput.focus();
+  }
+});
+
+document.getElementById("newCanvasCreateBtn")?.addEventListener("click", async () => {
+  const nameInput = document.getElementById("newCanvasNameInput");
+  const pwdInput = document.getElementById("newCanvasPasswordInput");
+  const name = nameInput?.value?.trim() || "";
+  const pwd = pwdInput?.value?.trim() || null;
+  const result = await createCanvas(name, pwd);
+  document.getElementById("newCanvasModal").style.display = "none";
+  if (result) {
+    window.location.href = `/index.html?canvas=${result.shareToken}`;
+  } else {
+    alert("Ошибка создания документа");
+  }
+});
+
+document.getElementById("newCanvasCancelBtn")?.addEventListener("click", () => {
+  document.getElementById("newCanvasModal").style.display = "none";
+});
+document.getElementById("newCanvasModal")?.querySelector(".dash-modal-backdrop")?.addEventListener("click", () => {
+  document.getElementById("newCanvasModal").style.display = "none";
+});
+
 const cameraSection = document.getElementById("cameraSection");
 const cameraSectionToggle = document.getElementById("cameraSectionToggle");
 const cameraIframe = document.getElementById("cameraIframe");
@@ -122,48 +158,60 @@ if (cameraSection && cameraSectionToggle && cameraIframe) {
   });
 }
 
-async function loadPdfs() {
+let passwordModalType = "pdf";
+
+async function loadDocuments() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
-  const { data, error } = await supabase
-    .from("pdfs")
-    .select("id, file_name, share_token, storage_path, created_at, share_password_hash")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
-  if (error) {
-    console.error("PDF listesi alınamadı:", error);
-    showUploadError("Не удалось загрузить список: " + (error.message || "ошибка"));
+  const [pdfRes, canvases] = await Promise.all([
+    supabase.from("pdfs").select("id, file_name, share_token, storage_path, created_at, share_password_hash").eq("user_id", user.id).order("created_at", { ascending: false }),
+    listCanvases(),
+  ]);
+  const pdfError = pdfRes.error;
+  const pdfData = pdfRes.data || [];
+  if (pdfError) {
+    showUploadError("Не удалось загрузить список: " + (pdfError.message || "ошибка"));
     return;
   }
   showUploadError("");
+  const items = [
+    ...pdfData.map((r) => ({ ...r, type: "pdf", name: r.file_name || "PDF", date: r.created_at })),
+    ...canvases.map((r) => ({ ...r, type: "canvas", name: r.name || "Çizim", date: r.created_at, share_password_hash: r.share_password_hash })),
+  ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
   pdfList.innerHTML = "";
-  if (!data?.length) {
+  if (!items.length) {
     pdfEmpty.style.display = "block";
     if (pdfCount) pdfCount.style.display = "none";
     return;
   }
   pdfEmpty.style.display = "none";
   if (pdfCount) {
-    pdfCount.textContent = data.length;
+    pdfCount.textContent = items.length;
     pdfCount.style.display = "inline";
   }
-  for (let i = 0; i < data.length; i++) {
-    const row = data[i];
+  for (let i = 0; i < items.length; i++) {
+    const row = items[i];
     const div = document.createElement("div");
     div.className = "dash-pdf-item";
     div.style.animationDelay = `${0.05 * i}s`;
-    const date = row.created_at ? new Date(row.created_at).toLocaleDateString("tr-TR") : "";
+    const date = row.date ? new Date(row.date).toLocaleDateString("tr-TR") : "";
     const hasPwd = !!(row.share_password_hash);
+    const icon = row.type === "pdf" ? "&#x1F4C4;" : "&#x270F;&#xFE0F;";
+    const openHref = row.type === "pdf" ? `/index.html?id=${row.share_token}` : `/index.html?canvas=${row.share_token}`;
+    const deleteData = row.type === "pdf"
+      ? `data-id="${row.id}" data-share="${row.share_token}" data-path="${escapeHtml(row.storage_path || "")}" data-type="pdf"`
+      : `data-id="${row.id}" data-share="${row.share_token}" data-type="canvas"`;
     div.innerHTML = `
-      <div class="dash-pdf-icon">&#x1F4C4;</div>
+      <div class="dash-pdf-icon">${icon}</div>
       <div class="dash-pdf-info">
-        <div class="dash-pdf-name">${escapeHtml(row.file_name || "PDF")}</div>
+        <div class="dash-pdf-name">${escapeHtml(row.name)}</div>
         <div class="dash-pdf-meta">${date}${hasPwd ? ' &#x1F512;' : ''}</div>
       </div>
       <div class="dash-pdf-actions">
-        <a href="/index.html?id=${row.share_token}" class="dash-btn dash-btn-primary" style="font-size:0.8rem;padding:0.5rem 1rem;">Открыть</a>
-        <button type="button" class="dash-btn dash-btn-ghost pdf-password-btn" style="font-size:0.8rem;padding:0.5rem 0.8rem;" data-share="${row.share_token}" title="${hasPwd ? 'Изменить пароль' : 'Добавить пароль'}">&#x1F512;</button>
-        <button type="button" class="dash-btn dash-btn-danger-ghost pdf-delete-btn" style="font-size:0.8rem;padding:0.5rem 0.8rem;" data-id="${row.id}" data-share="${row.share_token}" data-path="${escapeHtml(row.storage_path || "")}" title="Удалить">Удалить</button>
+        <a href="${openHref}" class="dash-btn dash-btn-primary" style="font-size:0.8rem;padding:0.5rem 1rem;">Открыть</a>
+        <button type="button" class="dash-btn dash-btn-ghost doc-password-btn" style="font-size:0.8rem;padding:0.5rem 0.8rem;" data-share="${row.share_token}" data-type="${row.type}" title="${hasPwd ? 'Изменить пароль' : 'Добавить пароль'}">&#x1F512;</button>
+        <button type="button" class="dash-btn dash-btn-danger-ghost doc-delete-btn" style="font-size:0.8rem;padding:0.5rem 0.8rem;" ${deleteData} title="Удалить">Удалить</button>
       </div>
     `;
     pdfList.appendChild(div);
@@ -202,7 +250,7 @@ fileInput.addEventListener("change", async (e) => {
       showUploadError("Ошибка загрузки: " + err);
       return;
     }
-    if (result) await loadPdfs();
+    if (result) await loadDocuments();
   } catch (ex) {
     if (btnText) btnText.style.opacity = "1";
     if (btnSpan) btnSpan.textContent = "+";
@@ -217,24 +265,30 @@ logoutBtn.addEventListener("click", async () => {
 });
 
 pdfList.addEventListener("click", async (e) => {
-  const delBtn = e.target.closest(".pdf-delete-btn");
+  const delBtn = e.target.closest(".doc-delete-btn");
   if (delBtn) {
     e.preventDefault();
     const id = delBtn.dataset.id;
     const share_token = delBtn.dataset.share;
-    const storage_path = delBtn.dataset.path;
+    const type = delBtn.dataset.type || "pdf";
     if (!id || !share_token) return;
-    if (!confirm("Удалить этот PDF и все рисунки навсегда?")) return;
+    if (!confirm(type === "pdf" ? "Удалить этот PDF и все рисунки навсегда?" : "Удалить этот документ и все рисунки навсегда?")) return;
     delBtn.disabled = true;
     delBtn.textContent = "...";
-    const ok = await deletePdfFromSupabase({ id, share_token, storage_path }, (err) => alert(err));
-    if (ok) await loadPdfs();
+    let ok = false;
+    if (type === "pdf") {
+      ok = await deletePdfFromSupabase({ id, share_token, storage_path: delBtn.dataset.path || "" }, (err) => alert(err));
+    } else {
+      ok = await deleteCanvas({ id, share_token });
+    }
+    if (ok) await loadDocuments();
     else { delBtn.disabled = false; delBtn.textContent = "Удалить"; }
     return;
   }
-  const pwdBtn = e.target.closest(".pdf-password-btn");
+  const pwdBtn = e.target.closest(".doc-password-btn");
   if (pwdBtn) {
     e.preventDefault();
+    passwordModalType = pwdBtn.dataset.type || "pdf";
     openPasswordModal(pwdBtn.dataset.share);
   }
 });
@@ -266,21 +320,25 @@ document.getElementById("modalPasswordSave")?.addEventListener("click", async ()
     alert("Введите пароль");
     return;
   }
-  const ok = await setPdfSharePassword(passwordModalShareToken, pwd);
+  const ok = passwordModalType === "canvas"
+    ? await setCanvasSharePassword(passwordModalShareToken, pwd)
+    : await setPdfSharePassword(passwordModalShareToken, pwd);
   closePasswordModal();
-  if (ok) await loadPdfs();
+  if (ok) await loadDocuments();
   else alert("Ошибка сохранения пароля");
 });
 
 document.getElementById("modalPasswordRemove")?.addEventListener("click", async () => {
   if (!passwordModalShareToken) return;
-  const ok = await setPdfSharePassword(passwordModalShareToken, "");
+  const ok = passwordModalType === "canvas"
+    ? await setCanvasSharePassword(passwordModalShareToken, "")
+    : await setPdfSharePassword(passwordModalShareToken, "");
   closePasswordModal();
-  if (ok) await loadPdfs();
+  if (ok) await loadDocuments();
   else alert("Ошибка удаления пароля");
 });
 
 document.getElementById("modalPasswordCancel")?.addEventListener("click", closePasswordModal);
 document.getElementById("passwordModal")?.querySelector(".dash-modal-backdrop")?.addEventListener("click", closePasswordModal);
 
-loadPdfs();
+loadDocuments();

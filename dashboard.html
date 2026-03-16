@@ -302,6 +302,41 @@
       transform: translateX(0);
     }
 
+    .dash-hero-card-wrap {
+      position: relative;
+    }
+
+    .dash-hero-card-wrap .dash-hero-card {
+      width: 100%;
+      text-align: left;
+    }
+
+    .dash-hero-add-btn {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 2px solid var(--dash-accent);
+      background: var(--dash-accent);
+      color: #fff;
+      font-size: 1.4rem;
+      font-weight: 700;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.25s;
+      z-index: 2;
+    }
+
+    .dash-hero-add-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 4px 20px var(--dash-accent-glow);
+    }
+
     /* ===== CAMERA SECTION ===== */
     .dash-camera-section {
       background: var(--dash-surface);
@@ -726,12 +761,15 @@
     </nav>
 
     <div class="dash-hero">
-      <button type="button" class="dash-hero-card dash-hero-card--draw" id="goCameraBtn">
-        <div class="dash-hero-icon">&#x270F;&#xFE0F;</div>
-        <div class="dash-hero-title">Режим рисования</div>
-        <div class="dash-hero-desc">Рисуйте жестами поверх камеры в реальном времени</div>
-        <div class="dash-hero-arrow">&rarr;</div>
-      </button>
+      <div class="dash-hero-card-wrap dash-hero-card--draw">
+        <button type="button" class="dash-hero-card" id="goCameraBtn">
+          <div class="dash-hero-icon">&#x270F;&#xFE0F;</div>
+          <div class="dash-hero-title">Режим рисования</div>
+          <div class="dash-hero-desc">Рисуйте жестами поверх камеры в реальном времени</div>
+          <div class="dash-hero-arrow">&rarr;</div>
+        </button>
+        <button type="button" class="dash-hero-add-btn" id="newCanvasBtn" title="Создать новый документ для рисования">+</button>
+      </div>
       <div class="dash-hero-card dash-hero-card--pdf" style="cursor:default;">
         <div class="dash-hero-icon">&#x1F4C4;</div>
         <div class="dash-hero-title">Документы PDF</div>
@@ -773,12 +811,26 @@
       <div class="dash-modal-backdrop"></div>
       <div class="dash-modal-content">
         <h3 class="dash-modal-title">&#x1F512; Пароль для ссылки</h3>
-        <p class="dash-modal-desc">Только те, кому вы дадите пароль, смогут открыть PDF по ссылке.</p>
+        <p class="dash-modal-desc">Только те, кому вы дадите пароль, смогут открыть по ссылке.</p>
         <input type="password" id="modalPasswordInput" class="dash-modal-input" placeholder="Введите пароль" autocomplete="new-password">
         <div class="dash-modal-actions">
           <button type="button" id="modalPasswordSave" class="dash-btn dash-btn-primary">Сохранить</button>
           <button type="button" id="modalPasswordRemove" class="dash-btn dash-btn-ghost">Убрать пароль</button>
           <button type="button" id="modalPasswordCancel" class="dash-btn dash-btn-ghost">Отмена</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="newCanvasModal" class="dash-modal" style="display:none">
+      <div class="dash-modal-backdrop"></div>
+      <div class="dash-modal-content">
+        <h3 class="dash-modal-title">&#x270F; Новый документ для рисования</h3>
+        <p class="dash-modal-desc">Создайте многостраничный документ. Имя и пароль — по желанию.</p>
+        <input type="text" id="newCanvasNameInput" class="dash-modal-input" placeholder="Название (например: Заметки)" maxlength="80">
+        <input type="password" id="newCanvasPasswordInput" class="dash-modal-input" placeholder="Пароль (опц.)" autocomplete="new-password">
+        <div class="dash-modal-actions">
+          <button type="button" id="newCanvasCreateBtn" class="dash-btn dash-btn-primary">Создать</button>
+          <button type="button" id="newCanvasCancelBtn" class="dash-btn dash-btn-ghost">Отмена</button>
         </div>
       </div>
     </div>
