@@ -3541,7 +3541,7 @@ if (shareId) {
   whiteSheetMode = true;
   blackSheetMode = false;
   cameraWrapper?.classList.remove("black-sheet-mode", "pdf-mode", "pptx-mode", "pptx-loaded");
-  cameraWrapper?.classList.add("white-sheet-mode");
+  cameraWrapper?.classList.add("white-sheet-mode", "camera-feed-mode");
   applyCanvasBackground();
   drawingControlsGroup.style.display = "flex";
   cameraControlsGroup.style.display = "none";

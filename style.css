@@ -223,6 +223,15 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   pointer-events: none;
 }
 
+/* Kamera modu: kamerayı göster, üzerine çizim yap (beyaz sayfa değil) */
+.camera-wrapper.camera-feed-mode .white-sheet-bg {
+  display: none;
+}
+
+.camera-wrapper.camera-feed-mode #output {
+  opacity: 1;
+}
+
 .camera-wrapper.white-sheet-mode.black-sheet-mode .white-sheet-bg {
   background: #000000;
 }
