@@ -168,6 +168,7 @@ let drawShape = "free";
 let drawToolType = "pen";
 let eraserMode = false;
 let canvasFadeEnabled = false;
+const FADE_DURATION_MS = 1500;
 let shapeFill = false;
 let canvasBackgroundColor = "#ffffff";
 let strokeOpacity = 1;
@@ -1038,7 +1039,7 @@ function renderToTempForFill(ctx, w, h, opts) {
     const t = document.createElement("canvas");
     t.width = f.w; t.height = f.h;
     t.getContext("2d").putImageData(f.data, 0, 0);
-    ctx.drawImage(t, 0, 0);
+    ctx.drawImage(t, 0, 0, f.w, f.h, 0, 0, w, h);
   });
   sh.forEach((s) => {
     const c = s.color || drawColor;
@@ -1129,7 +1130,7 @@ function renderPdfToTempForFill(ctx, w, h, pdfCanvasEl, opts) {
     const t = document.createElement("canvas");
     t.width = f.w; t.height = f.h;
     t.getContext("2d").putImageData(f.data, 0, 0);
-    ctx.drawImage(t, 0, 0);
+    ctx.drawImage(t, 0, 0, f.w, f.h, 0, 0, w, h);
   });
   const defLw = drawLineWidth || 4;
   sh.forEach((s) => {
@@ -1225,7 +1226,7 @@ function drawStrokesToCanvas(w, h) {
     const t = document.createElement("canvas");
     t.width = f.w; t.height = f.h;
     t.getContext("2d").putImageData(f.data, 0, 0);
-    dctx.drawImage(t, 0, 0);
+    dctx.drawImage(t, 0, 0, f.w, f.h, 0, 0, w, h);
   });
 
   const defLw = drawLineWidth || 4;
@@ -1322,8 +1323,10 @@ function drawStrokesToCanvas(w, h) {
       dctx.stroke();
     }
     if (sp.type === "circle") {
+      const diagNorm = Math.hypot(sp.end.x - sp.start.x, sp.end.y - sp.start.y);
+      const rPx = Math.max((diagNorm / 2) * Math.min(w, h), 4);
       dctx.beginPath();
-      dctx.arc(cx, cy, Math.max(rad, 4), 0, Math.PI * 2);
+      dctx.arc(cx, cy, rPx, 0, Math.PI * 2);
       dctx.stroke();
     } else if (sp.type === "rect" || sp.type === "ellipse") {
       if (sp.type === "rect") dctx.strokeRect(rectPx1, rectPy1, rectRw, rectRh);
@@ -1333,45 +1336,56 @@ function drawStrokesToCanvas(w, h) {
         dctx.stroke();
       }
     } else if (sp.type === "line" || sp.type === "arrow") {
+      const x1p = sx(sp.start.x), y1p = sp.start.y * h, x2p = sx(sp.end.x), y2p = sp.end.y * h;
       dctx.beginPath();
-      dctx.moveTo(sx(sp.start.x), sp.start.y * h);
-      dctx.lineTo(sx(sp.end.x), sp.end.y * h);
+      dctx.moveTo(x1p, y1p);
+      dctx.lineTo(x2p, y2p);
       dctx.stroke();
       if (sp.type === "arrow") {
-        const dx = sp.end.x - sp.start.x, dy = sp.end.y - sp.start.y;
-        const len = Math.hypot(dx, dy) || 0.001;
-        const ux = dx / len, uy = dy / len;
-        const arr = 0.08;
-        const ax = sp.end.x - ux * arr + uy * arr * 0.5;
-        const ay = sp.end.y - uy * arr - ux * arr * 0.5;
-        const bx = sp.end.x - ux * arr - uy * arr * 0.5;
-        const by = sp.end.y - uy * arr + ux * arr * 0.5;
+        const lenPx = Math.hypot(x2p - x1p, y2p - y1p) || 1;
+        const arrowLen = Math.min(lenPx * 0.3, 20);
+        const dx = x2p - x1p, dy = y2p - y1p;
+        const ux = dx / lenPx, uy = dy / lenPx;
+        const ax = x2p - ux * arrowLen + uy * arrowLen * 0.4;
+        const ay = y2p - uy * arrowLen - ux * arrowLen * 0.4;
+        const bx = x2p - ux * arrowLen - uy * arrowLen * 0.4;
+        const by = y2p - uy * arrowLen + ux * arrowLen * 0.4;
         dctx.beginPath();
-        dctx.moveTo(sx(ax), ay * h);
-        dctx.lineTo(sx(sp.end.x), sp.end.y * h);
-        dctx.lineTo(sx(bx), by * h);
+        dctx.moveTo(ax, ay);
+        dctx.lineTo(x2p, y2p);
+        dctx.lineTo(bx, by);
         dctx.stroke();
       }
     } else if (sp.type === "triangle") {
-      const x3 = sp.start.x, y3 = sp.end.y;
+      const dx = sp.end.x - sp.start.x, dy = sp.end.y - sp.start.y;
+      const len = Math.hypot(dx, dy) || 0.001;
+      const mx = (sp.start.x + sp.end.x) / 2, my = (sp.start.y + sp.end.y) / 2;
+      const perpLen = len * 0.5;
+      const px = mx - (dy / len) * perpLen, py = my + (dx / len) * perpLen;
       dctx.beginPath();
       dctx.moveTo(sx(sp.start.x), sp.start.y * h);
       dctx.lineTo(sx(sp.end.x), sp.end.y * h);
-      dctx.lineTo(sx(x3), y3 * h);
+      dctx.lineTo(sx(px), py * h);
+      dctx.closePath();
+      dctx.stroke();
+    } else if (sp.type === "triangle_right") {
+      dctx.beginPath();
+      dctx.moveTo(sx(sp.end.x), sp.end.y * h);
+      dctx.lineTo(sx(sp.start.x), sp.end.y * h);
+      dctx.lineTo(sx(sp.end.x), sp.start.y * h);
       dctx.closePath();
       dctx.stroke();
     }
     dctx.setLineDash([]);
   }
 
-  const FADE_DURATION = 3000;
   const now = Date.now();
   const allStrokes = [...strokes, currentStroke.points.length > 0 ? currentStroke : null].filter(Boolean);
   allStrokes.forEach((stroke) => {
     if (stroke._ts && canvasFadeEnabled) {
       const age = now - stroke._ts;
-      if (age > FADE_DURATION) return;
-      const fadeAlpha = Math.max(0, 1 - age / FADE_DURATION);
+      if (age > FADE_DURATION_MS) return;
+      const fadeAlpha = Math.max(0, 1 - age / FADE_DURATION_MS);
       dctx.save();
       dctx.globalAlpha = fadeAlpha;
       drawStrokeWithTool(dctx, stroke, sx, h);
@@ -1398,7 +1412,7 @@ function drawStrokesToCanvas(w, h) {
   }
 
   if (canvasFadeEnabled) {
-    strokes = strokes.filter(s => !s._ts || (now - s._ts) <= FADE_DURATION);
+    strokes = strokes.filter(s => !s._ts || (now - s._ts) <= FADE_DURATION_MS);
   }
 
   if (window.drawCursor && drawMode) {
@@ -1455,6 +1469,10 @@ function drawCursorDot(ctx, w, h, useDocX = false) {
 function updateDocumentOverlays() {
   if (pdfOverlay) pdfOverlay.style.display = (pdfMode && !pdfDoc) ? "flex" : "none";
   if (pptxOverlay) pptxOverlay.style.display = (pptxMode && !pptxViewer) ? "flex" : "none";
+  const fadeWrap = document.getElementById("fadeToggleWrap");
+  if (fadeWrap) {
+    fadeWrap.style.display = ((whiteSheetMode || pdfMode) && !pptxMode) ? "flex" : "none";
+  }
 }
 
 function updateHeaderTitle() {
@@ -1533,7 +1551,7 @@ function drawStrokesToPdfCanvas(w, h) {
     const t = document.createElement("canvas");
     t.width = f.w; t.height = f.h;
     t.getContext("2d").putImageData(f.data, 0, 0);
-    dctx.drawImage(t, 0, 0);
+    dctx.drawImage(t, 0, 0, f.w, f.h, 0, 0, pdfDrawCanvas.width, pdfDrawCanvas.height);
   });
   const defLw = drawLineWidth || 4;
   pdfShapes.forEach((sh) => {
@@ -1609,22 +1627,52 @@ function drawStrokesToPdfCanvas(w, h) {
     dctx.lineWidth = 2;
     dctx.setLineDash([6, 4]);
     if (sp.type === "circle") {
+      const diagNorm = Math.hypot(sp.end.x - sp.start.x, sp.end.y - sp.start.y);
+      const rPx = Math.max((diagNorm / 2) * Math.min(w, h), 4);
       dctx.beginPath();
-      dctx.arc(cx, cy, Math.max(Math.hypot(rw, rh) / 2, 4), 0, Math.PI * 2);
+      dctx.arc(cx, cy, rPx, 0, Math.PI * 2);
       dctx.stroke();
     } else if (sp.type === "rect" || sp.type === "ellipse") {
       if (sp.type === "rect") dctx.strokeRect(rectPx1, rectPy1, rectRw, rectRh);
       else { dctx.beginPath(); dctx.ellipse(cx, cy, rw / 2, rh / 2, 0, 0, Math.PI * 2); dctx.stroke(); }
     } else if (sp.type === "line" || sp.type === "arrow") {
+      const x1p = sp.start.x * w, y1p = sp.start.y * h, x2p = sp.end.x * w, y2p = sp.end.y * h;
       dctx.beginPath();
-      dctx.moveTo(sp.start.x * w, sp.start.y * h);
-      dctx.lineTo(sp.end.x * w, sp.end.y * h);
+      dctx.moveTo(x1p, y1p);
+      dctx.lineTo(x2p, y2p);
       dctx.stroke();
+      if (sp.type === "arrow") {
+        const lenPx = Math.hypot(x2p - x1p, y2p - y1p) || 1;
+        const arrowLen = Math.min(lenPx * 0.3, 20);
+        const dx = x2p - x1p, dy = y2p - y1p;
+        const ux = dx / lenPx, uy = dy / lenPx;
+        const ax = x2p - ux * arrowLen + uy * arrowLen * 0.4;
+        const ay = y2p - uy * arrowLen - ux * arrowLen * 0.4;
+        const bx = x2p - ux * arrowLen - uy * arrowLen * 0.4;
+        const by = y2p - uy * arrowLen + ux * arrowLen * 0.4;
+        dctx.beginPath();
+        dctx.moveTo(ax, ay);
+        dctx.lineTo(x2p, y2p);
+        dctx.lineTo(bx, by);
+        dctx.stroke();
+      }
     } else if (sp.type === "triangle") {
+      const dx = sp.end.x - sp.start.x, dy = sp.end.y - sp.start.y;
+      const len = Math.hypot(dx, dy) || 0.001;
+      const mx = (sp.start.x + sp.end.x) / 2, my = (sp.start.y + sp.end.y) / 2;
+      const perpLen = len * 0.5;
+      const px = mx - (dy / len) * perpLen, py = my + (dx / len) * perpLen;
       dctx.beginPath();
       dctx.moveTo(sp.start.x * w, sp.start.y * h);
       dctx.lineTo(sp.end.x * w, sp.end.y * h);
+      dctx.lineTo(px * w, py * h);
+      dctx.closePath();
+      dctx.stroke();
+    } else if (sp.type === "triangle_right") {
+      dctx.beginPath();
+      dctx.moveTo(sp.end.x * w, sp.end.y * h);
       dctx.lineTo(sp.start.x * w, sp.end.y * h);
+      dctx.lineTo(sp.end.x * w, sp.start.y * h);
       dctx.closePath();
       dctx.stroke();
     }
@@ -1632,7 +1680,23 @@ function drawStrokesToPdfCanvas(w, h) {
   }
   const allStrokes = [...pdfStrokes, pdfCurrentStroke.points.length > 0 ? pdfCurrentStroke : null].filter(Boolean);
   const sxPdf = (x) => x * w;
-  allStrokes.forEach((stroke) => drawStrokeWithTool(dctx, stroke, sxPdf, h));
+  const now = Date.now();
+  allStrokes.forEach((stroke) => {
+    if (stroke._ts && canvasFadeEnabled) {
+      const age = now - stroke._ts;
+      if (age > FADE_DURATION_MS) return;
+      const fadeAlpha = Math.max(0, 1 - age / FADE_DURATION_MS);
+      dctx.save();
+      dctx.globalAlpha = fadeAlpha;
+      drawStrokeWithTool(dctx, stroke, sxPdf, h);
+      dctx.restore();
+    } else {
+      drawStrokeWithTool(dctx, stroke, sxPdf, h);
+    }
+  });
+  if (canvasFadeEnabled) {
+    pdfStrokes = pdfStrokes.filter(s => !s._ts || (now - s._ts) <= FADE_DURATION_MS);
+  }
   if (pdfRemoteCurrentStroke?.points?.length >= 2) {
     const rawPts = pdfRemoteCurrentStroke.points;
     const pts = smoothStrokePoints(rawPts);
@@ -1786,7 +1850,11 @@ async function loadPdfFromShareToken(shareToken, password = null) {
       deserializeFillShapes(row.fill_shapes || []).then((fs) => {
         pdfStrokesByPage[p].fillShapes = fs;
         if (p === pdfPageNum) {
+          const oldPdfStrokes = pdfStrokes;
           pdfStrokes = pdfStrokesByPage[p].strokes || [];
+          for (let i = 0; i < Math.min(pdfStrokes.length, oldPdfStrokes.length); i++) {
+            if (oldPdfStrokes[i]._ts) pdfStrokes[i]._ts = oldPdfStrokes[i]._ts;
+          }
           pdfShapes = pdfStrokesByPage[p].shapes || [];
           pdfFillShapes = pdfStrokesByPage[p].fillShapes || [];
           drawStrokesToPdfCanvas(pdfDrawCanvas?.width || 1, pdfDrawCanvas?.height || 1);
@@ -1818,7 +1886,13 @@ async function loadPdfFromFile(file) {
     pdfStrokes = [];
     pdfShapes = [];
     pdfCurrentStroke = { points: [], color: drawColor };
-    if (cameraWrapper) cameraWrapper.classList.add("pdf-loaded");
+    pdfMode = true;
+    whiteSheetMode = false;
+    pptxMode = false;
+    if (cameraWrapper) {
+      cameraWrapper.classList.add("pdf-loaded", "pdf-mode");
+      cameraWrapper.classList.remove("white-sheet-mode", "black-sheet-mode", "pptx-mode");
+    }
     if (pdfPageInfo) pdfPageInfo.textContent = `1 / ${pdfTotalPages}`;
     if (pdfPrevBtn) pdfPrevBtn.disabled = pdfTotalPages <= 1;
     if (pdfNextBtn) pdfNextBtn.disabled = pdfTotalPages <= 1;
@@ -1856,7 +1930,7 @@ function setupPdfDrawing() {
       if (currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
       return;
     }
-    if (drawShape === "fill") {
+    if (drawShape === "fill" && fillToolBtn?.classList.contains("active")) {
       doFillAtPdf(p.x * pdfDrawCanvas.width, p.y * pdfDrawCanvas.height, pdfDrawCanvas.width, pdfDrawCanvas.height);
       drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
       return;
@@ -1880,7 +1954,7 @@ function setupPdfDrawing() {
       }
       return;
     }
-    if (["circle", "rect", "line", "ellipse", "triangle", "arrow"].includes(drawShape)) {
+    if (["circle", "rect", "line", "ellipse", "triangle", "triangle_right", "arrow"].includes(drawShape)) {
       pdfIsDrawing = true;
       pdfShapeInProgress = { start: { x: p.x, y: p.y }, end: { x: p.x, y: p.y }, type: drawShape };
       return;
@@ -1935,7 +2009,14 @@ function setupPdfDrawing() {
       } else if (pdfShapeInProgress.type === "ellipse") {
         sh.type = "ellipse"; sh.x = x1; sh.y = y1; sh.w = x2 - x1; sh.h = y2 - y1;
       } else if (pdfShapeInProgress.type === "triangle") {
-        sh.type = "triangle"; sh.x1 = s.x; sh.y1 = s.y; sh.x2 = t.x; sh.y2 = s.y; sh.x3 = s.x; sh.y3 = t.y;
+        const dx = t.x - s.x, dy = t.y - s.y;
+        const len = Math.hypot(dx, dy) || 0.001;
+        const mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2;
+        const perpLen = len * 0.5;
+        sh.type = "triangle"; sh.x1 = s.x; sh.y1 = s.y; sh.x2 = t.x; sh.y2 = t.y;
+        sh.x3 = mx - (dy / len) * perpLen; sh.y3 = my + (dx / len) * perpLen;
+      } else if (pdfShapeInProgress.type === "triangle_right") {
+        sh.type = "triangle"; sh.x1 = t.x; sh.y1 = t.y; sh.x2 = s.x; sh.y2 = t.y; sh.x3 = t.x; sh.y3 = s.y;
       }
       if (sh.type) {
         pdfShapes.push(sh);
@@ -1951,7 +2032,9 @@ function setupPdfDrawing() {
     e.preventDefault();
     pdfIsDrawing = false;
     if (pdfCurrentStroke.points.length > 1) {
-      pdfStrokes.push({ ...pdfCurrentStroke });
+      const stroke = { ...pdfCurrentStroke };
+      if (canvasFadeEnabled) stroke._ts = Date.now();
+      pdfStrokes.push(stroke);
       pushPdfHistory();
       if (currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
     }
@@ -1990,7 +2073,7 @@ function setupCanvasDrawing() {
       if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
       return;
     }
-    if (drawShape === "fill") {
+    if (drawShape === "fill" && fillToolBtn?.classList.contains("active")) {
       const px = MIRROR_CAMERA ? (1 - p.x) * drawCanvas.width : p.x * drawCanvas.width;
       const py = p.y * drawCanvas.height;
       doFillAtCanvas(px, py, drawCanvas.width, drawCanvas.height);
@@ -2016,7 +2099,7 @@ function setupCanvasDrawing() {
       }
       return;
     }
-    if (["circle", "rect", "line", "ellipse", "triangle", "arrow"].includes(drawShape)) {
+    if (["circle", "rect", "line", "ellipse", "triangle", "triangle_right", "arrow"].includes(drawShape)) {
       canvasIsDrawing = true;
       shapeInProgress = { start: { x: p.x, y: p.y }, end: { x: p.x, y: p.y }, type: drawShape };
       return;
@@ -2069,7 +2152,14 @@ function setupCanvasDrawing() {
       } else if (shapeInProgress.type === "ellipse") {
         sh.type = "ellipse"; sh.x = x1; sh.y = y1; sh.w = x2 - x1; sh.h = y2 - y1;
       } else if (shapeInProgress.type === "triangle") {
-        sh.type = "triangle"; sh.x1 = s.x; sh.y1 = s.y; sh.x2 = t.x; sh.y2 = s.y; sh.x3 = s.x; sh.y3 = t.y;
+        const dx = t.x - s.x, dy = t.y - s.y;
+        const len = Math.hypot(dx, dy) || 0.001;
+        const mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2;
+        const perpLen = len * 0.5;
+        sh.type = "triangle"; sh.x1 = s.x; sh.y1 = s.y; sh.x2 = t.x; sh.y2 = t.y;
+        sh.x3 = mx - (dy / len) * perpLen; sh.y3 = my + (dx / len) * perpLen;
+      } else if (shapeInProgress.type === "triangle_right") {
+        sh.type = "triangle"; sh.x1 = t.x; sh.y1 = t.y; sh.x2 = s.x; sh.y2 = t.y; sh.x3 = t.x; sh.y3 = s.y;
       }
       if (sh.type) {
         shapes.push(sh);
@@ -2085,7 +2175,9 @@ function setupCanvasDrawing() {
     e.preventDefault();
     canvasIsDrawing = false;
     if (currentStroke.points.length > 1) {
-      strokes.push({ ...currentStroke, _ts: Date.now() });
+      const stroke = { ...currentStroke };
+      if (canvasFadeEnabled) stroke._ts = Date.now();
+      strokes.push(stroke);
       pushCanvasHistory();
       if (currentCanvasShareToken && supabase) {
         savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
@@ -2955,6 +3047,7 @@ function detectLoop() {
             if (pinchReleaseFrames >= PINCH_RELEASE_FRAMES) {
               if (activeCurrentStroke.points.length > 1) {
                 const stroke = { points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth };
+                if (canvasFadeEnabled) stroke._ts = Date.now();
                 activeStrokes.push(stroke);
                 if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
               }
@@ -2997,7 +3090,7 @@ function detectLoop() {
           fingerLostFrames = 0;
           const drawCursorX = (pdfMode && pdfDoc) || (pptxMode && pptxViewer) ? toDocNormX(smoothedCursor.x) : smoothedCursor.x;
           const drawPinchX = (pdfMode && pdfDoc) || (pptxMode && pptxViewer) ? toDocNormX(pinchPos.x) : pinchPos.x;
-          if (drawShape === "fill" && pinchPos && !wasPinching) {
+          if (drawShape === "fill" && fillToolBtn?.classList.contains("active") && pinchPos && !wasPinching) {
             const cw = (pdfMode && pdfDrawCanvas) ? pdfDrawCanvas.width : (pptxMode && pptxDrawCanvas) ? pptxDrawCanvas.width : drawCanvas?.width || output?.width || 1;
             const ch = (pdfMode && pdfDrawCanvas) ? pdfDrawCanvas.height : (pptxMode && pptxDrawCanvas) ? pptxDrawCanvas.height : drawCanvas?.height || output?.height || 1;
             const px = clamp01(drawPinchX) * cw;
@@ -3011,7 +3104,7 @@ function detectLoop() {
               drawStrokesToCanvas(cw, ch);
             }
           }
-          if (["circle","rect","line","ellipse","triangle","arrow"].includes(drawShape)) {
+          if (["circle","rect","line","ellipse","triangle","triangle_right","arrow"].includes(drawShape)) {
             if (pinchPos) {
               const px = clamp01(drawPinchX), py = clamp01(pinchPos.y);
               if (!shapeInProgress) shapeInProgress = { start: { x: px, y: py }, end: { x: px, y: py }, type: drawShape };
@@ -3068,7 +3161,14 @@ function detectLoop() {
               } else if (shapeInProgress.type === "ellipse") {
                 activeShapes.push({ type: "ellipse", x: x1, y: y1, w, h, color: drawColor, lineWidth: lw, fill });
               } else if (shapeInProgress.type === "triangle") {
-                activeShapes.push({ type: "triangle", x1: s.x, y1: s.y, x2: e.x, y2: e.y, x3: s.x, y3: e.y, color: drawColor, lineWidth: lw, fill });
+                const dx = e.x - s.x, dy = e.y - s.y;
+                const len = Math.hypot(dx, dy) || 0.001;
+                const mx = (s.x + e.x) / 2, my = (s.y + e.y) / 2;
+                const perpLen = len * 0.5;
+                const x3 = mx - (dy / len) * perpLen, y3 = my + (dx / len) * perpLen;
+                activeShapes.push({ type: "triangle", x1: s.x, y1: s.y, x2: e.x, y2: e.y, x3, y3, color: drawColor, lineWidth: lw, fill });
+              } else if (shapeInProgress.type === "triangle_right") {
+                activeShapes.push({ type: "triangle", x1: e.x, y1: e.y, x2: s.x, y2: e.y, x3: e.x, y3: s.y, color: drawColor, lineWidth: lw, fill });
               } else if (shapeInProgress.type === "arrow") {
                 activeShapes.push({ type: "arrow", x1: s.x, y1: s.y, x2: e.x, y2: e.y, color: drawColor, lineWidth: lw });
               }
@@ -3079,6 +3179,7 @@ function detectLoop() {
           fingerLostFrames++;
           if (fingerLostFrames >= FINGER_LOST_THRESHOLD && activeCurrentStroke.points.length > 0) {
             const stroke = { points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth };
+            if (canvasFadeEnabled) stroke._ts = Date.now();
             activeStrokes.push(stroke);
             if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
             activeCurrentStroke.points = [];
@@ -3099,6 +3200,7 @@ function detectLoop() {
         fingerLostFrames++;
         if (fingerLostFrames >= FINGER_LOST_THRESHOLD && activeCurrentStroke.points.length > 0) {
           const stroke = { points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth };
+          if (canvasFadeEnabled) stroke._ts = Date.now();
           activeStrokes.push(stroke);
           if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
           activeCurrentStroke.points = [];
@@ -3565,6 +3667,14 @@ showSkeletonCheck.addEventListener("change", () => {
   showSkeleton = showSkeletonCheck.checked;
 });
 
+const fadeToggle = document.getElementById("fadeToggle");
+if (fadeToggle) {
+  fadeToggle.checked = canvasFadeEnabled;
+  fadeToggle.addEventListener("change", () => {
+    canvasFadeEnabled = fadeToggle.checked;
+  });
+}
+
 const PEN_TOOLS = [
   { id: "pen", icon: "✏️", lineWidth: 4 },
   { id: "marker", icon: "🖍", lineWidth: 14 },
@@ -3866,6 +3976,7 @@ drawBtn?.addEventListener("click", () => {
   if (!drawMode) {
     if (pdfMode && pdfDoc && pdfCurrentStroke.points.length > 0) {
       const stroke = { points: [...pdfCurrentStroke.points], color: pdfCurrentStroke.color || drawColor, lineWidth: pdfCurrentStroke.lineWidth ?? drawLineWidth, opacity: pdfCurrentStroke.opacity ?? 1 };
+      if (canvasFadeEnabled) stroke._ts = Date.now();
       pdfStrokes.push(stroke);
       pushPdfHistory();
       if (currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
@@ -3877,7 +3988,9 @@ drawBtn?.addEventListener("click", () => {
       pptxCurrentStroke = { points: [], color: drawColor };
       drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
     } else if (currentStroke.points.length > 0) {
-      strokes.push({ points: [...currentStroke.points], color: currentStroke.color || drawColor, lineWidth: currentStroke.lineWidth ?? drawLineWidth, opacity: currentStroke.opacity ?? 1, _ts: Date.now() });
+      const stroke = { points: [...currentStroke.points], color: currentStroke.color || drawColor, lineWidth: currentStroke.lineWidth ?? drawLineWidth, opacity: currentStroke.opacity ?? 1 };
+      if (canvasFadeEnabled) stroke._ts = Date.now();
+      strokes.push(stroke);
       pushCanvasHistory();
       currentStroke = { points: [], color: drawColor };
     }
@@ -4409,7 +4522,7 @@ if (shareId) {
   pdfOverlay?.classList.add("hidden");
   whiteSheetMode = true;
   blackSheetMode = false;
-  canvasFadeEnabled = true;
+  canvasFadeEnabled = false;
   cameraWrapper?.classList.remove("black-sheet-mode", "pdf-mode", "pptx-mode", "pptx-loaded");
   if (isEmbed) {
     cameraWrapper?.classList.add("white-sheet-mode", "camera-feed-mode");
@@ -4448,9 +4561,11 @@ if (urlParams.get("embed") === "1") {
 (function startFadeLoop() {
   let lastTick = 0;
   function fadeTick(ts) {
-    if (canvasFadeEnabled && strokes.some(s => s._ts) && drawCanvas) {
-      if (ts - lastTick > 50) {
-        lastTick = ts;
+    if (canvasFadeEnabled && ts - lastTick > 50) {
+      lastTick = ts;
+      if (pdfMode && pdfDoc && pdfStrokes.some(s => s._ts) && pdfDrawCanvas) {
+        drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+      } else if (!pdfMode && strokes.some(s => s._ts) && drawCanvas) {
         drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
       }
     }

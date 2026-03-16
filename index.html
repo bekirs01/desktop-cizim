@@ -71,6 +71,10 @@
         <div class="camera-wrapper" id="cameraWrapper">
           <div class="draw-toolbar" id="drawToolbar">
             <div class="toolbar-compact">
+              <label class="toolbar-fade-toggle" id="fadeToggleWrap" title="Рисунки исчезают через 1.5 секунды">
+                <input type="checkbox" id="fadeToggle">
+              </label>
+              <div class="toolbar-divider"></div>
               <div class="toolbar-pen-group">
                 <button id="penToolBtn" class="toolbar-icon-btn active" title="Инструменты рисования">&#x270F;&#xFE0F;</button>
                 <div class="toolbar-popover" id="penToolPopover">
@@ -123,6 +127,7 @@
                 <button class="shape-btn" data-shape="ellipse" title="Эллипс">&#x2B2D;</button>
                 <button class="shape-btn" data-shape="circle" title="Круг">&#x2B55;</button>
                 <button class="shape-btn" data-shape="triangle" title="Треугольник">&#x25B3;</button>
+                <button class="shape-btn" data-shape="triangle_right" title="Прямоугольный треугольник">&#x25B2;</button>
               </div>
             </div>
           </div>
