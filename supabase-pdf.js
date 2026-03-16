@@ -4,7 +4,17 @@
  */
 import { supabase, getShareBaseUrl } from "./supabase-config.js";
 
-export async function uploadPdfToSupabase(file, onSuccess, onError) {
+async function hashPassword(password) {
+  if (!password || !password.trim()) return null;
+  const enc = new TextEncoder();
+  const data = enc.encode(password.trim());
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export async function uploadPdfToSupabase(file, onSuccess, onError, sharePassword = null) {
   if (!supabase) {
     onError?.("Supabase yapılandırılmamış");
     return null;
@@ -26,12 +36,16 @@ export async function uploadPdfToSupabase(file, onSuccess, onError) {
     });
     if (uploadErr) throw new Error("Storage: " + (uploadErr.message || "Yükleme hatası"));
 
-    const { error: dbErr } = await supabase.from("pdfs").insert({
+    const sharePasswordHash = sharePassword ? await hashPassword(sharePassword) : null;
+    const insertRow = {
       user_id: user.id,
       storage_path: path,
       share_token: shareId,
       file_name: file.name,
-    });
+    };
+    if (sharePasswordHash) insertRow.share_password_hash = sharePasswordHash;
+
+    const { error: dbErr } = await supabase.from("pdfs").insert(insertRow);
     if (dbErr) throw new Error("Veritabanı: " + (dbErr.message || "Kayıt hatası"));
 
     const link = `${getShareBaseUrl()}/index.html?id=${shareId}`;
@@ -41,6 +55,17 @@ export async function uploadPdfToSupabase(file, onSuccess, onError) {
     onError?.(err.message || "Yükleme hatası");
     return null;
   }
+}
+
+/** PDF paylaşım şifresini ayarla veya kaldır (sadece sahip) */
+export async function setPdfSharePassword(shareToken, password) {
+  if (!supabase) return false;
+  const pwd = password && String(password).trim() ? String(password).trim() : null;
+  const { data, error } = await supabase.rpc("set_pdf_share_password", {
+    token: shareToken,
+    pwd: pwd,
+  });
+  return !error && data === true;
 }
 
 /** PDF'i Storage, pdf_strokes ve pdfs tablosundan tamamen siler */

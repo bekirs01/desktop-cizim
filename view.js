@@ -19,12 +19,21 @@ const drawCanvas = document.getElementById("drawCanvas");
 function showError(msg) {
   viewLoading.style.display = "none";
   viewContent.style.display = "none";
+  document.getElementById("viewPassword")?.style.setProperty("display", "none");
   viewError.style.display = "block";
   viewError.textContent = msg;
 }
 
+function showPasswordPrompt() {
+  viewLoading.style.display = "none";
+  viewContent.style.display = "none";
+  const el = document.getElementById("viewPassword");
+  if (el) el.style.display = "block";
+}
+
 function hideLoading() {
   viewLoading.style.display = "none";
+  document.getElementById("viewPassword")?.style.setProperty("display", "none");
   viewContent.style.display = "block";
 }
 
@@ -109,6 +118,17 @@ async function renderPage() {
   nextBtn.disabled = currentPage >= totalPages;
 }
 
+async function loadPdfWithPassword(shareId, password = null) {
+  const { data, error } = await supabase.rpc("get_pdf_by_share_token", { token: shareId, pwd: password || null });
+  if (error) return { error: error.message };
+  const row = data?.[0];
+  if (!row) return { error: "PDF bulunamadı" };
+  if (row.needs_password === true) return { needsPassword: true };
+  const path = row.storage_path;
+  if (!path) return { error: "PDF bulunamadı" };
+  return { path };
+}
+
 (async () => {
   const params = new URLSearchParams(window.location.search);
   const shareId = params.get("id");
@@ -122,18 +142,37 @@ async function renderPage() {
     return;
   }
 
-  try {
-    const { data, error } = await supabase.rpc("get_pdf_by_share_token", { token: shareId });
-    if (error) {
-      showError("PDF bulunamadı: " + (error.message || "Bilinmeyen hata"));
-      return;
-    }
-    const path = data?.[0]?.storage_path;
-    if (!path) {
-      showError("PDF bulunamadı.");
-      return;
-    }
+  let result = await loadPdfWithPassword(shareId);
+  if (result.needsPassword) {
+    showPasswordPrompt();
+    const input = document.getElementById("viewPasswordInput");
+    const errEl = document.getElementById("viewPasswordError");
+    const submitBtn = document.getElementById("viewPasswordSubmit");
+    const tryLoad = async () => {
+      submitBtn.disabled = true;
+      result = await loadPdfWithPassword(shareId, input?.value?.trim() || null);
+      submitBtn.disabled = false;
+      if (result.needsPassword) {
+        if (errEl) { errEl.style.display = "block"; errEl.textContent = "Неверный пароль"; }
+        return;
+      }
+      if (result.error) {
+        showError(result.error);
+        return;
+      }
+      await doLoadPdf(shareId, result.path);
+    };
+    submitBtn?.addEventListener("click", tryLoad);
+    input?.addEventListener("keydown", (e) => { if (e.key === "Enter") tryLoad(); });
+    return;
+  }
+  if (result.error) {
+    showError(result.error);
+    return;
+  }
 
+  async function doLoadPdf(id, path) {
+  try {
     const { data: urlData } = supabase.storage.from("pdfs").getPublicUrl(path);
     const pdfUrl = urlData?.publicUrl;
     if (!pdfUrl) {
@@ -144,10 +183,10 @@ async function renderPage() {
     pdfDoc = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
     totalPages = pdfDoc.numPages;
     currentPage = 1;
-    allStrokes = (await fetchStrokesLegacy(shareId)) || [];
+    allStrokes = (await fetchStrokesLegacy(id)) || [];
 
     // Mobil uygulama çizimlerini anında göster
-    subscribeStrokes(shareId, (payload) => {
+    subscribeStrokes(id, (payload) => {
       if (payload?.event === "pointer_position") {
         const { x, y } = payload.payload || {};
         if (typeof x === "number" && typeof y === "number") {
@@ -172,7 +211,7 @@ async function renderPage() {
         allStrokes = [...others, ...legacyFromStrokes(pageNum, strokes)];
         if (currentPage === pageNum) drawStrokesToCanvas(drawCanvas?.width || 0, drawCanvas?.height || 0);
       } else if (payload?.eventType === "UPDATE" || payload?.eventType === "INSERT") {
-        fetchStrokesLegacy(shareId).then((fresh) => {
+        fetchStrokesLegacy(id).then((fresh) => {
           allStrokes = fresh || [];
           drawStrokesToCanvas(drawCanvas?.width || 0, drawCanvas?.height || 0);
         });
@@ -195,4 +234,7 @@ async function renderPage() {
   } catch (err) {
     showError("Yükleme hatası: " + (err.message || "Bilinmeyen hata"));
   }
+  }
+
+  await doLoadPdf(shareId, result.path);
 })();

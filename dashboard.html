@@ -109,6 +109,36 @@
       gap: 0.75rem;
     }
 
+    .dash-upload-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .dash-upload-password {
+      width: 120px;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.8rem;
+      border-radius: var(--dash-radius-sm);
+      border: 1px solid var(--dash-border);
+      background: var(--dash-surface);
+      color: var(--dash-text);
+      font-family: var(--dash-font);
+    }
+
+    .dash-upload-password:focus {
+      outline: none;
+      border-color: var(--dash-accent);
+    }
+
+    .dash-upload-password::placeholder {
+      color: var(--dash-text-dim);
+    }
+
+    @media (max-width: 600px) {
+      .dash-upload-password { width: 100px; }
+    }
+
     .dash-btn {
       padding: 0.6rem 1.2rem;
       font-size: 0.85rem;
@@ -597,6 +627,72 @@
     ::-webkit-scrollbar-thumb { background: var(--dash-border); border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--dash-border-hover); }
 
+    /* ===== PASSWORD MODAL ===== */
+    .dash-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .dash-modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+    }
+
+    .dash-modal-content {
+      position: relative;
+      background: var(--dash-surface);
+      border: 1px solid var(--dash-border);
+      border-radius: var(--dash-radius);
+      padding: 1.5rem;
+      max-width: 380px;
+      width: 100%;
+      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+      animation: fadeIn 0.2s ease;
+    }
+
+    .dash-modal-title {
+      font-size: 1.1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .dash-modal-desc {
+      font-size: 0.85rem;
+      color: var(--dash-text-dim);
+      margin-bottom: 1rem;
+      line-height: 1.5;
+    }
+
+    .dash-modal-input {
+      width: 100%;
+      padding: 0.65rem 1rem;
+      border-radius: var(--dash-radius-sm);
+      border: 1px solid var(--dash-border);
+      background: var(--dash-bg);
+      color: var(--dash-text);
+      font-size: 0.95rem;
+      font-family: var(--dash-font);
+      margin-bottom: 1rem;
+      box-sizing: border-box;
+    }
+
+    .dash-modal-input:focus {
+      outline: none;
+      border-color: var(--dash-accent);
+    }
+
+    .dash-modal-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
     /* ===== RESPONSIVE ===== */
     @media (max-width: 600px) {
       .dash-app { padding: 1rem 1rem 3rem; }
@@ -616,12 +712,15 @@
         <span class="dash-brand-text">DrawFlow</span>
       </div>
       <div class="dash-nav-actions">
-        <label class="dash-upload-zone" id="uploadZone">
-          <input type="file" id="fileInput" accept="application/pdf">
-          <button type="button" class="dash-btn dash-btn-primary" onclick="this.parentElement.querySelector('input').click()">
-            <span>+</span> Загрузить PDF
-          </button>
-        </label>
+        <div class="dash-upload-group">
+          <label class="dash-upload-zone" id="uploadZone">
+            <input type="file" id="fileInput" accept="application/pdf">
+            <button type="button" class="dash-btn dash-btn-primary" onclick="this.parentElement.querySelector('input').click()">
+              <span>+</span> Загрузить PDF
+            </button>
+          </label>
+          <input type="password" id="uploadPasswordInput" class="dash-upload-password" placeholder="Пароль (опц.)" title="Пароль для доступа по ссылке. Оставьте пустым — ссылка будет открыта всем." autocomplete="new-password">
+        </div>
         <button id="logoutBtn" class="dash-btn dash-btn-ghost">Выйти</button>
       </div>
     </nav>
@@ -669,6 +768,20 @@
     </div>
 
     <div id="uploadError" class="dash-upload-error" style="display:none"></div>
+
+    <div id="passwordModal" class="dash-modal" style="display:none">
+      <div class="dash-modal-backdrop"></div>
+      <div class="dash-modal-content">
+        <h3 class="dash-modal-title">&#x1F512; Пароль для ссылки</h3>
+        <p class="dash-modal-desc">Только те, кому вы дадите пароль, смогут открыть PDF по ссылке.</p>
+        <input type="password" id="modalPasswordInput" class="dash-modal-input" placeholder="Введите пароль" autocomplete="new-password">
+        <div class="dash-modal-actions">
+          <button type="button" id="modalPasswordSave" class="dash-btn dash-btn-primary">Сохранить</button>
+          <button type="button" id="modalPasswordRemove" class="dash-btn dash-btn-ghost">Убрать пароль</button>
+          <button type="button" id="modalPasswordCancel" class="dash-btn dash-btn-ghost">Отмена</button>
+        </div>
+      </div>
+    </div>
 
     <div class="dash-section-title">
       <h2>Мои документы <span id="pdfCount" class="dash-count" style="display:none">0</span></h2>

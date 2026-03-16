@@ -1623,12 +1623,19 @@ function drawPointerOnCanvas(canvas) {
   ctx.restore();
 }
 
-async function loadPdfFromShareToken(shareToken) {
+async function loadPdfFromShareToken(shareToken, password = null) {
   if (!shareToken || !supabase) return false;
   try {
-    const { data, error } = await supabase.rpc("get_pdf_by_share_token", { token: shareToken });
-    if (error || !data?.[0]?.storage_path) throw new Error("PDF bulunamadı");
-    const { data: urlData } = supabase.storage.from("pdfs").getPublicUrl(data[0].storage_path);
+    const { data, error } = await supabase.rpc("get_pdf_by_share_token", { token: shareToken, pwd: password || null });
+    if (error) throw new Error("PDF bulunamadı");
+    const row = data?.[0];
+    if (!row) throw new Error("PDF bulunamadı");
+    if (row.needs_password === true) {
+      return { needsPassword: true };
+    }
+    const storagePath = row.storage_path;
+    if (!storagePath) throw new Error("PDF bulunamadı");
+    const { data: urlData } = supabase.storage.from("pdfs").getPublicUrl(storagePath);
     const pdfUrl = urlData?.publicUrl;
     if (!pdfUrl) throw new Error("PDF URL alınamadı");
     pdfDoc = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
@@ -3958,9 +3965,43 @@ if (shareId) {
   if (overlayText) overlayText.textContent = "Загрузка PDF...";
   if (overlayHint) overlayHint.textContent = "";
   cameraOverlay?.classList.remove("hidden");
-  loadPdfFromShareToken(shareId).then((ok) => {
+  loadPdfFromShareToken(shareId).then((result) => {
     document.documentElement.classList.remove("pdf-loading");
-    if (ok) {
+    if (result && typeof result === "object" && result.needsPassword) {
+      cameraOverlay?.classList.add("hidden");
+      const overlay = document.getElementById("pdfPasswordOverlay");
+      const input = document.getElementById("pdfPasswordInput");
+      const errEl = document.getElementById("pdfPasswordError");
+      const submitBtn = document.getElementById("pdfPasswordSubmit");
+      if (overlay && input) {
+        overlay.style.display = "flex";
+        input.value = "";
+        if (errEl) errEl.style.display = "none";
+        const tryOpen = async () => {
+          if (submitBtn) submitBtn.disabled = true;
+          const pwd = input?.value?.trim() || null;
+          const res = await loadPdfFromShareToken(shareId, pwd);
+          if (submitBtn) submitBtn.disabled = false;
+          if (res && typeof res === "object" && res.needsPassword) {
+            if (errEl) { errEl.style.display = "block"; errEl.textContent = "Неверный пароль"; }
+            return;
+          }
+          if (res === true) {
+            overlay.style.display = "none";
+            if (drawingControlsGroup) drawingControlsGroup.style.display = "flex";
+            if (cameraControlsGroup) cameraControlsGroup.style.display = "none";
+            if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "none";
+            if (canvasLinkBtn) canvasLinkBtn.style.display = "none";
+            if (pdfLinkBtn) pdfLinkBtn.style.display = "inline-flex";
+            drawMode = true;
+          }
+        };
+        submitBtn?.addEventListener("click", tryOpen);
+        input?.addEventListener("keydown", (e) => { if (e.key === "Enter") tryOpen(); });
+      }
+      return;
+    }
+    if (result === true) {
       if (drawingControlsGroup) drawingControlsGroup.style.display = "flex";
       if (cameraControlsGroup) cameraControlsGroup.style.display = "none";
       if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "none";

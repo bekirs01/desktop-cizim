@@ -1052,6 +1052,64 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
 
 .camera-overlay.hidden { opacity: 0; pointer-events: none; }
 
+/* PDF password overlay */
+.pdf-password-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+}
+
+.pdf-password-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  max-width: 340px;
+  width: 90%;
+  box-shadow: var(--shadow-lg);
+}
+
+.pdf-password-box h3 {
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.pdf-password-box p {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+}
+
+.pdf-password-box input {
+  width: 100%;
+  padding: 0.65rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+  box-sizing: border-box;
+}
+
+.pdf-password-box input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.pdf-password-error {
+  color: var(--error) !important;
+  font-size: 0.85rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.pdf-password-box .btn { width: 100%; }
+
 /* ========== Error / Warning ========== */
 .error-message {
   position: absolute;

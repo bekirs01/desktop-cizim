@@ -2,7 +2,7 @@
  * Dashboard - PDF listesi ve yükleme
  */
 import { supabase } from "./supabase-config.js";
-import { uploadPdfToSupabase, deletePdfFromSupabase } from "./supabase-pdf.js";
+import { uploadPdfToSupabase, deletePdfFromSupabase, setPdfSharePassword } from "./supabase-pdf.js";
 
 if (!supabase) {
   document.body.innerHTML = '<div class="dash-app"><p style="color:var(--dash-red);padding:3rem;text-align:center;">Supabase не настроен.</p></div>';
@@ -127,7 +127,7 @@ async function loadPdfs() {
   if (!user) return;
   const { data, error } = await supabase
     .from("pdfs")
-    .select("id, file_name, share_token, storage_path, created_at")
+    .select("id, file_name, share_token, storage_path, created_at, share_password_hash")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
   if (error) {
@@ -153,14 +153,16 @@ async function loadPdfs() {
     div.className = "dash-pdf-item";
     div.style.animationDelay = `${0.05 * i}s`;
     const date = row.created_at ? new Date(row.created_at).toLocaleDateString("tr-TR") : "";
+    const hasPwd = !!(row.share_password_hash);
     div.innerHTML = `
       <div class="dash-pdf-icon">&#x1F4C4;</div>
       <div class="dash-pdf-info">
         <div class="dash-pdf-name">${escapeHtml(row.file_name || "PDF")}</div>
-        <div class="dash-pdf-meta">${date}</div>
+        <div class="dash-pdf-meta">${date}${hasPwd ? ' &#x1F512;' : ''}</div>
       </div>
       <div class="dash-pdf-actions">
         <a href="/index.html?id=${row.share_token}" class="dash-btn dash-btn-primary" style="font-size:0.8rem;padding:0.5rem 1rem;">Открыть</a>
+        <button type="button" class="dash-btn dash-btn-ghost pdf-password-btn" style="font-size:0.8rem;padding:0.5rem 0.8rem;" data-share="${row.share_token}" title="${hasPwd ? 'Изменить пароль' : 'Добавить пароль'}">&#x1F512;</button>
         <button type="button" class="dash-btn dash-btn-danger-ghost pdf-delete-btn" style="font-size:0.8rem;padding:0.5rem 0.8rem;" data-id="${row.id}" data-share="${row.share_token}" data-path="${escapeHtml(row.storage_path || "")}" title="Удалить">Удалить</button>
       </div>
     `;
@@ -185,13 +187,14 @@ fileInput.addEventListener("change", async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   showUploadError("");
+  const sharePassword = document.getElementById("uploadPasswordInput")?.value?.trim() || null;
   const btnSpan = uploadZone.querySelector("button span");
   const btnText = uploadZone.querySelector("button");
   if (btnText) btnText.style.opacity = "0.6";
   if (btnSpan) btnSpan.textContent = "...";
   let err = null;
   try {
-    const result = await uploadPdfToSupabase(file, null, (e) => { err = e; });
+    const result = await uploadPdfToSupabase(file, null, (e) => { err = e; }, sharePassword);
     if (btnText) btnText.style.opacity = "1";
     if (btnSpan) btnSpan.textContent = "+";
     e.target.value = "";
@@ -214,19 +217,70 @@ logoutBtn.addEventListener("click", async () => {
 });
 
 pdfList.addEventListener("click", async (e) => {
-  const btn = e.target.closest(".pdf-delete-btn");
-  if (!btn) return;
-  e.preventDefault();
-  const id = btn.dataset.id;
-  const share_token = btn.dataset.share;
-  const storage_path = btn.dataset.path;
-  if (!id || !share_token) return;
-  if (!confirm("Удалить этот PDF и все рисунки навсегда?")) return;
-  btn.disabled = true;
-  btn.textContent = "...";
-  const ok = await deletePdfFromSupabase({ id, share_token, storage_path }, (err) => alert(err));
-  if (ok) await loadPdfs();
-  else { btn.disabled = false; btn.textContent = "Удалить"; }
+  const delBtn = e.target.closest(".pdf-delete-btn");
+  if (delBtn) {
+    e.preventDefault();
+    const id = delBtn.dataset.id;
+    const share_token = delBtn.dataset.share;
+    const storage_path = delBtn.dataset.path;
+    if (!id || !share_token) return;
+    if (!confirm("Удалить этот PDF и все рисунки навсегда?")) return;
+    delBtn.disabled = true;
+    delBtn.textContent = "...";
+    const ok = await deletePdfFromSupabase({ id, share_token, storage_path }, (err) => alert(err));
+    if (ok) await loadPdfs();
+    else { delBtn.disabled = false; delBtn.textContent = "Удалить"; }
+    return;
+  }
+  const pwdBtn = e.target.closest(".pdf-password-btn");
+  if (pwdBtn) {
+    e.preventDefault();
+    openPasswordModal(pwdBtn.dataset.share);
+  }
 });
+
+let passwordModalShareToken = null;
+function openPasswordModal(shareToken) {
+  passwordModalShareToken = shareToken;
+  const modal = document.getElementById("passwordModal");
+  const input = document.getElementById("modalPasswordInput");
+  if (modal && input) {
+    input.value = "";
+    modal.style.display = "flex";
+    input.focus();
+  }
+}
+
+function closePasswordModal() {
+  passwordModalShareToken = null;
+  const modal = document.getElementById("passwordModal");
+  const input = document.getElementById("modalPasswordInput");
+  if (modal) modal.style.display = "none";
+  if (input) input.value = "";
+}
+
+document.getElementById("modalPasswordSave")?.addEventListener("click", async () => {
+  const pwd = document.getElementById("modalPasswordInput")?.value?.trim();
+  if (!passwordModalShareToken) return;
+  if (!pwd) {
+    alert("Введите пароль");
+    return;
+  }
+  const ok = await setPdfSharePassword(passwordModalShareToken, pwd);
+  closePasswordModal();
+  if (ok) await loadPdfs();
+  else alert("Ошибка сохранения пароля");
+});
+
+document.getElementById("modalPasswordRemove")?.addEventListener("click", async () => {
+  if (!passwordModalShareToken) return;
+  const ok = await setPdfSharePassword(passwordModalShareToken, "");
+  closePasswordModal();
+  if (ok) await loadPdfs();
+  else alert("Ошибка удаления пароля");
+});
+
+document.getElementById("modalPasswordCancel")?.addEventListener("click", closePasswordModal);
+document.getElementById("passwordModal")?.querySelector(".dash-modal-backdrop")?.addEventListener("click", closePasswordModal);
 
 loadPdfs();

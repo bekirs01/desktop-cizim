@@ -18,6 +18,13 @@
     .view-pdf-wrap { position: relative; }
     .view-pdf-wrap #pdfCanvas { display: block; margin: 0 auto; max-width: 100%; }
     .view-pdf-wrap #drawCanvas { margin: 0 auto; display: block; }
+    .view-password { text-align: center; padding: 2rem; max-width: 320px; margin: 2rem auto; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
+    .view-password h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+    .view-password p { font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem; }
+    .view-password input { width: 100%; padding: 0.65rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-primary); font-size: 1rem; margin-bottom: 0.5rem; box-sizing: border-box; }
+    .view-password input:focus { outline: none; border-color: var(--accent); }
+    .view-password-error { color: var(--error); font-size: 0.85rem; margin-bottom: 0.5rem; }
+    .view-password .btn { width: 100%; }
   </style>
 </head>
 <body>
@@ -32,6 +39,13 @@
       <div class="view-container">
         <div id="viewError" class="view-error" style="display:none"></div>
         <div id="viewLoading" class="view-loading">PDF yükleniyor…</div>
+        <div id="viewPassword" class="view-password" style="display:none">
+          <h3>&#x1F512; Пароль для доступа</h3>
+          <p>Этот PDF защищён паролем.</p>
+          <input type="password" id="viewPasswordInput" placeholder="Пароль" autocomplete="current-password">
+          <p id="viewPasswordError" class="view-password-error" style="display:none">Неверный пароль</p>
+          <button type="button" id="viewPasswordSubmit" class="btn btn-primary">Открыть</button>
+        </div>
         <div id="viewContent" style="display:none">
           <div class="view-toolbar">
             <button id="prevBtn" class="btn btn-secondary btn-small" disabled>◀</button>

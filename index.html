@@ -147,6 +147,15 @@
             <p id="cameraOverlayText">Запуск камеры...</p>
             <p class="overlay-hint" id="cameraOverlayHint">При запросе разрешения нажмите «Разрешить»</p>
           </div>
+          <div id="pdfPasswordOverlay" class="pdf-password-overlay" style="display:none">
+            <div class="pdf-password-box">
+              <h3>&#x1F512; Пароль для доступа</h3>
+              <p>Этот PDF защищён паролем. Введите пароль, чтобы открыть.</p>
+              <input type="password" id="pdfPasswordInput" placeholder="Пароль" autocomplete="current-password">
+              <p id="pdfPasswordError" class="pdf-password-error" style="display:none">Неверный пароль</p>
+              <button type="button" id="pdfPasswordSubmit" class="btn btn-primary">Открыть</button>
+            </div>
+          </div>
           <script>
             (function(){
               var q=window.location.search;
