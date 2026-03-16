@@ -4,7 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <title>Система отслеживания движений в реальном времени</title>
+  <title>Режим рисования</title>
+  <script>
+    (function(){
+      if(window.location.search.indexOf('id=')!==-1){
+        document.documentElement.classList.add('pdf-loading');
+        var s=document.createElement('style');
+        s.textContent='.pdf-loading #drawCanvas,.pdf-loading #output,.pdf-loading .white-sheet-bg,.pdf-loading #video{display:none!important}.pdf-loading .pdf-container{display:flex!important}.pdf-loading .pdf-overlay{display:none!important}.pdf-loading .camera-overlay{display:flex!important;z-index:50}.pdf-loading #drawingControlsGroup{display:none!important}';
+        document.head.appendChild(s);
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="style.css?v=3">
   <script type="module">
     import { supabase } from './supabase-config.js';
@@ -45,7 +55,7 @@
 <body>
   <div class="app">
     <header class="header">
-      <h1>Система отслеживания движений в реальном времени</h1>
+      <h1 id="appHeaderTitle">Режим рисования</h1>
       <div class="header-right">
         <a href="/dashboard.html" class="btn btn-secondary btn-small" style="margin-right:0.5rem">← Мои PDF</a>
         <button id="fullscreenBtn" class="btn-icon" title="Полный экран">⛶</button>
@@ -141,6 +151,10 @@
             (function(){
               var q=window.location.search;
               if(q.indexOf('id=')!==-1){
+                var w=document.getElementById('cameraWrapper');
+                if(w)w.classList.add('pdf-mode');
+                var h=document.getElementById('appHeaderTitle');
+                if(h)h.textContent='Загрузка PDF...';
                 var e=document.getElementById('cameraOverlayText');
                 if(e)e.textContent='Загрузка PDF...';
                 var h=document.getElementById('cameraOverlayHint');
@@ -155,6 +169,12 @@
             <p>Нажмите «Загрузить PDF» выше для загрузки PDF</p>
             <p class="overlay-hint">После загрузки PDF можно рисовать поверх</p>
           </div>
+          <script>
+            if(window.location.search.indexOf('id=')!==-1){
+              var po=document.getElementById('pdfOverlay');
+              if(po)po.style.display='none';
+            }
+          </script>
           <div class="pptx-overlay" id="pptxOverlay">
             <p>Нажмите «Загрузить презентацию» выше для загрузки</p>
             <p class="overlay-hint">После загрузки PPTX можно рисовать поверх</p>
@@ -167,7 +187,8 @@
         </div>
         <div class="controls">
           <div class="controls-group drawing-controls" id="drawingControlsGroup">
-            <button type="button" id="canvasLinkBtn" class="btn btn-draw" title="Создать и скопировать ссылку на холст">🔗 Ссылка</button>
+            <button type="button" id="canvasSharedToggleBtn" class="btn btn-draw" title="Создать или удалить общий холст">📤 Создать общий холст</button>
+            <button type="button" id="canvasLinkBtn" class="btn btn-draw" title="Скопировать ссылку на холст" style="display:none">🔗 Ссылка</button>
             <button type="button" id="pdfLinkBtn" class="btn btn-draw" title="Копировать ссылку на PDF" style="display:none">🔗 Ссылка</button>
             <button type="button" id="gestureControlBtn" class="btn btn-mode" title="Включить рисование жестами">✋ Управление жестами</button>
             <div class="controls-group hand-preference hand-preference-inline" id="handPreferenceGroup" style="display:none">

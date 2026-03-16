@@ -101,6 +101,7 @@ const addObjBtn = document.getElementById("addObjBtn");
 const removeObjBtn = document.getElementById("removeObjBtn");
 const showSkeletonCheck = document.getElementById("showSkeleton");
 const fpsEl = document.getElementById("fps");
+const appHeaderTitle = document.getElementById("appHeaderTitle");
 const modeToggle = document.getElementById("modeToggle");
 const modeCameraBtn = document.getElementById("modeCameraBtn");
 const modeWhiteSheetBtn = document.getElementById("modeWhiteSheetBtn");
@@ -124,6 +125,7 @@ const pdfPageInfo = document.getElementById("pdfPageInfo");
 const pdfClearBtn = document.getElementById("pdfClearBtn");
 const pdfCopyLinkBtn = document.getElementById("pdfCopyLinkBtn");
 const drawingControlsGroup = document.getElementById("drawingControlsGroup");
+const canvasSharedToggleBtn = document.getElementById("canvasSharedToggleBtn");
 const canvasLinkBtn = document.getElementById("canvasLinkBtn");
 const pdfLinkBtn = document.getElementById("pdfLinkBtn");
 const gestureControlBtn = document.getElementById("gestureControlBtn");
@@ -223,6 +225,11 @@ let pdfIsDrawing = false;
 let currentPdfShareToken = null;
 let currentCanvasShareToken = null;
 let canvasRealtimeUnsubscribe = null;
+let localStrokes = [];
+let localShapes = [];
+let localFillShapes = [];
+let localHistoryStack = [];
+let localHistoryIndex = -1;
 let pdfRealtimeUnsubscribe = null;
 let pdfRealtimeBroadcast = null;
 let pdfRealtimeBroadcastProgress = null;
@@ -1360,6 +1367,12 @@ function updateDocumentOverlays() {
   if (pptxOverlay) pptxOverlay.style.display = (pptxMode && !pptxViewer) ? "flex" : "none";
 }
 
+function updateHeaderTitle() {
+  const text = pdfMode ? "Рисование на PDF" : "Режим рисования";
+  if (appHeaderTitle) appHeaderTitle.textContent = text;
+  document.title = text;
+}
+
 function isCanvasFullscreenMode() {
   const app = document.querySelector(".app");
   return !!document.fullscreenElement && document.fullscreenElement === app;
@@ -1619,6 +1632,7 @@ async function loadPdfFromShareToken(shareToken) {
     loadPdfPageState();
     await renderPdfPage();
     updateDocumentOverlays();
+    updateHeaderTitle();
     pdfRealtimeUnsubscribe?.();
     pdfRealtimeBroadcast = null;
     pdfRealtimeBroadcastProgress = null;
@@ -1985,6 +1999,7 @@ async function loadCanvasFromShareToken(shareToken) {
     canvasRealtimeUnsubscribe = sub?.unsubscribe || sub;
     if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
     updateDocumentOverlays();
+    updateHeaderTitle();
     return true;
   } catch (err) {
     console.error("Canvas load error:", err);
@@ -1992,30 +2007,80 @@ async function loadCanvasFromShareToken(shareToken) {
   }
 }
 
-async function createOrCopyCanvasLink() {
+function updateCanvasSharedUI() {
+  if (!canvasSharedToggleBtn || !canvasLinkBtn) return;
+  const isShared = !!currentCanvasShareToken;
+  canvasSharedToggleBtn.textContent = isShared ? "📥 Удалить общий холст" : "📤 Создать общий холст";
+  canvasSharedToggleBtn.title = isShared ? "Отключить общий холст (остаётся локальный)" : "Создать общий холст для совместной работы";
+  canvasLinkBtn.style.display = isShared ? "inline-flex" : "none";
+}
+
+async function createSharedCanvas() {
   if (!supabase) { alert("Сервис недоступен"); return; }
-  let link = canvasLinkBtn?.dataset?.link;
-  if (!currentCanvasShareToken || !link) {
-    const token = crypto.randomUUID().replace(/-/g, "");
-    const ok = await savePageStrokes(token, CANVAS_PAGE, strokes);
-    if (!ok) { alert("Не удалось создать сессию"); return; }
-    currentCanvasShareToken = token;
-    link = `${getShareBaseUrl()}/index.html?canvas=${token}`;
-    if (canvasLinkBtn) canvasLinkBtn.dataset.link = link;
-    canvasRealtimeUnsubscribe?.();
-    const sub = subscribeStrokes(token, (payload) => {
-      const row = payload?.new || payload?.newRecord || payload?.record;
-      if (!row || row.share_token !== token || row.page_num !== CANVAS_PAGE) return;
-      const incoming = (row.strokes || []).map((s) => ({
-        points: s.points || [],
-        color: s.color || drawColor,
-        lineWidth: s.lineWidth ?? drawLineWidth,
-      }));
-      strokes = incoming;
-      if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
-    });
-    canvasRealtimeUnsubscribe = sub?.unsubscribe || sub;
+  localStrokes = strokes.map(cloneStroke);
+  localShapes = shapes.map(cloneShape);
+  localFillShapes = fillShapes.map((f) => ({ data: new ImageData(new Uint8ClampedArray(f.data.data), f.w, f.h), w: f.w, h: f.h }));
+  localHistoryStack = historyStack.map((s) => ({
+    strokes: s.strokes.map(cloneStroke),
+    shapes: s.shapes.map(cloneShape),
+    fillShapes: s.fillShapes.map((f) => ({ data: new ImageData(new Uint8ClampedArray(f.data.data), f.w, f.h), w: f.w, h: f.h }))
+  }));
+  localHistoryIndex = historyIndex;
+  const token = crypto.randomUUID().replace(/-/g, "");
+  const ok = await savePageStrokes(token, CANVAS_PAGE, []);
+  if (!ok) { alert("Не удалось создать сессию"); return; }
+  currentCanvasShareToken = token;
+  strokes = [];
+  shapes = [];
+  fillShapes = [];
+  historyStack = [];
+  historyIndex = -1;
+  currentStroke = { points: [], color: drawColor };
+  pushCanvasHistory();
+  const link = `${getShareBaseUrl()}/index.html?canvas=${token}`;
+  if (canvasLinkBtn) canvasLinkBtn.dataset.link = link;
+  canvasRealtimeUnsubscribe?.();
+  const sub = subscribeStrokes(token, (payload) => {
+    const row = payload?.new || payload?.newRecord || payload?.record;
+    if (!row || row.share_token !== token || row.page_num !== CANVAS_PAGE) return;
+    const incoming = (row.strokes || []).map((s) => ({
+      points: s.points || [],
+      color: s.color || drawColor,
+      lineWidth: s.lineWidth ?? drawLineWidth,
+    }));
+    strokes = incoming;
+    if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+  });
+  canvasRealtimeUnsubscribe = sub?.unsubscribe || sub;
+  if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+  updateCanvasSharedUI();
+}
+
+function deleteSharedCanvas() {
+  currentCanvasShareToken = null;
+  canvasRealtimeUnsubscribe?.();
+  canvasRealtimeUnsubscribe = null;
+  if (canvasLinkBtn) canvasLinkBtn.dataset.link = "";
+  strokes = localStrokes.map(cloneStroke);
+  shapes = localShapes.map(cloneShape);
+  fillShapes = localFillShapes.map((f) => ({ data: new ImageData(new Uint8ClampedArray(f.data.data), f.w, f.h), w: f.w, h: f.h }));
+  historyStack = localHistoryStack.map((s) => ({
+    strokes: s.strokes.map(cloneStroke),
+    shapes: s.shapes.map(cloneShape),
+    fillShapes: s.fillShapes.map((f) => ({ data: new ImageData(new Uint8ClampedArray(f.data.data), f.w, f.h), w: f.w, h: f.h }))
+  }));
+  historyIndex = localHistoryIndex;
+  currentStroke = { points: [], color: drawColor };
+  if (localHistoryStack.length === 0) pushCanvasHistory();
+  if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+  updateCanvasSharedUI();
+}
+
+async function createOrCopyCanvasLink() {
+  if (!currentCanvasShareToken) {
+    await createSharedCanvas();
   }
+  const link = canvasLinkBtn?.dataset?.link;
   if (link) {
     try {
       await navigator.clipboard.writeText(link);
@@ -3002,11 +3067,14 @@ modeCameraBtn?.addEventListener("click", (e) => {
   if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
   if (drawingControlsGroup) drawingControlsGroup.style.display = "flex";
   if (cameraControlsGroup) cameraControlsGroup.style.display = "none";
+  if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "inline-flex";
   if (modePdfBtn) modePdfBtn.style.display = "";
   if (!gestureControlEnabled) cameraOverlay?.classList.add("hidden");
   restoreCameraAspect();
   scheduleDocRefit();
   updateDocumentOverlays();
+  updateCanvasSharedUI();
+  updateHeaderTitle();
 });
 
 modeWhiteSheetBtn?.addEventListener("click", () => {
@@ -3025,11 +3093,14 @@ modeWhiteSheetBtn?.addEventListener("click", () => {
   if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
   if (drawingControlsGroup) drawingControlsGroup.style.display = "flex";
   if (cameraControlsGroup) cameraControlsGroup.style.display = "none";
+  if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "inline-flex";
   if (modePdfBtn) modePdfBtn.style.display = "";
   if (!gestureControlEnabled) cameraOverlay?.classList.add("hidden");
   restoreCameraAspect();
   scheduleDocRefit();
   updateDocumentOverlays();
+  updateCanvasSharedUI();
+  updateHeaderTitle();
 });
 
 modeBlackSheetBtn?.addEventListener("click", () => {
@@ -3048,11 +3119,14 @@ modeBlackSheetBtn?.addEventListener("click", () => {
   if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
   if (drawingControlsGroup) drawingControlsGroup.style.display = "flex";
   if (cameraControlsGroup) cameraControlsGroup.style.display = "none";
+  if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "inline-flex";
   if (modePdfBtn) modePdfBtn.style.display = "";
   if (!gestureControlEnabled) cameraOverlay?.classList.add("hidden");
   restoreCameraAspect();
   scheduleDocRefit();
   updateDocumentOverlays();
+  updateCanvasSharedUI();
+  updateHeaderTitle();
 });
 
 modePdfBtn?.addEventListener("click", () => {
@@ -3074,6 +3148,7 @@ modePdfBtn?.addEventListener("click", () => {
   if (drawingControlsGroup) drawingControlsGroup.style.display = "none";
   if (cameraControlsGroup) cameraControlsGroup.style.display = "flex";
   if (modePdfBtn) modePdfBtn.style.display = "none";
+  updateHeaderTitle();
   if (pdfDoc) {
     loadPdfPageState();
     cameraWrapper?.classList.add("pdf-loaded");
@@ -3099,6 +3174,7 @@ modePptxBtn?.addEventListener("click", () => {
   if (drawingControlsGroup) drawingControlsGroup.style.display = "none";
   if (cameraControlsGroup) cameraControlsGroup.style.display = "flex";
   if (modePdfBtn) modePdfBtn.style.display = "none";
+  updateHeaderTitle();
   if (pptxViewer) {
     loadPptxPageState();
     cameraWrapper?.classList.add("pptx-loaded");
@@ -3370,6 +3446,10 @@ document.getElementById("zoomOutBtn")?.addEventListener("click", () => {
   renderPdfPage();
 });
 
+canvasSharedToggleBtn?.addEventListener("click", async () => {
+  if (currentCanvasShareToken) deleteSharedCanvas();
+  else await createSharedCanvas();
+});
 canvasLinkBtn?.addEventListener("click", () => createOrCopyCanvasLink());
 
 pdfLinkBtn?.addEventListener("click", async () => {
@@ -3508,15 +3588,24 @@ const canvasId = urlParams.get("canvas");
 const isCameraMode = urlParams.get("mode") === "camera";
 
 if (shareId) {
+  pdfMode = true;
+  whiteSheetMode = false;
+  blackSheetMode = false;
+  pptxMode = false;
+  cameraWrapper?.classList.remove("white-sheet-mode", "black-sheet-mode", "pptx-mode", "pptx-loaded");
+  cameraWrapper?.classList.add("pdf-mode");
+  if (pdfOverlay) pdfOverlay.style.display = "none";
   const overlayText = document.getElementById("cameraOverlayText");
   const overlayHint = document.getElementById("cameraOverlayHint");
   if (overlayText) overlayText.textContent = "Загрузка PDF...";
   if (overlayHint) overlayHint.textContent = "";
   cameraOverlay?.classList.remove("hidden");
   loadPdfFromShareToken(shareId).then((ok) => {
+    document.documentElement.classList.remove("pdf-loading");
     if (ok) {
       if (drawingControlsGroup) drawingControlsGroup.style.display = "flex";
       if (cameraControlsGroup) cameraControlsGroup.style.display = "none";
+      if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "none";
       if (canvasLinkBtn) canvasLinkBtn.style.display = "none";
       if (pdfLinkBtn) pdfLinkBtn.style.display = "inline-flex";
       cameraOverlay?.classList.add("hidden");
@@ -3529,8 +3618,9 @@ if (shareId) {
       applyCanvasBackground();
       drawingControlsGroup.style.display = "flex";
       cameraControlsGroup.style.display = "none";
-      if (canvasLinkBtn) canvasLinkBtn.style.display = "inline-flex";
+      if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "inline-flex";
       if (pdfLinkBtn) pdfLinkBtn.style.display = "none";
+      updateCanvasSharedUI();
       cameraOverlay?.classList.add("hidden");
       drawMode = true;
       scheduleDocRefit();
@@ -3545,17 +3635,17 @@ if (shareId) {
   applyCanvasBackground();
   drawingControlsGroup.style.display = "flex";
   cameraControlsGroup.style.display = "none";
-  if (canvasLinkBtn) canvasLinkBtn.style.display = "inline-flex";
+  if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "inline-flex";
   if (pdfLinkBtn) pdfLinkBtn.style.display = "none";
   cameraOverlay?.classList.add("hidden");
   drawMode = true;
   updateDocumentOverlays();
+  updateCanvasSharedUI();
+  updateHeaderTitle();
   scheduleDocRefit();
-  // Kamera modunda otomatik kamera başlat — el takibi ve çizim hemen çalışsın
   startCamera();
 }
 
-// iframe içindeyse (embed=1) dashboard linki ana pencerede açılsın
 if (urlParams.get("embed") === "1") {
   const dashLink = document.querySelector('a[href="/dashboard.html"]');
   if (dashLink) dashLink.target = "_top";
