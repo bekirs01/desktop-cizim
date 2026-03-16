@@ -67,62 +67,57 @@
       <section class="camera-section">
         <div class="camera-wrapper" id="cameraWrapper">
           <div class="draw-toolbar" id="drawToolbar">
-            <div class="toolbar-trigger" id="toolbarTrigger" title="Настройки рисования">⚙</div>
-            <div class="toolbar-content" id="toolbarContent">
-              <div class="toolbar-row">
-                <label>Цвет</label>
-                <div class="toolbar-colors">
-                  <button type="button" class="color-preset active" data-color="#00ff9f" style="background:#00ff9f"></button>
-                  <button type="button" class="color-preset" data-color="#ff6b9d" style="background:#ff6b9d"></button>
-                  <button type="button" class="color-preset" data-color="#6b9dff" style="background:#6b9dff"></button>
-                  <button type="button" class="color-preset" data-color="#ffd93d" style="background:#ffd93d"></button>
-                  <button type="button" class="color-preset" data-color="#ff4757" style="background:#ff4757"></button>
-                  <button type="button" class="color-preset" data-color="#ffffff" style="background:#fff;border-color:#888"></button>
-                  <button type="button" class="color-preset" data-color="#9b59b6" style="background:#9b59b6"></button>
-                  <button type="button" class="color-preset" data-color="#1abc9c" style="background:#1abc9c"></button>
-                  <button type="button" class="color-preset" data-color="#e74c3c" style="background:#e74c3c"></button>
-                  <button type="button" class="color-preset" data-color="#3498db" style="background:#3498db"></button>
-                  <button type="button" class="color-preset" data-color="#2ecc71" style="background:#2ecc71"></button>
-                  <button type="button" class="color-preset" data-color="#000000" style="background:#000;border-color:#444"></button>
-                  <input type="color" id="toolbarColor" class="color-picker" value="#00ff9f" title="Полная палитра">
+            <div class="toolbar-compact">
+              <div class="toolbar-pen-group">
+                <button id="penToolBtn" class="toolbar-icon-btn active" title="Инструменты рисования">✏️</button>
+                <div class="toolbar-popover" id="penToolPopover">
+                  <button class="pen-tool-opt" data-tool="pen" title="Ручка">✏️</button>
+                  <button class="pen-tool-opt" data-tool="marker" title="Маркер">🖍</button>
+                  <button class="pen-tool-opt" data-tool="pencil" title="Карандаш">✎</button>
+                  <button class="pen-tool-opt" data-tool="brush" title="Кисть">🖌</button>
                 </div>
               </div>
-              <div class="toolbar-row">
-                <label>Толщина <span id="toolbarSizeVal">4</span></label>
-                <div class="toolbar-size-btns">
-                  <button type="button" class="size-btn" data-delta="-1">−</button>
-                  <input type="range" id="toolbarSize" min="1" max="20" value="4" step="1">
-                  <button type="button" class="size-btn" data-delta="1">+</button>
-                </div>
+              <button id="fillToolBtn" class="toolbar-icon-btn" title="Заливка">🪣</button>
+              <button id="eraserToolBtn" class="toolbar-icon-btn" title="Ластик"><svg class="icon-eraser" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 20H7L3 16c-1-1 0-2 1-3l9-9c1-1 2-1 3 0l5 5c1 1 1 2 0 3l-9 9c-1 1-2 2-3 1z"/></svg></button>
+              <button id="colorToolBtn" class="toolbar-icon-btn color-preview" style="background:#00ff9f" title="Цвет"></button>
+              <button id="textToolBtn" class="toolbar-icon-btn" title="Текст">T</button>
+              <button id="figuresToolBtn" class="toolbar-icon-btn" title="Фигуры">▢</button>
+              <button id="undoBtn" class="toolbar-icon-btn" title="Отменить">↶</button>
+              <button id="redoBtn" class="toolbar-icon-btn" title="Повторить">↷</button>
+            </div>
+            <div class="toolbar-popover toolbar-popover-wide" id="colorPopover">
+              <div class="toolbar-colors">
+                <button type="button" class="color-preset active" data-color="#00ff9f" style="background:#00ff9f"></button>
+                <button type="button" class="color-preset" data-color="#ff6b9d" style="background:#ff6b9d"></button>
+                <button type="button" class="color-preset" data-color="#6b9dff" style="background:#6b9dff"></button>
+                <button type="button" class="color-preset" data-color="#ffd93d" style="background:#ffd93d"></button>
+                <button type="button" class="color-preset" data-color="#ff4757" style="background:#ff4757"></button>
+                <button type="button" class="color-preset" data-color="#ffffff" style="background:#fff;border-color:#888"></button>
+                <button type="button" class="color-preset" data-color="#9b59b6" style="background:#9b59b6"></button>
+                <button type="button" class="color-preset" data-color="#1abc9c" style="background:#1abc9c"></button>
+                <button type="button" class="color-preset" data-color="#e74c3c" style="background:#e74c3c"></button>
+                <button type="button" class="color-preset" data-color="#3498db" style="background:#3498db"></button>
+                <button type="button" class="color-preset" data-color="#2ecc71" style="background:#2ecc71"></button>
+                <button type="button" class="color-preset" data-color="#000000" style="background:#000;border-color:#444"></button>
               </div>
-              <div class="toolbar-row">
-                <label>Инструменты</label>
-                <div class="tool-btns">
-                  <button class="shape-btn active" data-shape="free" title="Карандаш">✏️</button>
-                  <button class="shape-btn" data-shape="fill" title="Заливка">🪣</button>
-                  <button class="shape-btn" data-shape="line" title="Линия">📏</button>
-                  <button class="shape-btn" data-shape="arrow" title="Стрелка">➤</button>
-                </div>
+              <div class="color-wheel-row">
+                <canvas id="colorWheelCanvas" class="color-wheel" width="140" height="140" title="Колесо цвета"></canvas>
+                <div class="color-wheel-preview" id="colorWheelPreview"></div>
               </div>
-              <div class="toolbar-row">
-                <label>Фигуры</label>
-                <div class="shape-btns">
-                  <button class="shape-btn" data-shape="rect" title="Прямоугольник">▢</button>
-                  <button class="shape-btn" data-shape="ellipse" title="Эллипс">⬭</button>
-                  <button class="shape-btn" data-shape="circle" title="Круг">⭕</button>
-                  <button class="shape-btn" data-shape="triangle" title="Треугольник">△</button>
-                </div>
-              </div>
-              <div class="toolbar-row">
-                <label>История</label>
-                <div class="history-btns">
-                  <button type="button" id="undoBtn" class="btn btn-draw btn-small" title="Отменить">↶</button>
-                  <button type="button" id="redoBtn" class="btn btn-draw btn-small" title="Повторить">↷</button>
-                </div>
-              </div>
-              <div class="toolbar-row">
-                <label>Прозрачность</label>
-                <input type="range" id="toolbarOpacity" min="0.3" max="1" step="0.1" value="1" title="Прозрачность линий">
+              <input type="hidden" id="toolbarColor" value="#00ff9f">
+              <label class="toolbar-slider-row"><span>Яркость</span><input type="range" id="colorBrightness" min="0" max="100" value="100"></label>
+              <label class="toolbar-slider-row"><span>Прозрачность</span><input type="range" id="toolbarOpacity" min="0.2" max="1" step="0.05" value="1"></label>
+              <label class="toolbar-slider-row"><span>Толщина</span><input type="range" id="toolbarThickness" min="1" max="24" step="1" value="4"></label>
+            </div>
+            <div class="toolbar-popover" id="figuresPopover">
+              <div class="toolbar-figures">
+                <button class="shape-btn" data-shape="free" title="Карандаш">✏️</button>
+                <button class="shape-btn" data-shape="line" title="Линия">📏</button>
+                <button class="shape-btn" data-shape="arrow" title="Стрелка">➤</button>
+                <button class="shape-btn" data-shape="rect" title="Прямоугольник">▢</button>
+                <button class="shape-btn" data-shape="ellipse" title="Эллипс">⬭</button>
+                <button class="shape-btn" data-shape="circle" title="Круг">⭕</button>
+                <button class="shape-btn" data-shape="triangle" title="Треугольник">△</button>
               </div>
             </div>
           </div>
@@ -142,6 +137,7 @@
           </div>
           <div class="white-sheet-bg" id="whiteSheetBg"></div>
           <canvas id="drawCanvas"></canvas>
+          <input type="text" id="textInputOverlay" class="text-input-overlay" placeholder="Введите текст..." style="display:none" maxlength="200">
           <div class="eye-overlay" id="eyeOverlay"></div>
           <div class="camera-overlay" id="cameraOverlay">
             <p id="cameraOverlayText">Запуск камеры...</p>

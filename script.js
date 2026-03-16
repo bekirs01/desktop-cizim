@@ -90,12 +90,9 @@ const stopBtn = document.getElementById("stopBtn");
 const drawBtn = document.getElementById("drawBtn");
 const clearDrawBtn = document.getElementById("clearDrawBtn");
 const drawToolbar = document.getElementById("drawToolbar");
-const toolbarTrigger = document.getElementById("toolbarTrigger");
 const toolbarContent = document.getElementById("toolbarContent");
 const gestureCursor = document.getElementById("gestureCursor");
 const toolbarColor = document.getElementById("toolbarColor");
-const toolbarSize = document.getElementById("toolbarSize");
-const toolbarSizeVal = document.getElementById("toolbarSizeVal");
 const objectsBtn = document.getElementById("objectsBtn");
 const addObjBtn = document.getElementById("addObjBtn");
 const removeObjBtn = document.getElementById("removeObjBtn");
@@ -162,6 +159,8 @@ let objectsMode = false;
 let drawColor = "#00ff9f";
 let drawLineWidth = 4;
 let drawShape = "free";
+let drawToolType = "pen";
+let eraserMode = false;
 let shapeFill = false;
 let canvasBackgroundColor = "#ffffff";
 let strokeOpacity = 1;
@@ -430,6 +429,7 @@ function eraseLayerAtPosition(strokesArr, shapesArr, eraseX, eraseY, radius = 0.
     else if (sh.type === "rect" || sh.type === "ellipse") { dx = (sh.x + sh.w / 2) - eraseX; dy = (sh.y + sh.h / 2) - eraseY; }
     else if (sh.type === "line" || sh.type === "arrow") { dx = (sh.x1 + sh.x2) / 2 - eraseX; dy = (sh.y1 + sh.y2) / 2 - eraseY; }
     else if (sh.type === "triangle") { dx = (sh.x1 + sh.x2 + sh.x3) / 3 - eraseX; dy = (sh.y1 + sh.y2 + sh.y3) / 3 - eraseY; }
+    else if (sh.type === "text") { dx = sh.x - eraseX; dy = sh.y - eraseY; }
     else return true;
     return dx * dx + dy * dy > r2;
   });
@@ -605,9 +605,12 @@ function simulateMouseMoveAtPosition(normX, normY, w, h) {
 }
 
 function isPointOverToolbar(clientX, clientY) {
-  if (!drawToolbar) return false;
-  const r = drawToolbar.getBoundingClientRect();
-  return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
+  const check = (el) => el && (() => { const r = el.getBoundingClientRect(); return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom; })();
+  if (check(drawToolbar)) return true;
+  if (colorPopover?.classList.contains("visible") && check(colorPopover)) return true;
+  if (penToolPopover?.classList.contains("visible") && check(penToolPopover)) return true;
+  if (figuresPopover?.classList.contains("visible") && check(figuresPopover)) return true;
+  return false;
 }
 
 function updateGestureCursor(clientX, clientY, visible) {
@@ -893,6 +896,49 @@ function drawObjects(ctx, w, h) {
   });
 }
 
+function drawStrokeWithTool(ctx, stroke, sx, h) {
+  const pts = smoothStrokePoints(stroke.points || stroke);
+  const c = stroke.color || drawColor;
+  const lw = stroke.lineWidth ?? drawLineWidth ?? 4;
+  const opacity = stroke.opacity ?? 1;
+  const tool = stroke.toolType || "pen";
+  if (pts.length < 2) return;
+  ctx.beginPath();
+  ctx.moveTo(sx(pts[0].x), pts[0].y * h);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(sx(pts[i].x), pts[i].y * h);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  if (tool === "pencil") {
+    ctx.strokeStyle = hexToRgba(c, opacity * 0.75);
+    ctx.lineWidth = lw * 0.9;
+    ctx.stroke();
+    ctx.strokeStyle = hexToRgba(c, opacity * 0.5);
+    ctx.lineWidth = lw * 0.5;
+    ctx.stroke();
+  } else if (tool === "marker") {
+    ctx.shadowBlur = Math.max(4, lw * 0.4);
+    ctx.shadowColor = c;
+    ctx.strokeStyle = hexToRgba(c, opacity * 0.85);
+    ctx.lineWidth = lw;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  } else if (tool === "brush") {
+    ctx.strokeStyle = hexToRgba(c, opacity * 0.9);
+    ctx.lineWidth = lw;
+    ctx.stroke();
+    ctx.strokeStyle = hexToRgba(c, opacity * 0.4);
+    ctx.lineWidth = lw * 1.3;
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle = hexToRgba(c, 0.25);
+    ctx.lineWidth = Math.max(lw * 2.5, 12);
+    ctx.stroke();
+    ctx.strokeStyle = hexToRgba(c, opacity);
+    ctx.lineWidth = lw;
+    ctx.stroke();
+  }
+}
+
 /** Stroke noktalarına hafif yumuşatma — çizim daha düzgün görünsün */
 function smoothStrokePoints(pts, alpha = 0.25) {
   if (!pts || pts.length < 3) return pts;
@@ -1011,24 +1057,14 @@ function renderToTempForFill(ctx, w, h, opts) {
       ctx.lineTo(x2, y2);
       ctx.lineTo(x2 - ux * al - uy * al * 0.4, y2 - uy * al + ux * al * 0.4);
       ctx.stroke();
+    } else if (s.type === "text" && s.text) {
+      ctx.fillStyle = hexToRgba(c, s.opacity ?? 1);
+      ctx.font = `${s.fontSize || 24}px sans-serif`;
+      ctx.fillText(s.text, sx(s.x), s.y * h);
     }
   });
   const allSt = [...st, cs?.points?.length > 0 ? cs : null].filter(Boolean);
-  allSt.forEach((stroke) => {
-    const pts = smoothStrokePoints(stroke.points || stroke);
-    const c = stroke.color || drawColor;
-    const lw = stroke.lineWidth ?? defLw;
-    if (pts.length < 2) return;
-    ctx.beginPath();
-    ctx.moveTo(sx(pts[0].x), pts[0].y * h);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(sx(pts[i].x), pts[i].y * h);
-    ctx.strokeStyle = hexToRgba(c, 0.25);
-    ctx.lineWidth = Math.max(lw * 2.5, 12);
-    ctx.stroke();
-    ctx.strokeStyle = hexToRgba(c, stroke.opacity ?? 1);
-    ctx.lineWidth = lw;
-    ctx.stroke();
-  });
+  allSt.forEach((stroke) => drawStrokeWithTool(ctx, stroke, sx, h));
 }
 
 function doFillAtCanvas(px, py, w, h) {
@@ -1114,24 +1150,15 @@ function renderPdfToTempForFill(ctx, w, h, pdfCanvasEl, opts) {
       ctx.lineTo(x2, y2);
       ctx.lineTo(x2 - ux * al - uy * al * 0.4, y2 - uy * al + ux * al * 0.4);
       ctx.stroke();
+    } else if (s.type === "text" && s.text) {
+      ctx.fillStyle = hexToRgba(c, opacity);
+      ctx.font = `${s.fontSize || 24}px sans-serif`;
+      ctx.fillText(s.text, s.x * w, s.y * h);
     }
   });
   const allSt = [...st, cs?.points?.length > 0 ? cs : null].filter(Boolean);
-  allSt.forEach((stroke) => {
-    const pts = smoothStrokePoints(stroke.points || stroke);
-    const c = stroke.color || drawColor;
-    const lw = stroke.lineWidth ?? defLw;
-    if (pts.length < 2) return;
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x * w, pts[0].y * h);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x * w, pts[i].y * h);
-    ctx.strokeStyle = hexToRgba(c, 0.25);
-    ctx.lineWidth = Math.max(lw * 2.5, 12);
-    ctx.stroke();
-    ctx.strokeStyle = hexToRgba(c, stroke.opacity ?? 1);
-    ctx.lineWidth = lw;
-    ctx.stroke();
-  });
+  const sxPdf = (x) => x * w;
+  allSt.forEach((stroke) => drawStrokeWithTool(ctx, stroke, sxPdf, h));
 }
 
 function doFillAtPdf(px, py, w, h) {
@@ -1228,6 +1255,10 @@ function drawStrokesToCanvas(w, h) {
       dctx.lineTo(x2, y2);
       dctx.lineTo(bx, by);
       dctx.stroke();
+    } else if (sh.type === "text" && sh.text) {
+      dctx.fillStyle = hexToRgba(color, opacity);
+      dctx.font = `${sh.fontSize || 24}px sans-serif`;
+      dctx.fillText(sh.text, sx(sh.x), sh.y * h);
     }
   });
 
@@ -1301,22 +1332,7 @@ function drawStrokesToCanvas(w, h) {
   }
 
   const allStrokes = [...strokes, currentStroke.points.length > 0 ? currentStroke : null].filter(Boolean);
-  dctx.lineCap = "round";
-  dctx.lineJoin = "round";
-  allStrokes.forEach((stroke) => {
-    const rawPts = stroke.points || stroke;
-    const pts = smoothStrokePoints(rawPts);
-    const color = stroke.color || drawColor;
-    const lw = stroke.lineWidth ?? defLw;
-    const opacity = stroke.opacity ?? 1;
-    if (pts.length < 2) return;
-    dctx.beginPath();
-    dctx.moveTo(sx(pts[0].x), pts[0].y * h);
-    for (let i = 1; i < pts.length; i++) dctx.lineTo(sx(pts[i].x), pts[i].y * h);
-    dctx.strokeStyle = hexToRgba(color, opacity);
-    dctx.lineWidth = lw;
-    dctx.stroke();
-  });
+  allStrokes.forEach((stroke) => drawStrokeWithTool(dctx, stroke, sx, h));
 
   // İmleç: маленькая красивая точка
   if (window.drawCursor && drawMode) {
@@ -1340,6 +1356,11 @@ function eraseAtPosition(eraseX, eraseY, radius = 0.07) {
   const next = eraseLayerAtPosition(strokes, shapes, eraseX, eraseY, radius);
   strokes = next.strokes;
   shapes = next.shapes;
+}
+function erasePdfAtPosition(eraseX, eraseY, radius = 0.07) {
+  const next = eraseLayerAtPosition(pdfStrokes, pdfShapes, eraseX, eraseY, radius);
+  pdfStrokes = next.strokes;
+  pdfShapes = next.shapes;
 }
 
 function toDocNormX(x) {
@@ -1500,6 +1521,10 @@ function drawStrokesToPdfCanvas(w, h) {
       dctx.lineTo(x2, y2);
       dctx.lineTo(x2 - ux * arrowLen - uy * arrowLen * 0.4, y2 - uy * arrowLen + ux * arrowLen * 0.4);
       dctx.stroke();
+    } else if (sh.type === "text" && sh.text) {
+      dctx.fillStyle = hexToRgba(color, opacity);
+      dctx.font = `${sh.fontSize || 24}px sans-serif`;
+      dctx.fillText(sh.text, sh.x * w, sh.y * h);
     }
   });
   if (pdfShapeInProgress && pdfMode) {
@@ -1538,22 +1563,8 @@ function drawStrokesToPdfCanvas(w, h) {
     dctx.setLineDash([]);
   }
   const allStrokes = [...pdfStrokes, pdfCurrentStroke.points.length > 0 ? pdfCurrentStroke : null].filter(Boolean);
-  allStrokes.forEach((stroke) => {
-    const rawPts = stroke.points || stroke;
-    const pts = smoothStrokePoints(rawPts);
-    const color = stroke.color || drawColor;
-    const lw = stroke.lineWidth ?? defLw;
-    if (pts.length < 2) return;
-    dctx.beginPath();
-    dctx.moveTo(pts[0].x * w, pts[0].y * h);
-    for (let i = 1; i < pts.length; i++) dctx.lineTo(pts[i].x * w, pts[i].y * h);
-    dctx.strokeStyle = hexToRgba(color, 0.25);
-    dctx.lineWidth = Math.max(lw * 2.5, 12);
-    dctx.stroke();
-    dctx.strokeStyle = hexToRgba(color, stroke.opacity ?? 1);
-    dctx.lineWidth = lw;
-    dctx.stroke();
-  });
+  const sxPdf = (x) => x * w;
+  allStrokes.forEach((stroke) => drawStrokeWithTool(dctx, stroke, sxPdf, h));
   if (pdfRemoteCurrentStroke?.points?.length >= 2) {
     const rawPts = pdfRemoteCurrentStroke.points;
     const pts = smoothStrokePoints(rawPts);
@@ -1750,13 +1761,40 @@ function setupPdfDrawing() {
       y: (clientY - rect.top) / rect.height
     };
   };
+  let pdfEraserActive = false;
   const onStart = (e) => {
     if (!pdfMode || !pdfDoc) return;
     e.preventDefault();
     const p = getNorm(e);
+    if (eraserMode) {
+      pdfEraserActive = true;
+      erasePdfAtPosition(p.x, p.y, 0.08);
+      drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+      if (currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
+      return;
+    }
     if (drawShape === "fill") {
       doFillAtPdf(p.x * pdfDrawCanvas.width, p.y * pdfDrawCanvas.height, pdfDrawCanvas.width, pdfDrawCanvas.height);
       drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+      return;
+    }
+    if (drawShape === "text") {
+      const textInput = document.getElementById("textInputOverlay");
+      if (textInput) {
+        const rect = pdfDrawCanvas.getBoundingClientRect();
+        const wr = pdfDrawCanvas.closest(".camera-wrapper")?.getBoundingClientRect() || rect;
+        const px = (rect.left - wr.left) + p.x * rect.width;
+        const py = (rect.top - wr.top) + p.y * rect.height;
+        textInput.style.left = px + "px";
+        textInput.style.top = py + "px";
+        textInput.style.display = "block";
+        textInput.value = "";
+        textInput.style.color = drawColor;
+        textInput.focus();
+        textInput.dataset.pendingX = String(p.x);
+        textInput.dataset.pendingY = String(p.y);
+        textInput.dataset.mode = "pdf";
+      }
       return;
     }
     if (["circle", "rect", "line", "ellipse", "triangle", "arrow"].includes(drawShape)) {
@@ -1765,11 +1803,18 @@ function setupPdfDrawing() {
       return;
     }
     pdfIsDrawing = true;
-    pdfCurrentStroke = { points: [{ x: p.x, y: p.y }], color: drawColor, lineWidth: drawLineWidth, opacity: strokeOpacity };
+    pdfCurrentStroke = { points: [{ x: p.x, y: p.y }], color: drawColor, lineWidth: drawLineWidth, opacity: strokeOpacity, toolType: drawToolType };
   };
   let lastBroadcastProgress = 0;
   const onMove = (e) => {
     const p = getNorm(e);
+    if (eraserMode && (pdfEraserActive || e.buttons === 1)) {
+      e.preventDefault();
+      erasePdfAtPosition(p.x, p.y, 0.08);
+      drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+      if (currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
+      return;
+    }
     if (pdfShapeInProgress) {
       e.preventDefault();
       pdfShapeInProgress.end = { x: p.x, y: p.y };
@@ -1789,6 +1834,7 @@ function setupPdfDrawing() {
     }
   };
   const onEnd = (e) => {
+    pdfEraserActive = false;
     if (pdfShapeInProgress) {
       e.preventDefault();
       const s = pdfShapeInProgress.start, t = pdfShapeInProgress.end;
@@ -1849,15 +1895,41 @@ function setupCanvasDrawing() {
     return { x: MIRROR_CAMERA ? 1 - nx : nx, y: ny };
   };
   let canvasIsDrawing = false;
+  let eraserActive = false;
   const onStart = (e) => {
     if (pdfMode || pptxMode) return;
     e.preventDefault();
     const p = getNorm(e);
+    if (eraserMode) {
+      eraserActive = true;
+      eraseAtPosition(p.x, p.y, 0.08);
+      drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+      if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, CANVAS_PAGE, strokes);
+      return;
+    }
     if (drawShape === "fill") {
       const px = MIRROR_CAMERA ? (1 - p.x) * drawCanvas.width : p.x * drawCanvas.width;
       const py = p.y * drawCanvas.height;
       doFillAtCanvas(px, py, drawCanvas.width, drawCanvas.height);
       drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+      return;
+    }
+    if (drawShape === "text") {
+      const textInput = document.getElementById("textInputOverlay");
+      if (textInput) {
+        const rect = drawCanvas.getBoundingClientRect();
+        const wr = drawCanvas.closest(".camera-wrapper")?.getBoundingClientRect() || rect;
+        const px = (rect.left - wr.left) + (MIRROR_CAMERA ? 1 - p.x : p.x) * rect.width;
+        const py = (rect.top - wr.top) + p.y * rect.height;
+        textInput.style.left = px + "px";
+        textInput.style.top = py + "px";
+        textInput.style.display = "block";
+        textInput.value = "";
+        textInput.style.color = drawColor;
+        textInput.focus();
+        textInput.dataset.pendingX = String(p.x);
+        textInput.dataset.pendingY = String(p.y);
+      }
       return;
     }
     if (["circle", "rect", "line", "ellipse", "triangle", "arrow"].includes(drawShape)) {
@@ -1866,10 +1938,17 @@ function setupCanvasDrawing() {
       return;
     }
     canvasIsDrawing = true;
-    currentStroke = { points: [{ x: p.x, y: p.y }], color: drawColor, lineWidth: drawLineWidth, opacity: strokeOpacity };
+    currentStroke = { points: [{ x: p.x, y: p.y }], color: drawColor, lineWidth: drawLineWidth, opacity: strokeOpacity, toolType: drawToolType };
   };
   const onMove = (e) => {
     const p = getNorm(e);
+    if (eraserMode && (eraserActive || e.buttons === 1)) {
+      e.preventDefault();
+      eraseAtPosition(p.x, p.y, 0.08);
+      drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+      if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, CANVAS_PAGE, strokes);
+      return;
+    }
     if (shapeInProgress) {
       e.preventDefault();
       shapeInProgress.end = { x: p.x, y: p.y };
@@ -1884,6 +1963,7 @@ function setupCanvasDrawing() {
     }
   };
   const onEnd = (e) => {
+    eraserActive = false;
     if (shapeInProgress) {
       e.preventDefault();
       const s = shapeInProgress.start, t = shapeInProgress.end;
@@ -2186,25 +2266,15 @@ function drawStrokesToPptxCanvas(w, h) {
       dctx.lineTo(x2, y2);
       dctx.lineTo(x2 - ux * arrowLen - uy * arrowLen * 0.4, y2 - uy * arrowLen + ux * arrowLen * 0.4);
       dctx.stroke();
+    } else if (sh.type === "text" && sh.text) {
+      dctx.fillStyle = hexToRgba(color, opacity);
+      dctx.font = `${sh.fontSize || 24}px sans-serif`;
+      dctx.fillText(sh.text, sh.x * w, sh.y * h);
     }
   });
   const allStrokes = [...pptxStrokes, pptxCurrentStroke.points.length > 0 ? pptxCurrentStroke : null].filter(Boolean);
-  allStrokes.forEach((stroke) => {
-    const rawPts = stroke.points || stroke;
-    const pts = smoothStrokePoints(rawPts);
-    const color = stroke.color || drawColor;
-    const lw = stroke.lineWidth ?? defLw;
-    if (pts.length < 2) return;
-    dctx.beginPath();
-    dctx.moveTo(pts[0].x * w, pts[0].y * h);
-    for (let i = 1; i < pts.length; i++) dctx.lineTo(pts[i].x * w, pts[i].y * h);
-    dctx.strokeStyle = hexToRgba(color, 0.25);
-    dctx.lineWidth = Math.max(lw * 2.5, 12);
-    dctx.stroke();
-    dctx.strokeStyle = hexToRgba(color, stroke.opacity ?? 1);
-    dctx.lineWidth = lw;
-    dctx.stroke();
-  });
+  const sxPptx = (x) => x * w;
+  allStrokes.forEach((stroke) => drawStrokeWithTool(dctx, stroke, sxPptx, h));
   drawCursorDot(dctx, w, h, true);
 }
 
@@ -2276,9 +2346,26 @@ function setupPptxDrawing() {
   const onStart = (e) => {
     if (!pptxMode || !pptxViewer) return;
     e.preventDefault();
-    pptxIsDrawing = true;
     const p = getNorm(e);
-    pptxCurrentStroke = { points: [{ x: p.x, y: p.y }], color: drawColor, lineWidth: drawLineWidth, opacity: strokeOpacity };
+    if (drawShape === "text") {
+      const textInput = document.getElementById("textInputOverlay");
+      if (textInput) {
+        const rect = pptxDrawCanvas.getBoundingClientRect();
+        const wr = pptxDrawCanvas.closest(".camera-wrapper")?.getBoundingClientRect() || rect;
+        const px = (rect.left - wr.left) + p.x * rect.width, py = (rect.top - wr.top) + p.y * rect.height;
+        textInput.style.left = px + "px";
+        textInput.style.top = py + "px";
+        textInput.style.display = "block";
+        textInput.value = "";
+        textInput.style.color = drawColor;
+        textInput.focus();
+        textInput.dataset.pendingX = String(p.x);
+        textInput.dataset.pendingY = String(p.y);
+      }
+      return;
+    }
+    pptxIsDrawing = true;
+    pptxCurrentStroke = { points: [{ x: p.x, y: p.y }], color: drawColor, lineWidth: drawLineWidth, opacity: strokeOpacity, toolType: drawToolType };
   };
   const onMove = (e) => {
     if (!pptxIsDrawing || !pptxCurrentStroke.points.length) return;
@@ -2518,7 +2605,6 @@ function detectLoop() {
 
       if (overToolbar) {
         shapeInProgress = null;
-        drawToolbar?.classList.add("expanded");
         const { clientX, clientY } = normToClient(cursorPos.x, cursorPos.y, w, h);
         simulateMouseMoveAtPosition(cursorPos.x, cursorPos.y, w, h);
         updateGestureCursor(clientX, clientY, true);
@@ -2553,7 +2639,6 @@ function detectLoop() {
       } else if ((gestureState === "erasing" && twoFingerPos) || (twoFingerPos && !cursorPos && framesSinceDraw >= GESTURE_LOCK_FRAMES && twoFingerHeldFrames >= 2)) {
         if (gestureState !== "erasing") {
           gestureState = "erasing";
-          drawToolbar?.classList.remove("expanded");
           fingerLostFrames = 0;
           wasPinching = false;
           shapeInProgress = null;
@@ -2588,7 +2673,6 @@ function detectLoop() {
         }
         activeRedraw();
       } else if (cursorPos) {
-        drawToolbar?.classList.remove("expanded");
         if (gestureState === "erasing") {
           if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes, true);
           gestureState = "idle";
@@ -3223,28 +3307,192 @@ showSkeletonCheck.addEventListener("change", () => {
   showSkeleton = showSkeletonCheck.checked;
 });
 
-toolbarTrigger?.addEventListener("click", () => {
-  drawToolbar?.classList.toggle("expanded");
+const PEN_TOOLS = [
+  { id: "pen", icon: "✏️", lineWidth: 4 },
+  { id: "marker", icon: "🖍", lineWidth: 14 },
+  { id: "pencil", icon: "✎", lineWidth: 2 },
+  { id: "brush", icon: "🖌", lineWidth: 8 }
+];
+const penToolBtn = document.getElementById("penToolBtn");
+const penToolPopover = document.getElementById("penToolPopover");
+const fillToolBtn = document.getElementById("fillToolBtn");
+const eraserToolBtn = document.getElementById("eraserToolBtn");
+const colorToolBtn = document.getElementById("colorToolBtn");
+const figuresToolBtn = document.getElementById("figuresToolBtn");
+const colorPopover = document.getElementById("colorPopover");
+const figuresPopover = document.getElementById("figuresPopover");
+
+function updatePenToolUI() {
+  const t = PEN_TOOLS.find((x) => x.id === drawToolType);
+  if (t) penToolBtn.textContent = t.icon;
+  document.querySelectorAll(".pen-tool-opt").forEach((b) => b.classList.toggle("active", (b.dataset.tool || "") === drawToolType));
+}
+
+penToolBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  penToolPopover?.classList.toggle("visible");
+  colorPopover?.classList.remove("visible");
+  figuresPopover?.classList.remove("visible");
+});
+document.querySelectorAll(".pen-tool-opt").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    drawToolType = btn.dataset.tool || "pen";
+    drawShape = "free";
+    textToolBtn?.classList.remove("active");
+    const t = PEN_TOOLS.find((x) => x.id === drawToolType);
+    if (t) {
+      drawLineWidth = t.lineWidth;
+      if (toolbarThickness) toolbarThickness.value = drawLineWidth;
+    }
+    eraserMode = false;
+    eraserToolBtn?.classList.remove("active");
+    fillToolBtn?.classList.remove("active");
+    penToolBtn?.classList.add("active");
+    updatePenToolUI();
+    penToolPopover?.classList.remove("visible");
+  });
 });
 
-toolbarColor?.addEventListener("input", () => {
-  drawColor = toolbarColor.value;
-  if (pdfMode && pdfDoc) pdfCurrentStroke.color = drawColor;
-  else if (pptxMode && pptxViewer) pptxCurrentStroke.color = drawColor;
-  else currentStroke.color = drawColor;
-  document.querySelectorAll(".color-preset").forEach((b) => b.classList.remove("active"));
+fillToolBtn?.addEventListener("click", () => {
+  drawShape = "fill";
+  eraserMode = false;
+  eraserToolBtn?.classList.remove("active");
+  penToolBtn?.classList.remove("active");
+  fillToolBtn?.classList.add("active");
+  textToolBtn?.classList.remove("active");
+  figuresToolBtn?.classList.remove("active");
+  document.querySelectorAll(".shape-btn").forEach((b) => b.classList.remove("active"));
+  figuresPopover?.classList.remove("visible");
 });
 
-toolbarSize?.addEventListener("input", () => {
-  drawLineWidth = parseInt(toolbarSize.value, 10);
-  if (toolbarSizeVal) toolbarSizeVal.textContent = drawLineWidth;
+eraserToolBtn?.addEventListener("click", () => {
+  eraserMode = !eraserMode;
+  eraserToolBtn?.classList.toggle("active", eraserMode);
+  if (eraserMode) {
+    penToolBtn?.classList.remove("active");
+    fillToolBtn?.classList.remove("active");
+  } else penToolBtn?.classList.add("active");
 });
+colorToolBtn?.addEventListener("click", () => {
+  colorPopover?.classList.toggle("visible");
+  figuresPopover?.classList.remove("visible");
+  penToolPopover?.classList.remove("visible");
+});
+const textToolBtn = document.getElementById("textToolBtn");
+textToolBtn?.addEventListener("click", () => {
+  drawShape = "text";
+  eraserMode = false;
+  penToolBtn?.classList.remove("active");
+  fillToolBtn?.classList.remove("active");
+  eraserToolBtn?.classList.remove("active");
+  textToolBtn?.classList.add("active");
+  figuresToolBtn?.classList.remove("active");
+  document.querySelectorAll(".shape-btn").forEach((b) => b.classList.remove("active"));
+  figuresPopover?.classList.remove("visible");
+});
+figuresToolBtn?.addEventListener("click", () => {
+  figuresPopover?.classList.toggle("visible");
+  colorPopover?.classList.remove("visible");
+  penToolPopover?.classList.remove("visible");
+  if (drawShape !== "fill") fillToolBtn?.classList.remove("active");
+  if (drawShape !== "text") textToolBtn?.classList.remove("active");
+});
+document.addEventListener("click", (e) => {
+  const inPen = penToolPopover?.contains(e.target) || penToolBtn?.contains(e.target) || penToolBtn?.closest(".toolbar-pen-group")?.contains(e.target);
+  const inColor = colorPopover?.contains(e.target) || colorToolBtn?.contains(e.target);
+  const inFigs = figuresPopover?.contains(e.target) || figuresToolBtn?.contains(e.target);
+  if (!inPen && !inColor && !inFigs) {
+    colorPopover?.classList.remove("visible");
+    figuresPopover?.classList.remove("visible");
+    penToolPopover?.classList.remove("visible");
+  }
+});
+
+function hsvToHex(h, s, v) {
+  const c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) { r = c; g = x; }
+  else if (h < 120) { r = x; g = c; }
+  else if (h < 180) { g = c; b = x; }
+  else if (h < 240) { g = x; b = c; }
+  else if (h < 300) { r = x; b = c; }
+  else { r = c; b = x; }
+  return "#" + [r + m, g + m, b + m].map((n) => Math.round(n * 255).toString(16).padStart(2, "0")).join("");
+}
+function hexToHsv(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255, g = parseInt(hex.slice(3, 5), 16) / 255, b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  const v = max, s = max === 0 ? 0 : d / max;
+  let h = 0;
+  if (d) { if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6; else if (max === g) h = ((b - r) / d + 2) / 6; else h = ((r - g) / d + 4) / 6; }
+  return { h: h * 360, s, v };
+}
+const colorWheelCanvas = document.getElementById("colorWheelCanvas");
+const colorWheelPreview = document.getElementById("colorWheelPreview");
+const colorBrightness = document.getElementById("colorBrightness");
+let colorWheelHue = 120, colorWheelSat = 0.8;
+(function initColorWheel() {
+  if (!colorWheelCanvas) return;
+  const ctx = colorWheelCanvas.getContext("2d");
+  const R = 68;
+  const draw = () => {
+    for (let y = 0; y < 140; y++) for (let x = 0; x < 140; x++) {
+      const dx = x - 70, dy = y - 70;
+      const r = Math.hypot(dx, dy) / R;
+      const a = (Math.atan2(dy, dx) * 180 / Math.PI + 450) % 360;
+      if (r <= 1) {
+        const v = parseFloat(colorBrightness?.value || 100) / 100;
+        ctx.fillStyle = hsvToHex(a, r, v);
+        ctx.fillRect(x, y, 1, 1);
+      }
+    }
+  };
+  draw();
+  colorBrightness?.addEventListener("input", () => { draw(); applyColorFromWheel(); });
+  colorWheelCanvas.addEventListener("mousedown", (e) => {
+    const rect = colorWheelCanvas.getBoundingClientRect();
+    const dx = (e.clientX - rect.left - 70) / R, dy = (e.clientY - rect.top - 70) / R;
+    const r = Math.min(1, Math.hypot(dx, dy));
+    colorWheelHue = (Math.atan2(dy, dx) * 180 / Math.PI + 450) % 360;
+    colorWheelSat = r;
+    applyColorFromWheel();
+    const move = (ev) => {
+      const dx2 = (ev.clientX - rect.left - 70) / R, dy2 = (ev.clientY - rect.top - 70) / R;
+      const r2 = Math.min(1, Math.hypot(dx2, dy2));
+      colorWheelHue = (Math.atan2(dy2, dx2) * 180 / Math.PI + 450) % 360;
+      colorWheelSat = r2;
+      applyColorFromWheel();
+    };
+    const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  });
+  function applyColorFromWheel() {
+    const v = parseFloat(colorBrightness?.value || 100) / 100;
+    drawColor = hsvToHex(colorWheelHue, colorWheelSat, v);
+    if (toolbarColor) toolbarColor.value = drawColor;
+    if (colorToolBtn) colorToolBtn.style.background = drawColor;
+    if (colorWheelPreview) colorWheelPreview.style.background = drawColor;
+    if (pdfMode && pdfDoc) pdfCurrentStroke.color = drawColor;
+    else if (pptxMode && pptxViewer) pptxCurrentStroke.color = drawColor;
+    else currentStroke.color = drawColor;
+    document.querySelectorAll(".color-preset").forEach((b) => b.classList.remove("active"));
+  }
+  window.applyColorFromWheel = applyColorFromWheel;
+  const hv = hexToHsv(drawColor);
+  colorWheelHue = hv.h; colorWheelSat = hv.s;
+  if (colorBrightness) colorBrightness.value = Math.round(hv.v * 100);
+  if (colorWheelPreview) colorWheelPreview.style.background = drawColor;
+})();
 
 document.querySelectorAll(".shape-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".shape-btn").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     drawShape = btn.dataset.shape || "free";
+    fillToolBtn?.classList.remove("active");
+    textToolBtn?.classList.remove("active");
+    figuresPopover?.classList.remove("visible");
   });
 });
 
@@ -3265,22 +3513,32 @@ document.querySelectorAll(".color-preset").forEach((btn) => {
   btn.addEventListener("click", () => {
     const c = btn.dataset.color || "#00ff9f";
     drawColor = c;
+    const hv = hexToHsv(c);
+    colorWheelHue = hv.h;
+    colorWheelSat = hv.s;
+    if (colorBrightness) colorBrightness.value = Math.round(hv.v * 100);
+    if (colorWheelCanvas && colorWheelCanvas.getContext) {
+      const ctx = colorWheelCanvas.getContext("2d");
+      const R = 68;
+      for (let y = 0; y < 140; y++) for (let x = 0; x < 140; x++) {
+        const dx = x - 70, dy = y - 70;
+        const r = Math.hypot(dx, dy) / R;
+        const a = (Math.atan2(dy, dx) * 180 / Math.PI + 450) % 360;
+        if (r <= 1) {
+          const v = parseFloat(colorBrightness?.value || 100) / 100;
+          ctx.fillStyle = hsvToHex(a, r, v);
+          ctx.fillRect(x, y, 1, 1);
+        }
+      }
+    }
     if (pdfMode && pdfDoc) pdfCurrentStroke.color = c;
     else if (pptxMode && pptxViewer) pptxCurrentStroke.color = c;
     else currentStroke.color = c;
     document.querySelectorAll(".color-preset").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     if (toolbarColor) toolbarColor.value = c;
-  });
-});
-
-document.querySelectorAll(".size-btn").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    let v = parseInt(toolbarSize?.value || "4", 10) + parseInt(btn.dataset.delta || "0", 10);
-    v = Math.max(1, Math.min(20, v));
-    drawLineWidth = v;
-    if (toolbarSize) toolbarSize.value = v;
-    if (toolbarSizeVal) toolbarSizeVal.textContent = v;
+    if (colorToolBtn) colorToolBtn.style.background = c;
+    if (colorWheelPreview) colorWheelPreview.style.background = c;
   });
 });
 
@@ -3288,22 +3546,68 @@ function applyCanvasBackground() {
   if (whiteSheetBg) whiteSheetBg.style.background = canvasBackgroundColor;
 }
 
-const shapeFillCheck = document.getElementById("shapeFillCheck");
-shapeFillCheck?.addEventListener("change", () => { shapeFill = shapeFillCheck.checked; });
-
 const toolbarOpacity = document.getElementById("toolbarOpacity");
+const toolbarThickness = document.getElementById("toolbarThickness");
 toolbarOpacity?.addEventListener("input", () => { strokeOpacity = parseFloat(toolbarOpacity.value) || 1; });
+toolbarThickness?.addEventListener("input", () => {
+  drawLineWidth = parseInt(toolbarThickness.value, 10) || 4;
+});
 
-if (toolbarSizeVal) toolbarSizeVal.textContent = drawLineWidth;
 if (toolbarColor) toolbarColor.value = drawColor;
+if (colorToolBtn) colorToolBtn.style.background = drawColor;
+if (toolbarThickness) toolbarThickness.value = drawLineWidth;
+updatePenToolUI?.();
 document.querySelectorAll(".color-preset").forEach((b) => {
   b.classList.toggle("active", (b.dataset.color || "").toLowerCase() === drawColor.toLowerCase());
 });
+document.querySelectorAll(".shape-btn").forEach((b) => {
+  b.classList.toggle("active", (b.dataset.shape || "") === drawShape);
+});
+fillToolBtn?.classList.toggle("active", drawShape === "fill");
+textToolBtn?.classList.toggle("active", drawShape === "text");
+
+const textInputOverlay = document.getElementById("textInputOverlay");
+textInputOverlay?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    commitTextInput();
+  } else if (e.key === "Escape") {
+    textInputOverlay.style.display = "none";
+    textInputOverlay.value = "";
+  }
+});
+textInputOverlay?.addEventListener("blur", () => {
+  if (textInputOverlay.value.trim()) commitTextInput();
+  else textInputOverlay.style.display = "none";
+});
+function commitTextInput() {
+  const txt = textInputOverlay?.value?.trim();
+  const x = parseFloat(textInputOverlay?.dataset.pendingX || "0");
+  const y = parseFloat(textInputOverlay?.dataset.pendingY || "0");
+  textInputOverlay.style.display = "none";
+  textInputOverlay.value = "";
+  if (!txt) return;
+  const addText = (shapesArr, pushHistory, save) => {
+    shapesArr.push({ type: "text", x, y, text: txt, color: drawColor, fontSize: 24 });
+    pushHistory?.();
+    if (save && currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, CANVAS_PAGE, strokes);
+  };
+  if (pdfMode && pdfDoc) {
+    addText(pdfShapes, () => pushPdfHistory(), false);
+    if (currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
+    drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+  } else if (pptxMode && pptxViewer) {
+    addText(pptxShapes, () => pushPptxHistory(), false);
+    drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+  } else {
+    addText(shapes, () => pushCanvasHistory(), true);
+    drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+  }
+}
 
 drawBtn?.addEventListener("click", () => {
   drawMode = !drawMode;
   drawBtn?.classList.toggle("active", drawMode);
-  if (drawMode) drawToolbar?.classList.add("expanded");
   if (!drawMode) {
     if (pdfMode && pdfDoc && pdfCurrentStroke.points.length > 0) {
       const stroke = { points: [...pdfCurrentStroke.points], color: pdfCurrentStroke.color || drawColor, lineWidth: pdfCurrentStroke.lineWidth ?? drawLineWidth, opacity: pdfCurrentStroke.opacity ?? 1 };

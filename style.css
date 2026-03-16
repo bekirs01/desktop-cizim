@@ -517,25 +517,35 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   text-align: center;
 }
 
-/* ========== Панель рисования - слева ========== */
+/* ========== Панель рисования - компактная слева ========== */
 .draw-toolbar {
   position: absolute;
-  top: 0;
+  top: 50%;
   left: 0;
-  bottom: 0;
+  transform: translateY(-50%);
   z-index: 30;
   display: flex;
-  align-items: stretch;
-  overflow: hidden;
+  align-items: center;
 }
 
-.toolbar-trigger {
-  width: 40px;
-  min-width: 40px;
+.toolbar-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 4px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-left: none;
-  border-radius: 0 10px 10px 0;
+  border-radius: 0 12px 12px 0;
+  box-shadow: var(--shadow);
+}
+
+.toolbar-icon-btn {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
   color: var(--text-secondary);
   font-size: 1.2rem;
   cursor: pointer;
@@ -543,36 +553,46 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   align-items: center;
   justify-content: center;
   transition: var(--transition);
-  flex-shrink: 0;
 }
+.toolbar-icon-btn:hover { background: var(--bg-secondary); color: var(--accent); }
+.toolbar-icon-btn.active { background: rgba(0,255,159,0.2); color: var(--accent); }
+.toolbar-icon-btn.color-preview { border: 2px solid var(--border); }
 
-.toolbar-trigger:hover,
-.draw-toolbar.expanded .toolbar-trigger {
-  background: var(--bg-secondary);
-  color: var(--accent);
-}
+.toolbar-pen-group { position: relative; }
+.toolbar-popover#penToolPopover { flex-direction: row; padding: 6px; gap: 4px; }
+.toolbar-popover#penToolPopover.visible { display: flex; }
+.pen-tool-opt { width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-secondary); font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: var(--transition); }
+.pen-tool-opt:hover { border-color: var(--accent); }
+.pen-tool-opt.active { background: rgba(0,255,159,0.2); border-color: var(--accent); color: var(--accent); }
 
-.toolbar-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem;
+.icon-eraser { width: 20px; height: 20px; stroke-linecap: round; stroke-linejoin: round; }
+
+.toolbar-popover-wide { min-width: 200px; }
+.toolbar-picker-row, .toolbar-slider-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-secondary); margin-top: 8px; }
+.toolbar-picker-row span, .toolbar-slider-row span { min-width: 80px; }
+.color-picker-full { width: 100%; height: 36px; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; padding: 2px; background: var(--bg-secondary); }
+.toolbar-slider-row input[type="range"] { flex: 1; min-width: 80px; }
+.color-wheel-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.color-wheel { border-radius: 50%; cursor: crosshair; border: 2px solid var(--border); }
+.color-wheel-preview { width: 36px; height: 36px; border-radius: 8px; border: 2px solid var(--border); flex-shrink: 0; }
+.text-input-overlay { position: absolute; top: 0; left: 0; min-width: 120px; max-width: 280px; padding: 6px 10px; font-size: 18px; font-family: inherit; color: var(--text-primary); border: 2px solid var(--accent); border-radius: 6px; background: var(--bg-card); outline: none; z-index: 100; box-shadow: var(--shadow); }
+
+.toolbar-popover {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  margin-left: 4px;
+  padding: 10px;
   background: var(--bg-card);
-  border-right: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   box-shadow: var(--shadow);
-  width: 200px;
-  min-width: 0;
-  max-width: 0;
-  overflow: hidden;
-  opacity: 0;
-  transition: max-width 0.2s ease, opacity 0.15s ease;
+  display: none;
 }
+.toolbar-popover.visible { display: block; }
 
-.draw-toolbar.expanded .toolbar-content {
-  max-width: 280px;
-  opacity: 1;
-  overflow: visible;
-}
+.toolbar-colors { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.toolbar-figures { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* Курсор жеста над панелью — видно куда наводишь */
 .gesture-cursor {
