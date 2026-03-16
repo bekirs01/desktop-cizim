@@ -2,7 +2,7 @@
  * Paylaşım linkiyle PDF görüntüleme (view.html?id=SHARE_TOKEN)
  */
 import { supabase } from "./supabase-config.js";
-import { fetchStrokesLegacy } from "./supabase-strokes.js";
+import { fetchStrokesLegacy, subscribeStrokes } from "./supabase-strokes.js";
 import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4/build/pdf.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4/build/pdf.worker.mjs";
 
@@ -53,6 +53,12 @@ function drawStrokesToCanvas(w, h) {
     }
     dctx.stroke();
   }
+}
+
+/** pdf_page_strokes formatından legacy formatına dönüştür */
+function legacyFromStrokes(pageNum, strokes) {
+  if (!strokes || !Array.isArray(strokes)) return [];
+  return strokes.map((s) => ({ page_num: pageNum, stroke_data: s }));
 }
 
 async function renderPage() {
@@ -114,6 +120,31 @@ async function renderPage() {
     totalPages = pdfDoc.numPages;
     currentPage = 1;
     allStrokes = (await fetchStrokesLegacy(shareId)) || [];
+
+    // Mobil uygulama çizimlerini anında göster
+    subscribeStrokes(shareId, (payload) => {
+      if (payload?.type === "progress") {
+        const { pageNum, stroke } = payload;
+        if (pageNum != null && stroke?.points?.length >= 2) {
+          const progress = legacyFromStrokes(pageNum, [stroke]);
+          const others = allStrokes.filter((r) => r.page_num !== pageNum);
+          allStrokes = [...others, ...progress];
+          if (currentPage === pageNum) drawStrokesToCanvas(drawCanvas?.width || 0, drawCanvas?.height || 0);
+        }
+      } else if (payload?.new?.strokes) {
+        const pageNum = payload.new.page_num;
+        const strokes = payload.new.strokes || [];
+        const others = allStrokes.filter((r) => r.page_num !== pageNum);
+        allStrokes = [...others, ...legacyFromStrokes(pageNum, strokes)];
+        if (currentPage === pageNum) drawStrokesToCanvas(drawCanvas?.width || 0, drawCanvas?.height || 0);
+      } else if (payload?.eventType === "UPDATE" || payload?.eventType === "INSERT") {
+        fetchStrokesLegacy(shareId).then((fresh) => {
+          allStrokes = fresh || [];
+          drawStrokesToCanvas(drawCanvas?.width || 0, drawCanvas?.height || 0);
+        });
+      }
+    });
+
     hideLoading();
     await renderPage();
 
