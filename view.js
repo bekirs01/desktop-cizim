@@ -32,6 +32,7 @@ let pdfDoc = null;
 let currentPage = 1;
 let totalPages = 0;
 let allStrokes = [];
+let pointerPosition = null;
 
 function drawStrokesToCanvas(w, h) {
   if (!drawCanvas) return;
@@ -52,6 +53,30 @@ function drawStrokesToCanvas(w, h) {
       dctx.lineTo(pts[i].x * w, pts[i].y * h);
     }
     dctx.stroke();
+  }
+  drawPointer();
+}
+
+function drawPointer() {
+  if (!drawCanvas) return;
+  const ctx = drawCanvas.getContext("2d");
+  if (!ctx) return;
+  if (pointerPosition) {
+    const x = pointerPosition.x * drawCanvas.width;
+    const y = pointerPosition.y * drawCanvas.height;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, 14, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255, 68, 68, 0.35)";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, 6, 0, Math.PI * 2);
+    ctx.fillStyle = "#FF4444";
+    ctx.fill();
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
   }
 }
 
@@ -123,7 +148,16 @@ async function renderPage() {
 
     // Mobil uygulama çizimlerini anında göster
     subscribeStrokes(shareId, (payload) => {
-      if (payload?.type === "progress") {
+      if (payload?.event === "pointer_position") {
+        const { x, y } = payload.payload || {};
+        if (typeof x === "number" && typeof y === "number") {
+          pointerPosition = { x, y };
+          if (currentPage != null) drawStrokesToCanvas(drawCanvas?.width || 0, drawCanvas?.height || 0);
+        }
+      } else if (payload?.event === "pointer_hidden") {
+        pointerPosition = null;
+        if (currentPage != null) drawStrokesToCanvas(drawCanvas?.width || 0, drawCanvas?.height || 0);
+      } else if (payload?.type === "progress") {
         const { pageNum, stroke } = payload;
         if (pageNum != null && stroke?.points?.length >= 2) {
           const progress = legacyFromStrokes(pageNum, [stroke]);
