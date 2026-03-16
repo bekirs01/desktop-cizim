@@ -109,6 +109,19 @@ document.getElementById("goCameraBtn")?.addEventListener("click", (e) => {
   window.location.href = "/index.html?mode=camera";
 });
 
+// Kamera bölümü - aç/kapa ve iframe yükle
+const cameraSection = document.getElementById("cameraSection");
+const cameraSectionToggle = document.getElementById("cameraSectionToggle");
+const cameraIframe = document.getElementById("cameraIframe");
+if (cameraSection && cameraSectionToggle && cameraIframe) {
+  cameraSectionToggle.addEventListener("click", () => {
+    const expanded = cameraSection.classList.toggle("expanded");
+    if (expanded && cameraIframe.src === "about:blank") {
+      cameraIframe.src = "/index.html?mode=camera&embed=1";
+    }
+  });
+}
+
 async function loadPdfs() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;

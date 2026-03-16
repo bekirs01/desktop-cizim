@@ -2332,7 +2332,7 @@ function detectLoop() {
             }
           }
           cachedHandLandmarks = handLandmarks;
-          if (showSkeleton && !drawModeHandOnly) drawHandLandmarks(ctx, handLandmarks, w, h);
+          if (showSkeleton) drawHandLandmarks(ctx, handLandmarks, w, h);
         } catch (_) {}
       }
     } else {
@@ -2340,7 +2340,7 @@ function detectLoop() {
       window.eyesClosed = cachedEyesClosed;
       handLandmarks = cachedHandLandmarks || [];
       if (lm && showSkeleton) drawPoseSkeleton(ctx, lm, w, h);
-      if (handLandmarks?.length && showSkeleton && !drawModeHandOnly) drawHandLandmarks(ctx, handLandmarks, w, h);
+      if (handLandmarks?.length && showSkeleton) drawHandLandmarks(ctx, handLandmarks, w, h);
     }
 
     if (objectsMode) {
@@ -3551,4 +3551,12 @@ if (shareId) {
   drawMode = true;
   updateDocumentOverlays();
   scheduleDocRefit();
+  // Kamera modunda otomatik kamera başlat — el takibi ve çizim hemen çalışsın
+  startCamera();
+}
+
+// iframe içindeyse (embed=1) dashboard linki ana pencerede açılsın
+if (urlParams.get("embed") === "1") {
+  const dashLink = document.querySelector('a[href="/dashboard.html"]');
+  if (dashLink) dashLink.target = "_top";
 }
