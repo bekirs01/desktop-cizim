@@ -15,7 +15,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 import { supabase, getShareBaseUrl } from "./supabase-config.js";
 import { uploadPdfToSupabase } from "./supabase-pdf.js";
-import { savePageStrokes, deleteStrokesForPage, fetchStrokes, subscribeStrokes } from "./supabase-strokes.js";
+import { savePageStrokes, deleteStrokesForPage, fetchStrokes, subscribeStrokes, deserializeFillShapes } from "./supabase-strokes.js";
 import { getCanvasByShareToken } from "./supabase-canvas.js";
 
 let PPTXViewer = null;
@@ -291,12 +291,15 @@ function savePdfPageState() {
   if (!pdfDoc) return;
   const pageLayer = clonePageLayer(pdfStrokes, pdfShapes);
   if (pdfCurrentStroke.points.length > 1) pageLayer.strokes.push(cloneStroke(pdfCurrentStroke));
+  pageLayer.fillShapes = pdfFillShapes.map((f) => ({ data: new ImageData(new Uint8ClampedArray(f.data.data), f.w, f.h), w: f.w, h: f.h }));
   pdfStrokesByPage[pdfPageNum] = pageLayer;
 }
 
 async function savePdfStrokesAndBroadcast(pageNum, strokes, skipBroadcast = false) {
   if (!currentPdfShareToken) return;
-  const ok = await savePageStrokes(currentPdfShareToken, pageNum, strokes);
+  const sh = pdfStrokesByPage[pdfPageNum]?.shapes ?? pdfShapes;
+  const fsh = pdfStrokesByPage[pdfPageNum]?.fillShapes ?? pdfFillShapes;
+  const ok = await savePageStrokes(currentPdfShareToken, pageNum, strokes, sh, fsh);
   if (ok && pdfRealtimeBroadcast && !skipBroadcast) pdfRealtimeBroadcast(pageNum, strokes);
 }
 
@@ -304,6 +307,7 @@ function loadPdfPageState() {
   const saved = pdfStrokesByPage[pdfPageNum];
   pdfStrokes = saved ? (saved.strokes || []).map(cloneStroke) : [];
   pdfShapes = saved ? (saved.shapes || []).map(cloneShape) : [];
+  pdfFillShapes = saved?.fillShapes ? saved.fillShapes.map((f) => ({ data: new ImageData(new Uint8ClampedArray(f.data.data), f.w, f.h), w: f.w, h: f.h })) : [];
   pdfCurrentStroke = { points: [], color: drawColor, lineWidth: drawLineWidth };
   pdfHistoryStack = [];
   pdfHistoryIndex = -1;
@@ -350,7 +354,7 @@ function undoCanvas() {
   fillShapes = s.fillShapes.map((f) => ({ data: new ImageData(new Uint8ClampedArray(f.data.data), f.w, f.h), w: f.w, h: f.h }));
   currentStroke = { points: [], color: drawColor };
   if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
-  if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes);
+  if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
 }
 
 function redoCanvas() {
@@ -362,7 +366,7 @@ function redoCanvas() {
   fillShapes = s.fillShapes.map((f) => ({ data: new ImageData(new Uint8ClampedArray(f.data.data), f.w, f.h), w: f.w, h: f.h }));
   currentStroke = { points: [], color: drawColor };
   if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
-  if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes);
+  if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
 }
 
 function undoPdf() {
@@ -435,8 +439,23 @@ function loadPptxPageState() {
   pushPptxHistory();
 }
 
-function eraseLayerAtPosition(strokesArr, shapesArr, eraseX, eraseY, radius = 0.07) {
+function eraseLayerAtPosition(strokesArr, shapesArr, eraseX, eraseY, radius = 0.07, fillShapesArr = []) {
   const r2 = radius * radius;
+  let nextFillShapes = fillShapesArr || [];
+  if (fillShapesArr?.length > 0) {
+    for (let i = fillShapesArr.length - 1; i >= 0; i--) {
+      const f = fillShapesArr[i];
+      if (!f?.data || !f.w || !f.h) continue;
+      const px = Math.floor(eraseX * f.w);
+      const py = Math.floor(eraseY * f.h);
+      if (px < 0 || py < 0 || px >= f.w || py >= f.h) continue;
+      const idx = (py * f.w + px) * 4;
+      if (f.data.data[idx + 3] > 10) {
+        nextFillShapes = fillShapesArr.slice(0, i).concat(fillShapesArr.slice(i + 1));
+        break;
+      }
+    }
+  }
   const nextShapes = shapesArr.filter((sh) => {
     let dx, dy;
     if (sh.type === "circle") { dx = sh.cx - eraseX; dy = sh.cy - eraseY; }
@@ -467,7 +486,7 @@ function eraseLayerAtPosition(strokesArr, shapesArr, eraseX, eraseY, radius = 0.
     if (seg.length > 1) segments.push({ points: seg, color, lineWidth: lw, opacity });
     for (const s of segments) nextStrokes.push({ points: s.points, color: s.color, lineWidth: s.lineWidth, opacity: s.opacity });
   }
-  return { strokes: nextStrokes, shapes: nextShapes };
+  return { strokes: nextStrokes, shapes: nextShapes, fillShapes: nextFillShapes };
 }
 
 function createObject(x, y, r = 0.05) {
@@ -1400,14 +1419,16 @@ function drawStrokesToCanvas(w, h) {
 }
 
 function eraseAtPosition(eraseX, eraseY, radius = 0.07) {
-  const next = eraseLayerAtPosition(strokes, shapes, eraseX, eraseY, radius);
+  const next = eraseLayerAtPosition(strokes, shapes, eraseX, eraseY, radius, fillShapes);
   strokes = next.strokes;
   shapes = next.shapes;
+  fillShapes = next.fillShapes || fillShapes;
 }
 function erasePdfAtPosition(eraseX, eraseY, radius = 0.07) {
-  const next = eraseLayerAtPosition(pdfStrokes, pdfShapes, eraseX, eraseY, radius);
+  const next = eraseLayerAtPosition(pdfStrokes, pdfShapes, eraseX, eraseY, radius, pdfFillShapes);
   pdfStrokes = next.strokes;
   pdfShapes = next.shapes;
+  pdfFillShapes = next.fillShapes || pdfFillShapes;
 }
 
 function toDocNormX(x) {
@@ -1681,7 +1702,7 @@ async function loadPdfFromShareToken(shareToken, password = null) {
     if (pages?.length) {
       for (const row of pages) {
         const p = row.page_num;
-        if (!pdfStrokesByPage[p]) pdfStrokesByPage[p] = { strokes: [], shapes: [] };
+        if (!pdfStrokesByPage[p]) pdfStrokesByPage[p] = { strokes: [], shapes: [], fillShapes: [] };
         for (const s of row.strokes || []) {
           pdfStrokesByPage[p].strokes.push({
             points: s.points || [],
@@ -1689,6 +1710,8 @@ async function loadPdfFromShareToken(shareToken, password = null) {
             lineWidth: s.lineWidth ?? drawLineWidth,
           });
         }
+        pdfStrokesByPage[p].shapes = (row.shapes || []).map(cloneShape);
+        pdfStrokesByPage[p].fillShapes = await deserializeFillShapes(row.fill_shapes || []);
       }
     }
     if (cameraWrapper) cameraWrapper.classList.add("pdf-loaded");
@@ -1757,12 +1780,18 @@ async function loadPdfFromShareToken(shareToken, password = null) {
       const recentlyErased = lastEraseEndTime > 0 && Date.now() - lastEraseEndTime < 1200;
       if (p === pdfPageNum && recentlyErased) return;
       pdfRemoteCurrentStroke = null;
-      if (!pdfStrokesByPage[p]) pdfStrokesByPage[p] = { strokes: [], shapes: [] };
+      if (!pdfStrokesByPage[p]) pdfStrokesByPage[p] = { strokes: [], shapes: [], fillShapes: [] };
       pdfStrokesByPage[p].strokes = incomingStrokes;
-      if (p === pdfPageNum) {
-        pdfStrokes = pdfStrokesByPage[p].strokes || [];
-        drawStrokesToPdfCanvas(pdfDrawCanvas?.width || 1, pdfDrawCanvas?.height || 1);
-      }
+      pdfStrokesByPage[p].shapes = (row.shapes || []).map(cloneShape);
+      deserializeFillShapes(row.fill_shapes || []).then((fs) => {
+        pdfStrokesByPage[p].fillShapes = fs;
+        if (p === pdfPageNum) {
+          pdfStrokes = pdfStrokesByPage[p].strokes || [];
+          pdfShapes = pdfStrokesByPage[p].shapes || [];
+          pdfFillShapes = pdfStrokesByPage[p].fillShapes || [];
+          drawStrokesToPdfCanvas(pdfDrawCanvas?.width || 1, pdfDrawCanvas?.height || 1);
+        }
+      });
     });
     pdfRealtimeUnsubscribe = sub?.unsubscribe || sub;
     pdfRealtimeBroadcast = sub?.broadcast;
@@ -1958,7 +1987,7 @@ function setupCanvasDrawing() {
       eraserActive = true;
       eraseAtPosition(p.x, p.y, 0.08);
       drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
-      if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes);
+      if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
       return;
     }
     if (drawShape === "fill") {
@@ -1966,6 +1995,7 @@ function setupCanvasDrawing() {
       const py = p.y * drawCanvas.height;
       doFillAtCanvas(px, py, drawCanvas.width, drawCanvas.height);
       drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+      if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
       return;
     }
     if (drawShape === "text") {
@@ -2000,7 +2030,7 @@ function setupCanvasDrawing() {
       e.preventDefault();
       eraseAtPosition(p.x, p.y, 0.08);
       drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
-      if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes);
+      if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
       return;
     }
     if (shapeInProgress) {
@@ -2044,7 +2074,7 @@ function setupCanvasDrawing() {
       if (sh.type) {
         shapes.push(sh);
         pushCanvasHistory();
-        if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes);
+        if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
       }
       shapeInProgress = null;
       canvasIsDrawing = false;
@@ -2058,7 +2088,7 @@ function setupCanvasDrawing() {
       strokes.push({ ...currentStroke, _ts: Date.now() });
       pushCanvasHistory();
       if (currentCanvasShareToken && supabase) {
-        savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes);
+        savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
       }
     }
     canvasRemoteCurrentStroke = null;
@@ -2147,8 +2177,8 @@ async function loadCanvasFromShareToken(shareToken) {
       lineWidth: s.lineWidth ?? drawLineWidth,
     }));
     strokes = loadedStrokes;
-    shapes = [];
-    fillShapes = [];
+    shapes = (row?.shapes || []).map(cloneShape);
+    fillShapes = await deserializeFillShapes(row?.fill_shapes || []);
     currentStroke = { points: [], color: drawColor };
     historyStack = [];
     historyIndex = -1;
@@ -2187,7 +2217,11 @@ async function loadCanvasFromShareToken(shareToken) {
         lineWidth: s.lineWidth ?? drawLineWidth,
       }));
       strokes = incoming;
-      if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+      shapes = (row.shapes || []).map(cloneShape);
+      deserializeFillShapes(row.fill_shapes || []).then((fs) => {
+        fillShapes = fs;
+        if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+      });
     });
     canvasRealtimeUnsubscribe = sub?.unsubscribe || sub;
     canvasRealtimeBroadcastProgress = sub?.broadcastProgress || null;
@@ -2209,7 +2243,7 @@ async function saveCurrentCanvasPageToStorage() {
     shapes: shapes.map(cloneShape),
     fillShapes: fillShapes.map((f) => ({ data: new ImageData(new Uint8ClampedArray(f.data.data), f.w, f.h), w: f.w, h: f.h })),
   };
-  if (supabase) await savePageStrokes(currentCanvasShareToken, canvasPageNum, strokes);
+  if (supabase) await savePageStrokes(currentCanvasShareToken, canvasPageNum, strokes, shapes, fillShapes);
 }
 
 function switchToCanvasPage(pageNum) {
@@ -2251,7 +2285,9 @@ async function loadCanvasDocumentWithPages(shareToken) {
         color: s.color || drawColor,
         lineWidth: s.lineWidth ?? drawLineWidth,
       }));
-      canvasStrokesByPage[row.page_num] = { strokes: loaded, shapes: [], fillShapes: [] };
+      const loadedShapes = (row.shapes || []).map(cloneShape);
+      const loadedFills = await deserializeFillShapes(row.fill_shapes || []);
+      canvasStrokesByPage[row.page_num] = { strokes: loaded, shapes: loadedShapes, fillShapes: loadedFills };
     }
     canvasTotalPages = docPages.length >= 1 ? Math.max(...docPages.map((r) => r.page_num)) : 1;
     if (!canvasStrokesByPage[1]) canvasStrokesByPage[1] = { strokes: [], shapes: [], fillShapes: [] };
@@ -2301,11 +2337,16 @@ async function loadCanvasDocumentWithPages(shareToken) {
         color: s.color || drawColor,
         lineWidth: s.lineWidth ?? drawLineWidth,
       }));
-      canvasStrokesByPage[row.page_num] = { ...(canvasStrokesByPage[row.page_num] || {}), strokes: incoming };
-      if (row.page_num === canvasPageNum) {
-        strokes = incoming;
-        if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
-      }
+      const loadedShapes = (row.shapes || []).map(cloneShape);
+      deserializeFillShapes(row.fill_shapes || []).then((loadedFills) => {
+        canvasStrokesByPage[row.page_num] = { strokes: incoming, shapes: loadedShapes, fillShapes: loadedFills };
+        if (row.page_num === canvasPageNum) {
+          strokes = incoming;
+          shapes = loadedShapes;
+          fillShapes = loadedFills;
+          if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+        }
+      });
     });
     canvasRealtimeUnsubscribe = sub?.unsubscribe || sub;
     canvasRealtimeBroadcastProgress = sub?.broadcastProgress || null;
@@ -2345,7 +2386,7 @@ async function createSharedCanvas() {
   }));
   localHistoryIndex = historyIndex;
   const token = crypto.randomUUID().replace(/-/g, "");
-  const ok = await savePageStrokes(token, CANVAS_PAGE, []);
+  const ok = await savePageStrokes(token, CANVAS_PAGE, [], [], []);
   if (!ok) { alert("Не удалось создать сессию"); return; }
   currentCanvasShareToken = token;
   strokes = [];
@@ -2869,19 +2910,20 @@ function detectLoop() {
         }
         window.drawCursor = null;
         const eraseX = (pdfMode && pdfDoc) || (pptxMode && pptxViewer) ? toDocNormX(smoothedErasePos.x) : smoothedErasePos.x;
-        const erased = eraseLayerAtPosition(activeStrokes, activeShapes, eraseX, smoothedErasePos.y, 0.09);
+        const activeFills = pdfMode ? pdfFillShapes : (pptxMode ? [] : fillShapes);
+        const erased = eraseLayerAtPosition(activeStrokes, activeShapes, eraseX, smoothedErasePos.y, 0.09, activeFills);
         activeStrokes = erased.strokes;
         activeShapes = erased.shapes;
-        if (pdfMode && pdfDoc) { pdfStrokes = erased.strokes; pdfShapes = erased.shapes; }
+        if (pdfMode && pdfDoc) { pdfStrokes = erased.strokes; pdfShapes = erased.shapes; pdfFillShapes = erased.fillShapes || pdfFillShapes; }
         else if (pptxMode && pptxViewer) { pptxStrokes = erased.strokes; pptxShapes = erased.shapes; }
-        else { strokes = erased.strokes; shapes = erased.shapes; }
+        else { strokes = erased.strokes; shapes = erased.shapes; fillShapes = erased.fillShapes || fillShapes; }
         const now = Date.now();
         if (pdfMode && currentPdfShareToken && (now - lastEraseSaveTime >= 200)) {
           lastEraseSaveTime = now;
           savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes, true);
         } else if (currentCanvasShareToken && (now - lastEraseSaveTime >= 200)) {
           lastEraseSaveTime = now;
-          savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes);
+          savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
         }
         activeRedraw();
       } else if (cursorPos) {
@@ -3544,26 +3586,38 @@ function updatePenToolUI() {
   document.querySelectorAll(".pen-tool-opt").forEach((b) => b.classList.toggle("active", (b.dataset.tool || "") === drawToolType));
 }
 
+function setActiveToolOnly(tool) {
+  penToolBtn?.classList.remove("active");
+  fillToolBtn?.classList.remove("active");
+  eraserToolBtn?.classList.remove("active");
+  textToolBtn?.classList.remove("active");
+  figuresToolBtn?.classList.remove("active");
+  document.querySelectorAll(".shape-btn").forEach((b) => b.classList.remove("active"));
+  if (tool === "pen") penToolBtn?.classList.add("active");
+  else if (tool === "fill") fillToolBtn?.classList.add("active");
+  else if (tool === "eraser") eraserToolBtn?.classList.add("active");
+  else if (tool === "text") textToolBtn?.classList.add("active");
+  else if (tool === "figures") figuresToolBtn?.classList.add("active");
+}
+
 penToolBtn?.addEventListener("click", (e) => {
   e.stopPropagation();
   penToolPopover?.classList.toggle("visible");
   colorPopover?.classList.remove("visible");
   figuresPopover?.classList.remove("visible");
+  if (penToolPopover?.classList.contains("visible")) setActiveToolOnly("pen");
 });
 document.querySelectorAll(".pen-tool-opt").forEach((btn) => {
   btn.addEventListener("click", () => {
     drawToolType = btn.dataset.tool || "pen";
     drawShape = "free";
-    textToolBtn?.classList.remove("active");
     const t = PEN_TOOLS.find((x) => x.id === drawToolType);
     if (t) {
       drawLineWidth = t.lineWidth;
       if (toolbarThickness) toolbarThickness.value = drawLineWidth;
     }
     eraserMode = false;
-    eraserToolBtn?.classList.remove("active");
-    fillToolBtn?.classList.remove("active");
-    penToolBtn?.classList.add("active");
+    setActiveToolOnly("pen");
     updatePenToolUI();
     penToolPopover?.classList.remove("visible");
   });
@@ -3572,22 +3626,14 @@ document.querySelectorAll(".pen-tool-opt").forEach((btn) => {
 fillToolBtn?.addEventListener("click", () => {
   drawShape = "fill";
   eraserMode = false;
-  eraserToolBtn?.classList.remove("active");
-  penToolBtn?.classList.remove("active");
-  fillToolBtn?.classList.add("active");
-  textToolBtn?.classList.remove("active");
-  figuresToolBtn?.classList.remove("active");
-  document.querySelectorAll(".shape-btn").forEach((b) => b.classList.remove("active"));
+  setActiveToolOnly("fill");
   figuresPopover?.classList.remove("visible");
 });
 
 eraserToolBtn?.addEventListener("click", () => {
   eraserMode = !eraserMode;
-  eraserToolBtn?.classList.toggle("active", eraserMode);
-  if (eraserMode) {
-    penToolBtn?.classList.remove("active");
-    fillToolBtn?.classList.remove("active");
-  } else penToolBtn?.classList.add("active");
+  if (eraserMode) setActiveToolOnly("eraser");
+  else setActiveToolOnly("pen");
 });
 colorToolBtn?.addEventListener("click", () => {
   colorPopover?.classList.toggle("visible");
@@ -3598,20 +3644,14 @@ const textToolBtn = document.getElementById("textToolBtn");
 textToolBtn?.addEventListener("click", () => {
   drawShape = "text";
   eraserMode = false;
-  penToolBtn?.classList.remove("active");
-  fillToolBtn?.classList.remove("active");
-  eraserToolBtn?.classList.remove("active");
-  textToolBtn?.classList.add("active");
-  figuresToolBtn?.classList.remove("active");
-  document.querySelectorAll(".shape-btn").forEach((b) => b.classList.remove("active"));
+  setActiveToolOnly("text");
   figuresPopover?.classList.remove("visible");
 });
-figuresToolBtn?.addEventListener("click", () => {
+figuresToolBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
   figuresPopover?.classList.toggle("visible");
   colorPopover?.classList.remove("visible");
   penToolPopover?.classList.remove("visible");
-  if (drawShape !== "fill") fillToolBtn?.classList.remove("active");
-  if (drawShape !== "text") textToolBtn?.classList.remove("active");
 });
 document.addEventListener("click", (e) => {
   const inPen = penToolPopover?.contains(e.target) || penToolBtn?.contains(e.target) || penToolBtn?.closest(".toolbar-pen-group")?.contains(e.target);
@@ -3705,9 +3745,8 @@ document.querySelectorAll(".shape-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".shape-btn").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
-    drawShape = btn.dataset.shape || "free";
-    fillToolBtn?.classList.remove("active");
-    textToolBtn?.classList.remove("active");
+    drawShape = btn.dataset.shape || "line";
+    setActiveToolOnly("figures");
     figuresPopover?.classList.remove("visible");
   });
 });
@@ -3806,7 +3845,7 @@ function commitTextInput() {
   const addText = (shapesArr, pushHistory, save) => {
     shapesArr.push({ type: "text", x, y, text: txt, color: drawColor, fontSize: 24 });
     pushHistory?.();
-    if (save && currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes);
+    if (save && currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
   };
   if (pdfMode && pdfDoc) {
     addText(pdfShapes, () => pushPdfHistory(), false);
@@ -3845,6 +3884,55 @@ drawBtn?.addEventListener("click", () => {
   }
 });
 
+const clearPageBtn = document.getElementById("clearPageBtn");
+const clearPageModal = document.getElementById("clearPageModal");
+const clearPageCancel = document.getElementById("clearPageCancel");
+const clearPageConfirm = document.getElementById("clearPageConfirm");
+clearPageBtn?.addEventListener("click", () => {
+  if (clearPageModal) clearPageModal.style.display = "flex";
+});
+clearPageCancel?.addEventListener("click", () => {
+  if (clearPageModal) clearPageModal.style.display = "none";
+});
+clearPageConfirm?.addEventListener("click", () => {
+  if (clearPageModal) clearPageModal.style.display = "none";
+  if (pdfMode && pdfDrawCanvas) {
+    if (currentPdfShareToken) {
+      deleteStrokesForPage(currentPdfShareToken, pdfPageNum);
+    }
+    pdfStrokes = [];
+    pdfShapes = [];
+    pdfFillShapes = [];
+    pdfStrokesByPage[pdfPageNum] = { strokes: [], shapes: [], fillShapes: [] };
+    pdfCurrentStroke = { points: [], color: drawColor };
+    const dctx = pdfDrawCanvas.getContext("2d");
+    dctx.clearRect(0, 0, pdfDrawCanvas.width, pdfDrawCanvas.height);
+    if (currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
+  } else if (pptxMode && pptxDrawCanvas) {
+    pptxStrokes = [];
+    pptxShapes = [];
+    pptxStrokesByPage[pptxPageNum] = { strokes: [], shapes: [] };
+    pptxCurrentStroke = { points: [], color: drawColor };
+    const dctx = pptxDrawCanvas.getContext("2d");
+    dctx.clearRect(0, 0, pptxDrawCanvas.width, pptxDrawCanvas.height);
+  } else {
+    strokes = [];
+    shapes = [];
+    fillShapes = [];
+    currentStroke = { points: [], color: drawColor };
+    const dctx = drawCanvas.getContext("2d");
+    dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
+    if (isCanvasDocument) {
+      canvasStrokesByPage[canvasPageNum] = { strokes: [], shapes: [], fillShapes: [] };
+    }
+  }
+  syncCurrentDocumentPageState?.();
+  if (pdfMode && pdfDrawCanvas) drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+  else if (pptxMode && pptxDrawCanvas) drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+  else if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+});
+
 clearDrawBtn?.addEventListener("click", () => {
   if (pdfMode && pdfDrawCanvas) {
     if (currentPdfShareToken) {
@@ -3853,7 +3941,7 @@ clearDrawBtn?.addEventListener("click", () => {
     pdfStrokes = [];
     pdfShapes = [];
     pdfFillShapes = [];
-    pdfStrokesByPage[pdfPageNum] = { strokes: [], shapes: [] };
+    pdfStrokesByPage[pdfPageNum] = { strokes: [], shapes: [], fillShapes: [] };
     pdfCurrentStroke = { points: [], color: drawColor };
     const dctx = pdfDrawCanvas.getContext("2d");
     dctx.clearRect(0, 0, pdfDrawCanvas.width, pdfDrawCanvas.height);
@@ -3871,7 +3959,7 @@ clearDrawBtn?.addEventListener("click", () => {
     currentStroke = { points: [], color: drawColor };
     const dctx = drawCanvas.getContext("2d");
     dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-    if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), []);
+    if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), [], [], []);
   }
   syncCurrentDocumentPageState();
 });

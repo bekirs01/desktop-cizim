@@ -40,8 +40,49 @@ export async function saveStroke(shareToken, pageNum, stroke) {
   return savePageStrokes(shareToken, pageNum, strokes);
 }
 
-/** Sayfanın tüm stroke'larını kaydeder - 1 sayfa = 1 kayıt */
-export async function savePageStrokes(shareToken, pageNum, strokes) {
+function serializeFillShape(f) {
+  if (!f?.data || !f.w || !f.h) return null;
+  try {
+    const c = document.createElement("canvas");
+    c.width = f.w;
+    c.height = f.h;
+    c.getContext("2d").putImageData(f.data, 0, 0);
+    const url = c.toDataURL("image/png");
+    return { data: url.replace(/^data:image\/png;base64,/, ""), w: f.w, h: f.h };
+  } catch (e) {
+    return null;
+  }
+}
+function deserializeFillShape(s) {
+  if (!s?.data || !s.w || !s.h) return null;
+  return new Promise((res) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = s.w;
+      c.height = s.h;
+      const ctx = c.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      res({ data: ctx.getImageData(0, 0, s.w, s.h), w: s.w, h: s.h });
+    };
+    img.onerror = () => res(null);
+    img.src = "data:image/png;base64," + s.data;
+  });
+}
+
+/** Serileştirilmiş fill_shapes dizisini ImageData formatına çevirir */
+export async function deserializeFillShapes(serialized) {
+  if (!serialized || !Array.isArray(serialized)) return [];
+  const out = [];
+  for (const s of serialized) {
+    const f = await deserializeFillShape(s);
+    if (f) out.push(f);
+  }
+  return out;
+}
+
+/** Sayfanın tüm stroke'larını (ve isteğe bağlı shapes, fillShapes) kaydeder */
+export async function savePageStrokes(shareToken, pageNum, strokes, shapes, fillShapes) {
   if (!supabase) return false;
   const cleaned = (strokes || [])
     .filter((s) => s.points?.length >= 2)
@@ -50,10 +91,21 @@ export async function savePageStrokes(shareToken, pageNum, strokes) {
       color: s.color || "#00ff9f",
       lineWidth: s.lineWidth ?? 4,
     }));
-  const { error } = await supabase.from("pdf_page_strokes").upsert(
-    { share_token: shareToken, page_num: pageNum, strokes: cleaned, updated_at: new Date().toISOString() },
-    { onConflict: "share_token,page_num" }
-  );
+  const shapesJson = shapes && shapes.length > 0 ? shapes : [];
+  const fillShapesJson = fillShapes && fillShapes.length > 0
+    ? fillShapes.map(serializeFillShape).filter(Boolean)
+    : [];
+  const payload = {
+    share_token: shareToken,
+    page_num: pageNum,
+    strokes: cleaned,
+    shapes: shapesJson,
+    fill_shapes: fillShapesJson,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await supabase.from("pdf_page_strokes").upsert(payload, {
+    onConflict: "share_token,page_num",
+  });
   if (error) {
     console.warn("Sayfa kaydetme hatası:", error);
     return false;
@@ -68,19 +120,24 @@ export async function fetchPageStrokes(shareToken, pageNum) {
   return page?.strokes || [];
 }
 
-/** Tüm sayfaların stroke'larını getirir (eski format: {page_num, stroke_data} uyumluluğu) */
+/** Tüm sayfaların stroke'larını getirir (shapes, fill_shapes dahil) */
 export async function fetchStrokes(shareToken) {
   if (!supabase) return null;
   const { data, error } = await supabase
     .from("pdf_page_strokes")
-    .select("page_num, strokes")
+    .select("page_num, strokes, shapes, fill_shapes")
     .eq("share_token", shareToken)
     .order("page_num", { ascending: true });
   if (error) {
     console.warn("Stroke yükleme hatası:", error);
     return null;
   }
-  return (data || []).map((r) => ({ page_num: r.page_num, strokes: r.strokes || [] }));
+  return (data || []).map((r) => ({
+    page_num: r.page_num,
+    strokes: r.strokes || [],
+    shapes: r.shapes || [],
+    fill_shapes: r.fill_shapes || [],
+  }));
 }
 
 /** Eski API: fetchStrokes döngüsel format (her satır = stroke) - view/script uyumluluğu */

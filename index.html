@@ -88,6 +88,8 @@
               <div class="toolbar-divider"></div>
               <button id="undoBtn" class="toolbar-icon-btn" title="Отменить">&#x21B6;</button>
               <button id="redoBtn" class="toolbar-icon-btn" title="Повторить">&#x21B7;</button>
+              <div class="toolbar-divider"></div>
+              <button id="clearPageBtn" class="toolbar-icon-btn" title="Очистить страницу">&#x1F5D1;</button>
             </div>
             <div class="toolbar-popover toolbar-popover-wide" id="colorPopover">
               <div class="toolbar-colors">
@@ -115,7 +117,6 @@
             </div>
             <div class="toolbar-popover" id="figuresPopover">
               <div class="toolbar-figures">
-                <button class="shape-btn" data-shape="free" title="Карандаш">&#x270F;&#xFE0F;</button>
                 <button class="shape-btn" data-shape="line" title="Линия">&#x1F4CF;</button>
                 <button class="shape-btn" data-shape="arrow" title="Стрелка">&#x27A4;</button>
                 <button class="shape-btn" data-shape="rect" title="Прямоугольник">&#x25A2;</button>
@@ -146,6 +147,16 @@
           <div class="camera-overlay" id="cameraOverlay">
             <p id="cameraOverlayText">Запуск камеры...</p>
             <p class="overlay-hint" id="cameraOverlayHint">При запросе разрешения нажмите «Разрешить»</p>
+          </div>
+          <div id="clearPageModal" class="pdf-password-overlay" style="display:none">
+            <div class="pdf-password-box">
+              <h3>Очистить страницу?</h3>
+              <p>Всё содержимое текущей страницы будет удалено. Это действие нельзя отменить.</p>
+              <div style="display:flex;gap:0.5rem;justify-content:center;margin-top:1rem">
+                <button type="button" id="clearPageCancel" class="btn btn-secondary">Отмена</button>
+                <button type="button" id="clearPageConfirm" class="btn btn-primary">Очистить</button>
+              </div>
+            </div>
           </div>
           <div id="pdfPasswordOverlay" class="pdf-password-overlay" style="display:none">
             <div class="pdf-password-box">
