@@ -118,6 +118,14 @@ export function subscribeStrokes(shareToken, onUpdate) {
       const { pageNum, stroke } = msg?.payload || msg || {};
       if (pageNum != null && stroke?.points?.length >= 2) onUpdate?.({ type: "progress", pageNum, stroke });
     })
+    .on("broadcast", { event: "pointer_position" }, (msg) => {
+      const p = msg?.payload?.payload || msg?.payload || msg || {};
+      const { x, y } = p;
+      if (typeof x === "number" && typeof y === "number") onUpdate?.({ event: "pointer_position", payload: { x, y } });
+    })
+    .on("broadcast", { event: "pointer_hidden" }, () => {
+      onUpdate?.({ event: "pointer_hidden" });
+    })
     .subscribe((status) => {
       if (status === "CHANNEL_ERROR") console.warn("[Realtime] Bağlantı hatası - SUPABASE_REALTIME_ENABLE.sql çalıştırdın mı?");
     });

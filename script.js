@@ -223,6 +223,7 @@ let pdfCurrentStroke = { points: [], color: "#00ff9f" };
 let pdfZoomScale = 1;
 let pdfIsDrawing = false;
 let currentPdfShareToken = null;
+let pointerPosition = null;
 let currentCanvasShareToken = null;
 let canvasRealtimeUnsubscribe = null;
 let localStrokes = [];
@@ -1569,6 +1570,28 @@ function drawStrokesToPdfCanvas(w, h) {
     dctx.stroke();
   }
   drawCursorDot(dctx, w, h, true);
+  drawPointerOnCanvas(pdfDrawCanvas);
+}
+
+function drawPointerOnCanvas(canvas) {
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx || !pointerPosition) return;
+  const x = pointerPosition.x * canvas.width;
+  const y = pointerPosition.y * canvas.height;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, 14, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255, 68, 68, 0.35)";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x, y, 6, 0, Math.PI * 2);
+  ctx.fillStyle = "#FF4444";
+  ctx.fill();
+  ctx.strokeStyle = "white";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.restore();
 }
 
 async function loadPdfFromShareToken(shareToken) {
@@ -1637,6 +1660,19 @@ async function loadPdfFromShareToken(shareToken) {
     pdfRealtimeBroadcast = null;
     pdfRealtimeBroadcastProgress = null;
     const sub = subscribeStrokes(shareToken, (payload) => {
+      if (payload?.event === "pointer_position") {
+        const { x, y } = payload.payload || {};
+        if (typeof x === "number" && typeof y === "number") {
+          pointerPosition = { x, y };
+          if (pdfMode && pdfDrawCanvas) drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+        }
+        return;
+      }
+      if (payload?.event === "pointer_hidden") {
+        pointerPosition = null;
+        if (pdfMode && pdfDrawCanvas) drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+        return;
+      }
       if (payload?.type === "progress") {
         if (payload.pageNum === pdfPageNum) {
           pdfRemoteCurrentStroke = payload.stroke;
