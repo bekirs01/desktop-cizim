@@ -4389,6 +4389,7 @@ if (shareId) {
     document.documentElement.classList.remove("pdf-loading");
     if (result && typeof result === "object" && result.needsPassword) {
       cameraOverlay?.classList.add("hidden");
+      if (drawingControlsGroup) drawingControlsGroup.style.display = "none";
       const overlay = document.getElementById("pdfPasswordOverlay");
       const input = document.getElementById("pdfPasswordInput");
       const errEl = document.getElementById("pdfPasswordError");
@@ -4447,6 +4448,7 @@ if (shareId) {
     const check = await getCanvasByShareToken(canvasId);
     if (check.needsPassword) {
       cameraOverlay?.classList.add("hidden");
+      if (drawingControlsGroup) drawingControlsGroup.style.display = "none";
       const overlay = document.getElementById("pdfPasswordOverlay");
       const input = document.getElementById("pdfPasswordInput");
       const errEl = document.getElementById("pdfPasswordError");
