@@ -194,7 +194,7 @@ let smoothedPinch = null;
 let smoothedErasePos = null;
 const CURSOR_SMOOTH = 0.45;
 const ERASE_SMOOTH = 0.5;
-const GESTURE_LOCK_FRAMES = 8;
+const GESTURE_LOCK_FRAMES = 6;
 let framesSinceDraw = 999;
 let framesSinceErase = 999;
 
@@ -573,17 +573,18 @@ function isTwoFingersExtended(hand) {
   const lenPinky = d(pinkyTip, hand[17]);
   const distIdxMid = d(idxTip, midTip);
   const minExtended = Math.max(0.025, handSize * 0.12);
-  const minVGap = Math.max(0.01, handSize * 0.22);
+  const minVGap = Math.max(0.01, handSize * 0.2);
   const maxVGap = handSize * 1.5;
   const tipToPipMin = Math.max(0.018, handSize * 0.1);
   const tipToPipIdx = d(idxTip, idxPip);
   const tipToPipMid = d(midTip, midPip);
-  const maxBentLen = handSize * 0.4;
+  const maxBentLen = handSize * 0.5;
+  const minRatio = 1.35;
   return lenIdx >= minExtended && lenMid >= minExtended &&
          tipToPipIdx > tipToPipMin && tipToPipMid > tipToPipMin &&
          lenRing < maxBentLen && lenPinky < maxBentLen &&
-         lenIdx > lenRing * 1.5 && lenMid > lenRing * 1.5 &&
-         lenIdx > lenPinky * 1.5 && lenMid > lenPinky * 1.5 &&
+         lenIdx > lenRing * minRatio && lenMid > lenRing * minRatio &&
+         lenIdx > lenPinky * minRatio && lenMid > lenPinky * minRatio &&
          distIdxMid > minVGap && distIdxMid < maxVGap;
 }
 
@@ -2463,16 +2464,12 @@ async function loadCanvasDocumentWithPages(shareToken) {
 
 function updateCanvasSharedUI() {
   if (!canvasSharedToggleBtn || !canvasLinkBtn) return;
+  canvasSharedToggleBtn.style.display = "none";
   if (isCanvasDocument) {
-    canvasSharedToggleBtn.style.display = "none";
     canvasLinkBtn.style.display = currentCanvasShareToken ? "inline-flex" : "none";
     return;
   }
-  const isShared = !!currentCanvasShareToken;
-  canvasSharedToggleBtn.style.display = "inline-flex";
-  canvasSharedToggleBtn.textContent = isShared ? "📥 Удалить общий холст" : "📤 Создать общий холст";
-  canvasSharedToggleBtn.title = isShared ? "Отключить общий холст (остаётся локальный)" : "Создать общий холст для совместной работы";
-  canvasLinkBtn.style.display = isShared ? "inline-flex" : "none";
+  canvasLinkBtn.style.display = !!currentCanvasShareToken ? "inline-flex" : "none";
 }
 
 async function createSharedCanvas() {
@@ -2950,7 +2947,7 @@ function detectLoop() {
         }
       }
       if (twoFingerPos && !cursorPos) twoFingerHeldFrames = Math.min(10, twoFingerHeldFrames + 1);
-      else twoFingerHeldFrames = 0;
+      else twoFingerHeldFrames = Math.max(0, twoFingerHeldFrames - 1);
 
       // 5a. Панель: указательный над полосой слева или панелью = мышь, щепотка = клик
       const overToolbar = cursorPos && (() => {
@@ -2992,7 +2989,7 @@ function detectLoop() {
 
       if (overToolbar) {
         // пропускаем рисование/стирание — только панель
-      } else if ((gestureState === "erasing" && twoFingerPos) || (gestureState === "idle" && twoFingerPos && !cursorPos && framesSinceDraw >= GESTURE_LOCK_FRAMES && twoFingerHeldFrames >= 5)) {
+      } else if ((gestureState === "erasing" && twoFingerPos) || (gestureState === "idle" && twoFingerPos && !cursorPos && framesSinceDraw >= GESTURE_LOCK_FRAMES && twoFingerHeldFrames >= 4)) {
         if (gestureState !== "erasing") {
           gestureState = "erasing";
           fingerLostFrames = 0;
@@ -3558,7 +3555,7 @@ modeCameraBtn?.addEventListener("click", (e) => {
   if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
   if (drawingControlsGroup) drawingControlsGroup.style.display = "flex";
   if (cameraControlsGroup) cameraControlsGroup.style.display = "none";
-  if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "inline-flex";
+  if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "none";
   if (modePdfBtn) modePdfBtn.style.display = "";
   if (!gestureControlEnabled) cameraOverlay?.classList.add("hidden");
   restoreCameraAspect();
@@ -3584,7 +3581,7 @@ modeWhiteSheetBtn?.addEventListener("click", () => {
   if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
   if (drawingControlsGroup) drawingControlsGroup.style.display = "flex";
   if (cameraControlsGroup) cameraControlsGroup.style.display = "none";
-  if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "inline-flex";
+  if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "none";
   if (modePdfBtn) modePdfBtn.style.display = "";
   if (!gestureControlEnabled) cameraOverlay?.classList.add("hidden");
   restoreCameraAspect();
@@ -3610,7 +3607,7 @@ modeBlackSheetBtn?.addEventListener("click", () => {
   if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
   if (drawingControlsGroup) drawingControlsGroup.style.display = "flex";
   if (cameraControlsGroup) cameraControlsGroup.style.display = "none";
-  if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "inline-flex";
+  if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "none";
   if (modePdfBtn) modePdfBtn.style.display = "";
   if (!gestureControlEnabled) cameraOverlay?.classList.add("hidden");
   restoreCameraAspect();
@@ -4488,7 +4485,7 @@ if (shareId) {
               applyCanvasBackground();
               drawingControlsGroup.style.display = "flex";
               cameraControlsGroup.style.display = "none";
-              if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "inline-flex";
+              if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "none";
               if (pdfLinkBtn) pdfLinkBtn.style.display = "none";
               updateCanvasSharedUI();
               cameraOverlay?.classList.add("hidden");
@@ -4508,7 +4505,7 @@ if (shareId) {
         applyCanvasBackground();
         drawingControlsGroup.style.display = "flex";
         cameraControlsGroup.style.display = "none";
-        if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "inline-flex";
+        if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "none";
         if (pdfLinkBtn) pdfLinkBtn.style.display = "none";
         updateCanvasSharedUI();
         cameraOverlay?.classList.add("hidden");
@@ -4522,7 +4519,7 @@ if (shareId) {
       applyCanvasBackground();
       drawingControlsGroup.style.display = "flex";
       cameraControlsGroup.style.display = "none";
-      if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "inline-flex";
+      if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "none";
       if (pdfLinkBtn) pdfLinkBtn.style.display = "none";
       updateCanvasSharedUI();
       cameraOverlay?.classList.add("hidden");
@@ -4556,7 +4553,7 @@ if (shareId) {
   applyCanvasBackground();
   drawingControlsGroup.style.display = isEmbed ? "none" : "flex";
   cameraControlsGroup.style.display = "none";
-  if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = isEmbed ? "none" : "inline-flex";
+  if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "none";
   if (pdfLinkBtn) pdfLinkBtn.style.display = "none";
   cameraOverlay?.classList.add("hidden");
   if (!isEmbed) drawMode = true;
