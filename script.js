@@ -15,7 +15,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 import { supabase, getShareBaseUrl } from "./supabase-config.js";
 import { uploadPdfToSupabase } from "./supabase-pdf.js";
-import { savePageStrokes, deleteStrokesForPage, fetchStrokes, subscribeStrokes, deserializeFillShapes } from "./supabase-strokes.js";
+import { savePageStrokes as _savePageStrokes, deleteStrokesForPage, fetchStrokes, subscribeStrokes, deserializeFillShapes } from "./supabase-strokes.js";
 import { getCanvasByShareToken } from "./supabase-canvas.js";
 
 let PPTXViewer = null;
@@ -194,7 +194,7 @@ let smoothedPinch = null;
 let smoothedErasePos = null;
 const CURSOR_SMOOTH = 0.45;
 const ERASE_SMOOTH = 0.5;
-const GESTURE_LOCK_FRAMES = 3;
+const GESTURE_LOCK_FRAMES = 8;
 let framesSinceDraw = 999;
 let framesSinceErase = 999;
 
@@ -252,6 +252,11 @@ let lastCanvasBroadcastProgress = 0;
 let lastGestureBroadcastProgress = 0;
 let lastEraseSaveTime = 0;
 let lastEraseEndTime = 0;
+let lastLocalSaveTime = 0;
+function savePageStrokes(...args) {
+  lastLocalSaveTime = Date.now();
+  return _savePageStrokes(...args);
+}
 
 // PPTX state
 let pptxMode = false;
@@ -568,15 +573,17 @@ function isTwoFingersExtended(hand) {
   const lenPinky = d(pinkyTip, hand[17]);
   const distIdxMid = d(idxTip, midTip);
   const minExtended = Math.max(0.025, handSize * 0.12);
-  const minVGap = Math.max(0.01, handSize * 0.18);
+  const minVGap = Math.max(0.01, handSize * 0.22);
   const maxVGap = handSize * 1.5;
   const tipToPipMin = Math.max(0.018, handSize * 0.1);
   const tipToPipIdx = d(idxTip, idxPip);
   const tipToPipMid = d(midTip, midPip);
+  const maxBentLen = handSize * 0.4;
   return lenIdx >= minExtended && lenMid >= minExtended &&
          tipToPipIdx > tipToPipMin && tipToPipMid > tipToPipMin &&
-         lenIdx > lenRing * 1.15 && lenMid > lenRing * 1.15 &&
-         lenIdx > lenPinky * 1.15 && lenMid > lenPinky * 1.15 &&
+         lenRing < maxBentLen && lenPinky < maxBentLen &&
+         lenIdx > lenRing * 1.5 && lenMid > lenRing * 1.5 &&
+         lenIdx > lenPinky * 1.5 && lenMid > lenPinky * 1.5 &&
          distIdxMid > minVGap && distIdxMid < maxVGap;
 }
 
@@ -1841,8 +1848,8 @@ async function loadPdfFromShareToken(shareToken, password = null) {
         color: s.color || drawColor,
         lineWidth: s.lineWidth ?? drawLineWidth,
       }));
-      const recentlyErased = lastEraseEndTime > 0 && Date.now() - lastEraseEndTime < 1200;
-      if (p === pdfPageNum && recentlyErased) return;
+      const recentlySaved = lastLocalSaveTime > 0 && Date.now() - lastLocalSaveTime < 2000;
+      if (p === pdfPageNum && recentlySaved) return;
       pdfRemoteCurrentStroke = null;
       if (!pdfStrokesByPage[p]) pdfStrokesByPage[p] = { strokes: [], shapes: [], fillShapes: [] };
       pdfStrokesByPage[p].strokes = incomingStrokes;
@@ -2423,6 +2430,8 @@ async function loadCanvasDocumentWithPages(shareToken) {
       }
       const row = payload?.new || payload?.newRecord || payload?.record;
       if (!row || row.share_token !== shareToken || row.page_num < 1) return;
+      const recentlySaved = lastLocalSaveTime > 0 && Date.now() - lastLocalSaveTime < 2000;
+      if (row.page_num === canvasPageNum && recentlySaved) return;
       canvasRemoteCurrentStroke = null;
       const incoming = (row.strokes || []).map((s) => ({
         points: s.points || [],
@@ -2500,6 +2509,8 @@ async function createSharedCanvas() {
     }
     const row = payload?.new || payload?.newRecord || payload?.record;
     if (!row || row.share_token !== token || row.page_num !== CANVAS_PAGE) return;
+    const recentlySaved = lastLocalSaveTime > 0 && Date.now() - lastLocalSaveTime < 2000;
+    if (recentlySaved) return;
     canvasRemoteCurrentStroke = null;
     const incoming = (row.strokes || []).map((s) => ({
       points: s.points || [],
@@ -2981,7 +2992,7 @@ function detectLoop() {
 
       if (overToolbar) {
         // пропускаем рисование/стирание — только панель
-      } else if ((gestureState === "erasing" && twoFingerPos) || (twoFingerPos && !cursorPos && framesSinceDraw >= GESTURE_LOCK_FRAMES && twoFingerHeldFrames >= 2)) {
+      } else if ((gestureState === "erasing" && twoFingerPos) || (gestureState === "idle" && twoFingerPos && !cursorPos && framesSinceDraw >= GESTURE_LOCK_FRAMES && twoFingerHeldFrames >= 5)) {
         if (gestureState !== "erasing") {
           gestureState = "erasing";
           fingerLostFrames = 0;
