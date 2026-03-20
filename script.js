@@ -91,6 +91,52 @@ const stopBtn = document.getElementById("stopBtn");
 const drawBtn = document.getElementById("drawBtn");
 const clearDrawBtn = document.getElementById("clearDrawBtn");
 const drawToolbar = document.getElementById("drawToolbar");
+let drawToolbarMouseInside = false;
+let drawToolbarGestureInside = false;
+let drawToolbarInteractTimer = null;
+function updateDrawToolbarOpenState() {
+  if (!drawToolbar) return;
+  const open = drawToolbarMouseInside || drawToolbarGestureInside;
+  const was = drawToolbar.classList.contains("draw-toolbar--open");
+  if (!open) {
+    if (drawToolbarInteractTimer) {
+      clearTimeout(drawToolbarInteractTimer);
+      drawToolbarInteractTimer = null;
+    }
+    drawToolbar.classList.remove("draw-toolbar--open", "draw-toolbar--interactive");
+    if (was) {
+      document.getElementById("colorPopover")?.classList.remove("visible");
+      document.getElementById("penToolPopover")?.classList.remove("visible");
+      document.getElementById("figuresPopover")?.classList.remove("visible");
+      document.getElementById("thicknessPopover")?.classList.remove("visible");
+      document.getElementById("opacityPopover")?.classList.remove("visible");
+    }
+    return;
+  }
+  drawToolbar.classList.add("draw-toolbar--open");
+  if (!was) {
+    drawToolbar.classList.remove("draw-toolbar--interactive");
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      drawToolbar.classList.add("draw-toolbar--interactive");
+    } else {
+      clearTimeout(drawToolbarInteractTimer);
+      drawToolbarInteractTimer = setTimeout(() => {
+        drawToolbar.classList.add("draw-toolbar--interactive");
+        drawToolbarInteractTimer = null;
+      }, 340);
+    }
+  }
+}
+drawToolbar?.addEventListener("mouseenter", () => {
+  drawToolbarMouseInside = true;
+  updateDrawToolbarOpenState();
+});
+drawToolbar?.addEventListener("mouseleave", () => {
+  drawToolbarMouseInside = false;
+  const ae = document.activeElement;
+  if (ae && drawToolbar.contains(ae)) ae.blur();
+  updateDrawToolbarOpenState();
+});
 const toolbarContent = document.getElementById("toolbarContent");
 const gestureCursor = document.getElementById("gestureCursor");
 const toolbarColor = document.getElementById("toolbarColor");
@@ -167,6 +213,11 @@ let drawLineWidth = 4;
 let drawShape = "free";
 let drawToolType = "pen";
 let eraserMode = false;
+const MIN_SELECT_NORM = 0.012;
+let selectMarqueeNorm = null;
+let selectState = null;
+let selectDragging = false;
+let selectDragAnchor = null;
 let canvasFadeEnabled = false;
 const FADE_DURATION_MS = 1500;
 let shapeFill = false;
@@ -342,6 +393,7 @@ async function savePdfStrokesAndBroadcast(pageNum, strokes, skipBroadcast = fals
 }
 
 function loadPdfPageState() {
+  clearSelectionToolState();
   const saved = pdfStrokesByPage[pdfPageNum];
   pdfStrokes = saved ? (saved.strokes || []).map(cloneStroke) : [];
   pdfShapes = saved ? (saved.shapes || []).map(cloneShape) : [];
@@ -477,6 +529,7 @@ function syncCurrentDocumentPageState() {
 }
 
 function loadPptxPageState() {
+  clearSelectionToolState();
   const saved = pptxStrokesByPage[pptxPageNum];
   pptxStrokes = saved ? (saved.strokes || []).map(cloneStroke) : [];
   pptxShapes = saved ? (saved.shapes || []).map(cloneShape) : [];
@@ -694,6 +747,10 @@ function isPointOverToolbar(clientX, clientY) {
   if (colorPopover?.classList.contains("visible") && check(colorPopover)) return true;
   if (penToolPopover?.classList.contains("visible") && check(penToolPopover)) return true;
   if (figuresPopover?.classList.contains("visible") && check(figuresPopover)) return true;
+  const thicknessPopover = document.getElementById("thicknessPopover");
+  const opacityPopover = document.getElementById("opacityPopover");
+  if (thicknessPopover?.classList.contains("visible") && check(thicknessPopover)) return true;
+  if (opacityPopover?.classList.contains("visible") && check(opacityPopover)) return true;
   return false;
 }
 
@@ -1574,6 +1631,8 @@ function drawStrokesToCanvas(w, h) {
     if (hasActiveFadeStrokes(strokes, now)) scheduleFadeTick();
   }
 
+  drawSelectOverlay(dctx, w, h, sx);
+
   if (window.drawCursor && drawMode) {
     const cx = MIRROR_CAMERA ? (1 - window.drawCursor.x) * w : window.drawCursor.x * w;
     const cy = window.drawCursor.y * h;
@@ -1608,6 +1667,219 @@ function erasePptxAtPosition(eraseX, eraseY, radius = 0.07) {
   pptxStrokes = next.strokes;
   pptxShapes = next.shapes;
   pptxFillShapes = next.fillShapes || pptxFillShapes;
+}
+
+function clearSelectionToolState() {
+  selectMarqueeNorm = null;
+  selectState = null;
+  selectDragging = false;
+  selectDragAnchor = null;
+}
+
+function normRectsIntersect(a, b) {
+  const ax0 = Math.min(a.x0, a.x1), ax1 = Math.max(a.x0, a.x1);
+  const ay0 = Math.min(a.y0, a.y1), ay1 = Math.max(a.y0, a.y1);
+  const bx0 = Math.min(b.x0, b.x1), bx1 = Math.max(b.x0, b.x1);
+  const by0 = Math.min(b.y0, b.y1), by1 = Math.max(b.y0, b.y1);
+  return ax0 < bx1 && ax1 > bx0 && ay0 < by1 && ay1 > by0;
+}
+
+function strokeNormBBox(stroke) {
+  const pts = stroke?.points;
+  if (!pts?.length) return null;
+  let minX = pts[0].x, maxX = pts[0].x, minY = pts[0].y, maxY = pts[0].y;
+  for (const pt of pts) {
+    minX = Math.min(minX, pt.x); maxX = Math.max(maxX, pt.x);
+    minY = Math.min(minY, pt.y); maxY = Math.max(maxY, pt.y);
+  }
+  return { x0: minX, y0: minY, x1: maxX, y1: maxY };
+}
+
+function shapeNormBBox(sh) {
+  if (!sh?.type) return null;
+  if (sh.type === "circle") {
+    const pad = sh.r || 0.02;
+    return { x0: sh.cx - pad, y0: sh.cy - pad, x1: sh.cx + pad, y1: sh.cy + pad };
+  }
+  if (sh.type === "rect" || sh.type === "ellipse") {
+    const x0 = Math.min(sh.x, sh.x + sh.w), x1 = Math.max(sh.x, sh.x + sh.w);
+    const y0 = Math.min(sh.y, sh.y + sh.h), y1 = Math.max(sh.y, sh.y + sh.h);
+    return { x0, y0, x1, y1 };
+  }
+  if (sh.type === "line" || sh.type === "arrow") {
+    return {
+      x0: Math.min(sh.x1, sh.x2), y0: Math.min(sh.y1, sh.y2),
+      x1: Math.max(sh.x1, sh.x2), y1: Math.max(sh.y1, sh.y2),
+    };
+  }
+  if (sh.type === "triangle") {
+    return {
+      x0: Math.min(sh.x1, sh.x2, sh.x3), y0: Math.min(sh.y1, sh.y2, sh.y3),
+      x1: Math.max(sh.x1, sh.x2, sh.x3), y1: Math.max(sh.y1, sh.y2, sh.y3),
+    };
+  }
+  if (sh.type === "text" && sh.text) {
+    const approxW = Math.min(0.35, (String(sh.text).length || 1) * 0.018);
+    const approxH = ((sh.fontSize || 24) / 480);
+    return { x0: sh.x, y0: sh.y - approxH, x1: sh.x + approxW, y1: sh.y + approxH * 0.35 };
+  }
+  return null;
+}
+
+function pickSelectionInRect(rect, strokesArr, shapesArr) {
+  const strokeIdx = [];
+  const shapeIdx = [];
+  strokesArr.forEach((st, i) => {
+    const bb = strokeNormBBox(st);
+    if (bb && normRectsIntersect(rect, bb)) strokeIdx.push(i);
+  });
+  shapesArr.forEach((sh, i) => {
+    const bb = shapeNormBBox(sh);
+    if (bb && normRectsIntersect(rect, bb)) shapeIdx.push(i);
+  });
+  return { strokeIdx, shapeIdx };
+}
+
+function selectionUnionBBoxFromSel(sel, strokesArr, shapesArr) {
+  if (!sel || (!sel.strokeIdx.length && !sel.shapeIdx.length)) return null;
+  let bb = null;
+  const grow = (b) => {
+    if (!b) return;
+    if (!bb) bb = { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 };
+    else {
+      bb.x0 = Math.min(bb.x0, b.x0); bb.y0 = Math.min(bb.y0, b.y0);
+      bb.x1 = Math.max(bb.x1, b.x1); bb.y1 = Math.max(bb.y1, b.y1);
+    }
+  };
+  for (const i of sel.strokeIdx) grow(strokeNormBBox(strokesArr[i]));
+  for (const i of sel.shapeIdx) grow(shapeNormBBox(shapesArr[i]));
+  return bb;
+}
+
+function pointInNormRect(px, py, r, pad = 0.012) {
+  const x0 = Math.min(r.x0, r.x1) - pad, x1 = Math.max(r.x0, r.x1) + pad;
+  const y0 = Math.min(r.y0, r.y1) - pad, y1 = Math.max(r.y0, r.y1) + pad;
+  return px >= x0 && px <= x1 && py >= y0 && py <= y1;
+}
+
+function clampNorm(v) {
+  return Math.max(0, Math.min(1, v));
+}
+
+function offsetStrokeNorm(stroke, dx, dy) {
+  if (!stroke?.points) return;
+  stroke.points = stroke.points.map((p) => ({ x: clampNorm(p.x + dx), y: clampNorm(p.y + dy) }));
+}
+
+function offsetShapeNorm(sh, dx, dy) {
+  if (sh.type === "circle") {
+    sh.cx = clampNorm(sh.cx + dx); sh.cy = clampNorm(sh.cy + dy);
+  } else if (sh.type === "rect" || sh.type === "ellipse") {
+    sh.x = clampNorm(sh.x + dx); sh.y = clampNorm(sh.y + dy);
+  } else if (sh.type === "line" || sh.type === "arrow") {
+    sh.x1 = clampNorm(sh.x1 + dx); sh.y1 = clampNorm(sh.y1 + dy);
+    sh.x2 = clampNorm(sh.x2 + dx); sh.y2 = clampNorm(sh.y2 + dy);
+  } else if (sh.type === "triangle") {
+    sh.x1 = clampNorm(sh.x1 + dx); sh.y1 = clampNorm(sh.y1 + dy);
+    sh.x2 = clampNorm(sh.x2 + dx); sh.y2 = clampNorm(sh.y2 + dy);
+    sh.x3 = clampNorm(sh.x3 + dx); sh.y3 = clampNorm(sh.y3 + dy);
+  } else if (sh.type === "text") {
+    sh.x = clampNorm(sh.x + dx); sh.y = clampNorm(sh.y + dy);
+  }
+}
+
+function applySelectionOffset(sel, dx, dy, strokesArr, shapesArr) {
+  if (!sel) return;
+  for (const i of sel.strokeIdx) {
+    const st = strokesArr[i];
+    if (st?.points) offsetStrokeNorm(st, dx, dy);
+  }
+  for (const i of sel.shapeIdx) {
+    const sh = shapesArr[i];
+    if (sh) offsetShapeNorm(sh, dx, dy);
+  }
+}
+
+function screenRectFromNormMarquee(x0, y0, x1, y1, w, h, sx) {
+  const xd0 = Math.min(x0, x1), xd1 = Math.max(x0, x1);
+  const yd0 = Math.min(y0, y1), yd1 = Math.max(y0, y1);
+  const px0 = sx(xd0), px1 = sx(xd1);
+  return {
+    left: Math.min(px0, px1),
+    top: yd0 * h,
+    rw: Math.max(1, Math.abs(px1 - px0)),
+    rh: Math.max(1, (yd1 - yd0) * h),
+  };
+}
+
+function drawSelectOverlay(dctx, w, h, sx) {
+  const hasSel = selectState && (selectState.strokeIdx.length || selectState.shapeIdx.length);
+  if (drawShape !== "select" && !selectMarqueeNorm && !hasSel) return;
+  let strokesArr, shapesArr;
+  if (pdfMode && pdfDoc) { strokesArr = pdfStrokes; shapesArr = pdfShapes; }
+  else if (pptxMode && pptxViewer) { strokesArr = pptxStrokes; shapesArr = pptxShapes; }
+  else if (!pdfMode && !pptxMode) { strokesArr = strokes; shapesArr = shapes; }
+  else return;
+  dctx.save();
+  dctx.setLineDash([6, 4]);
+  dctx.lineWidth = 2;
+  if (selectMarqueeNorm) {
+    const m = selectMarqueeNorm;
+    const r = screenRectFromNormMarquee(m.x0, m.y0, m.x1, m.y1, w, h, sx);
+    dctx.strokeStyle = "rgba(108, 92, 231, 0.95)";
+    dctx.strokeRect(r.left, r.top, r.rw, r.rh);
+  }
+  if (hasSel) {
+    const ub = selectionUnionBBoxFromSel(selectState, strokesArr, shapesArr);
+    if (ub && (ub.x1 > ub.x0) && (ub.y1 > ub.y0)) {
+      const r = screenRectFromNormMarquee(ub.x0, ub.y0, ub.x1, ub.y1, w, h, sx);
+      dctx.strokeStyle = "rgba(0, 122, 255, 0.9)";
+      dctx.strokeRect(r.left, r.top, r.rw, r.rh);
+    }
+  }
+  dctx.setLineDash([]);
+  dctx.restore();
+}
+
+function selectPointerButtonDown(e) {
+  if (e.touches && e.touches.length > 0) return true;
+  if (typeof e.buttons === "number") return (e.buttons & 1) !== 0;
+  return true;
+}
+
+function finalizeSelectGestureEnd() {
+  if (drawShape !== "select") return;
+  const strokesArr = pdfMode && pdfDoc ? pdfStrokes : (pptxMode && pptxViewer ? pptxStrokes : strokes);
+  const shapesArr = pdfMode && pdfDoc ? pdfShapes : (pptxMode && pptxViewer ? pptxShapes : shapes);
+  if (selectDragging && selectState) {
+    selectDragging = false;
+    selectDragAnchor = null;
+    if (pdfMode && pdfDoc) {
+      pushPdfHistory();
+      savePdfPageState();
+      if (currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
+    } else if (pptxMode && pptxViewer) {
+      pushPptxHistory();
+      if (currentPptxShareToken) {
+        savePptxPageState();
+        savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
+      }
+    } else {
+      pushCanvasHistory();
+      if (currentCanvasShareToken && supabase) {
+        savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
+      }
+    }
+  } else if (selectMarqueeNorm) {
+    const m = selectMarqueeNorm;
+    const wN = Math.abs(m.x1 - m.x0), hN = Math.abs(m.y1 - m.y0);
+    if (wN >= MIN_SELECT_NORM || hN >= MIN_SELECT_NORM) {
+      const rect = { x0: Math.min(m.x0, m.x1), y0: Math.min(m.y0, m.y1), x1: Math.max(m.x0, m.x1), y1: Math.max(m.y0, m.y1) };
+      const picked = pickSelectionInRect(rect, strokesArr, shapesArr);
+      selectState = picked.strokeIdx.length || picked.shapeIdx.length ? picked : null;
+    } else selectState = null;
+    selectMarqueeNorm = null;
+  }
 }
 
 function toDocNormX(x) {
@@ -1895,6 +2167,7 @@ function drawStrokesToPdfCanvas(w, h) {
     dctx.lineWidth = lw;
     dctx.stroke();
   }
+  drawSelectOverlay(dctx, w, h, sxPdf);
   drawCursorDot(dctx, w, h, true);
   drawPointerOnCanvas(pdfDrawCanvas);
 }
@@ -2243,6 +2516,17 @@ function setupPdfDrawing() {
       if (currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
       return;
     }
+    if (drawShape === "select") {
+      const ub = selectState ? selectionUnionBBoxFromSel(selectState, pdfStrokes, pdfShapes) : null;
+      if (selectState && ub && pointInNormRect(p.x, p.y, ub)) {
+        selectDragging = true;
+        selectDragAnchor = { x: p.x, y: p.y };
+        return;
+      }
+      selectState = null;
+      selectMarqueeNorm = { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+      return;
+    }
     if (drawShape === "fill" && fillToolBtn?.classList.contains("active")) {
       doFillAtPdf(p.x * pdfDrawCanvas.width, p.y * pdfDrawCanvas.height, pdfDrawCanvas.width, pdfDrawCanvas.height);
       drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
@@ -2278,6 +2562,26 @@ function setupPdfDrawing() {
   let lastBroadcastProgress = 0;
   const onMove = (e) => {
     const p = getNorm(e);
+    if (drawShape === "select") {
+      if (selectDragging && selectState) {
+        if (!selectPointerButtonDown(e)) return;
+        e.preventDefault();
+        const dx = p.x - selectDragAnchor.x;
+        const dy = p.y - selectDragAnchor.y;
+        selectDragAnchor = { x: p.x, y: p.y };
+        applySelectionOffset(selectState, dx, dy, pdfStrokes, pdfShapes);
+        drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+        return;
+      }
+      if (selectMarqueeNorm) {
+        if (!selectPointerButtonDown(e)) return;
+        e.preventDefault();
+        selectMarqueeNorm.x1 = p.x;
+        selectMarqueeNorm.y1 = p.y;
+        drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+        return;
+      }
+    }
     if (eraserMode && (pdfEraserActive || e.buttons === 1)) {
       e.preventDefault();
       erasePdfAtPosition(p.x, p.y, 0.08);
@@ -2305,6 +2609,30 @@ function setupPdfDrawing() {
   };
   const onEnd = (e) => {
     pdfEraserActive = false;
+    if (drawShape === "select") {
+      e.preventDefault();
+      if (selectDragging) {
+        selectDragging = false;
+        selectDragAnchor = null;
+        pushPdfHistory();
+        savePdfPageState();
+        if (currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
+        drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+        return;
+      }
+      if (selectMarqueeNorm) {
+        const m = selectMarqueeNorm;
+        const wN = Math.abs(m.x1 - m.x0), hN = Math.abs(m.y1 - m.y0);
+        if (wN >= MIN_SELECT_NORM || hN >= MIN_SELECT_NORM) {
+          const rect = { x0: Math.min(m.x0, m.x1), y0: Math.min(m.y0, m.y1), x1: Math.max(m.x0, m.x1), y1: Math.max(m.y0, m.y1) };
+          const picked = pickSelectionInRect(rect, pdfStrokes, pdfShapes);
+          selectState = picked.strokeIdx.length || picked.shapeIdx.length ? picked : null;
+        } else selectState = null;
+        selectMarqueeNorm = null;
+        drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+        return;
+      }
+    }
     if (pdfShapeInProgress) {
       e.preventDefault();
       const s = pdfShapeInProgress.start, t = pdfShapeInProgress.end;
@@ -2389,6 +2717,17 @@ function setupCanvasDrawing() {
       if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
       return;
     }
+    if (drawShape === "select") {
+      const ub = selectState ? selectionUnionBBoxFromSel(selectState, strokes, shapes) : null;
+      if (selectState && ub && pointInNormRect(p.x, p.y, ub)) {
+        selectDragging = true;
+        selectDragAnchor = { x: p.x, y: p.y };
+        return;
+      }
+      selectState = null;
+      selectMarqueeNorm = { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+      return;
+    }
     if (drawShape === "fill" && fillToolBtn?.classList.contains("active")) {
       const px = MIRROR_CAMERA ? (1 - p.x) * drawCanvas.width : p.x * drawCanvas.width;
       const py = p.y * drawCanvas.height;
@@ -2425,6 +2764,26 @@ function setupCanvasDrawing() {
   };
   const onMove = (e) => {
     const p = getNorm(e);
+    if (drawShape === "select") {
+      if (selectDragging && selectState) {
+        if (!selectPointerButtonDown(e)) return;
+        e.preventDefault();
+        const dx = p.x - selectDragAnchor.x;
+        const dy = p.y - selectDragAnchor.y;
+        selectDragAnchor = { x: p.x, y: p.y };
+        applySelectionOffset(selectState, dx, dy, strokes, shapes);
+        drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+        return;
+      }
+      if (selectMarqueeNorm) {
+        if (!selectPointerButtonDown(e)) return;
+        e.preventDefault();
+        selectMarqueeNorm.x1 = p.x;
+        selectMarqueeNorm.y1 = p.y;
+        drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+        return;
+      }
+    }
     if (eraserMode && (eraserActive || e.buttons === 1)) {
       e.preventDefault();
       eraseAtPosition(p.x, p.y, 0.08);
@@ -2452,6 +2811,29 @@ function setupCanvasDrawing() {
   };
   const onEnd = (e) => {
     eraserActive = false;
+    if (drawShape === "select") {
+      e.preventDefault();
+      if (selectDragging) {
+        selectDragging = false;
+        selectDragAnchor = null;
+        pushCanvasHistory();
+        if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
+        drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+        return;
+      }
+      if (selectMarqueeNorm) {
+        const m = selectMarqueeNorm;
+        const wN = Math.abs(m.x1 - m.x0), hN = Math.abs(m.y1 - m.y0);
+        if (wN >= MIN_SELECT_NORM || hN >= MIN_SELECT_NORM) {
+          const rect = { x0: Math.min(m.x0, m.x1), y0: Math.min(m.y0, m.y1), x1: Math.max(m.x0, m.x1), y1: Math.max(m.y0, m.y1) };
+          const picked = pickSelectionInRect(rect, strokes, shapes);
+          selectState = picked.strokeIdx.length || picked.shapeIdx.length ? picked : null;
+        } else selectState = null;
+        selectMarqueeNorm = null;
+        drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+        return;
+      }
+    }
     if (shapeInProgress) {
       e.preventDefault();
       const s = shapeInProgress.start, t = shapeInProgress.end;
@@ -2665,6 +3047,7 @@ async function saveCurrentCanvasPageToStorage() {
 function switchToCanvasPage(pageNum) {
   if (!isCanvasDocument || pageNum < 1 || pageNum > canvasTotalPages) return;
   canvasRemoteCurrentStroke = null;
+  clearSelectionToolState();
   saveCurrentCanvasPageToStorage().then(() => {
     canvasPageNum = pageNum;
     const layer = canvasStrokesByPage[canvasPageNum];
@@ -3017,6 +3400,7 @@ function drawStrokesToPptxCanvas(w, h) {
     pptxStrokes = pptxStrokes.filter((s) => !s._ts || (now - s._ts) <= FADE_DURATION_MS);
     if (hasActiveFadeStrokes(pptxStrokes, now)) scheduleFadeTick();
   }
+  drawSelectOverlay(dctx, w, h, sxPptx);
   drawCursorDot(dctx, w, h, true);
 }
 
@@ -3111,6 +3495,17 @@ function setupPptxDrawing() {
       if (currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
       return;
     }
+    if (drawShape === "select") {
+      const ub = selectState ? selectionUnionBBoxFromSel(selectState, pptxStrokes, pptxShapes) : null;
+      if (selectState && ub && pointInNormRect(p.x, p.y, ub)) {
+        selectDragging = true;
+        selectDragAnchor = { x: p.x, y: p.y };
+        return;
+      }
+      selectState = null;
+      selectMarqueeNorm = { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+      return;
+    }
     if (drawShape === "fill" && fillToolBtn?.classList.contains("active")) {
       doFillAtPptx(p.x * pptxDrawCanvas.width, p.y * pptxDrawCanvas.height, pptxDrawCanvas.width, pptxDrawCanvas.height);
       drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
@@ -3145,6 +3540,26 @@ function setupPptxDrawing() {
   let lastBroadcastProgress = 0;
   const onMove = (e) => {
     const p = getNorm(e);
+    if (drawShape === "select") {
+      if (selectDragging && selectState) {
+        if (!selectPointerButtonDown(e)) return;
+        e.preventDefault();
+        const dx = p.x - selectDragAnchor.x;
+        const dy = p.y - selectDragAnchor.y;
+        selectDragAnchor = { x: p.x, y: p.y };
+        applySelectionOffset(selectState, dx, dy, pptxStrokes, pptxShapes);
+        drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+        return;
+      }
+      if (selectMarqueeNorm) {
+        if (!selectPointerButtonDown(e)) return;
+        e.preventDefault();
+        selectMarqueeNorm.x1 = p.x;
+        selectMarqueeNorm.y1 = p.y;
+        drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+        return;
+      }
+    }
     if (eraserMode && (pptxEraserActive || e.buttons === 1)) {
       e.preventDefault();
       erasePptxAtPosition(p.x, p.y, 0.08);
@@ -3172,6 +3587,32 @@ function setupPptxDrawing() {
   };
   const onEnd = (e) => {
     pptxEraserActive = false;
+    if (drawShape === "select") {
+      e.preventDefault();
+      if (selectDragging) {
+        selectDragging = false;
+        selectDragAnchor = null;
+        pushPptxHistory();
+        if (currentPptxShareToken) {
+          savePptxPageState();
+          savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
+        }
+        drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+        return;
+      }
+      if (selectMarqueeNorm) {
+        const m = selectMarqueeNorm;
+        const wN = Math.abs(m.x1 - m.x0), hN = Math.abs(m.y1 - m.y0);
+        if (wN >= MIN_SELECT_NORM || hN >= MIN_SELECT_NORM) {
+          const rect = { x0: Math.min(m.x0, m.x1), y0: Math.min(m.y0, m.y1), x1: Math.max(m.x0, m.x1), y1: Math.max(m.y0, m.y1) };
+          const picked = pickSelectionInRect(rect, pptxStrokes, pptxShapes);
+          selectState = picked.strokeIdx.length || picked.shapeIdx.length ? picked : null;
+        } else selectState = null;
+        selectMarqueeNorm = null;
+        drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+        return;
+      }
+    }
     if (pptxShapeInProgress) {
       e.preventDefault();
       const s = pptxShapeInProgress.start, t = pptxShapeInProgress.end;
@@ -3446,8 +3887,9 @@ function detectLoop() {
       const overToolbar = cursorPos && (() => {
         const normX = MIRROR_CAMERA ? (1 - cursorPos.x) : cursorPos.x;
         const { clientX, clientY } = normToClient(cursorPos.x, cursorPos.y, w, h);
-        return normX < 0.03 || isPointOverToolbar(clientX, clientY);
+        return normX < 0.06 || isPointOverToolbar(clientX, clientY);
       })();
+      drawToolbarGestureInside = !!overToolbar;
 
       if (overToolbar) {
         shapeInProgress = null;
@@ -3612,7 +4054,30 @@ function detectLoop() {
               drawStrokesToCanvas(cw, ch);
             }
           }
-          if (["circle","rect","line","ellipse","triangle","triangle_right","arrow"].includes(drawShape)) {
+          if (drawShape === "select" && pinchPos) {
+            const px = clamp01(drawPinchX), py = clamp01(pinchPos.y);
+            if (!wasPinching) {
+              const ub = selectState ? selectionUnionBBoxFromSel(selectState, activeStrokes, activeShapes) : null;
+              if (selectState && ub && pointInNormRect(px, py, ub)) {
+                selectDragging = true;
+                selectDragAnchor = { x: px, y: py };
+                selectMarqueeNorm = null;
+              } else {
+                selectState = null;
+                selectDragging = false;
+                selectDragAnchor = null;
+                selectMarqueeNorm = { x0: px, y0: py, x1: px, y1: py };
+              }
+            } else if (selectDragging && selectState) {
+              const dx = px - selectDragAnchor.x;
+              const dy = py - selectDragAnchor.y;
+              selectDragAnchor = { x: px, y: py };
+              applySelectionOffset(selectState, dx, dy, activeStrokes, activeShapes);
+            } else if (selectMarqueeNorm) {
+              selectMarqueeNorm.x1 = px;
+              selectMarqueeNorm.y1 = py;
+            }
+          } else if (["circle","rect","line","ellipse","triangle","triangle_right","arrow"].includes(drawShape)) {
             if (pinchPos) {
               const px = clamp01(drawPinchX), py = clamp01(pinchPos.y);
               if (!shapeInProgress) shapeInProgress = { start: { x: px, y: py }, end: { x: px, y: py }, type: drawShape };
@@ -3642,6 +4107,9 @@ function detectLoop() {
           }
           wasPinching = true;
         } else {
+          if (drawShape === "select" && wasPinching) {
+            finalizeSelectGestureEnd();
+          }
           if (shapeInProgress) {
             const s = shapeInProgress.start, e = shapeInProgress.end;
             let x1 = Math.min(s.x, e.x), x2 = Math.max(s.x, e.x);
@@ -3703,6 +4171,9 @@ function detectLoop() {
         if (gestureState === "erasing" && pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes, true);
         if (gestureState === "erasing") lastEraseEndTime = Date.now();
         window.drawCursor = null;
+        if (drawMode && handLandmarker && drawShape === "select" && (selectMarqueeNorm || selectDragging)) {
+          finalizeSelectGestureEnd();
+        }
         wasPinching = false;
         shapeInProgress = null;
         gestureState = "idle";
@@ -3739,11 +4210,13 @@ function detectLoop() {
       }
       syncCurrentDocumentPageState();
     } else {
+      drawToolbarGestureInside = false;
       window.drawCursor = null;
       smoothedCursor = null;
       smoothedPinch = null;
       updateGestureCursor(0, 0, false);
     }
+    updateDrawToolbarOpenState();
     if (pdfMode && pdfDoc) drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
     else if (pptxMode && pptxViewer) drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
     else drawStrokesToCanvas(w, h);
@@ -4202,8 +4675,13 @@ const fillToolBtn = document.getElementById("fillToolBtn");
 const eraserToolBtn = document.getElementById("eraserToolBtn");
 const colorToolBtn = document.getElementById("colorToolBtn");
 const figuresToolBtn = document.getElementById("figuresToolBtn");
+const selectMoveBtn = document.getElementById("selectMoveBtn");
 const colorPopover = document.getElementById("colorPopover");
 const figuresPopover = document.getElementById("figuresPopover");
+const thicknessToolBtn = document.getElementById("thicknessToolBtn");
+const opacityToolBtn = document.getElementById("opacityToolBtn");
+const thicknessPopover = document.getElementById("thicknessPopover");
+const opacityPopover = document.getElementById("opacityPopover");
 
 function updatePenToolUI() {
   const t = PEN_TOOLS.find((x) => x.id === drawToolType);
@@ -4217,12 +4695,14 @@ function setActiveToolOnly(tool) {
   eraserToolBtn?.classList.remove("active");
   textToolBtn?.classList.remove("active");
   figuresToolBtn?.classList.remove("active");
+  selectMoveBtn?.classList.remove("active");
   document.querySelectorAll(".shape-btn").forEach((b) => b.classList.remove("active"));
   if (tool === "pen") penToolBtn?.classList.add("active");
   else if (tool === "fill") fillToolBtn?.classList.add("active");
   else if (tool === "eraser") eraserToolBtn?.classList.add("active");
   else if (tool === "text") textToolBtn?.classList.add("active");
   else if (tool === "figures") figuresToolBtn?.classList.add("active");
+  else if (tool === "select") selectMoveBtn?.classList.add("active");
 }
 
 penToolBtn?.addEventListener("click", (e) => {
@@ -4230,12 +4710,19 @@ penToolBtn?.addEventListener("click", (e) => {
   penToolPopover?.classList.toggle("visible");
   colorPopover?.classList.remove("visible");
   figuresPopover?.classList.remove("visible");
-  if (penToolPopover?.classList.contains("visible")) setActiveToolOnly("pen");
+  thicknessPopover?.classList.remove("visible");
+  opacityPopover?.classList.remove("visible");
+  if (penToolPopover?.classList.contains("visible")) {
+    drawShape = "free";
+    clearSelectionToolState();
+    setActiveToolOnly("pen");
+  }
 });
 document.querySelectorAll(".pen-tool-opt").forEach((btn) => {
   btn.addEventListener("click", () => {
     drawToolType = btn.dataset.tool || "pen";
     drawShape = "free";
+    clearSelectionToolState();
     const t = PEN_TOOLS.find((x) => x.id === drawToolType);
     if (t) {
       drawLineWidth = t.lineWidth;
@@ -4244,6 +4731,7 @@ document.querySelectorAll(".pen-tool-opt").forEach((btn) => {
     eraserMode = false;
     setActiveToolOnly("pen");
     updatePenToolUI();
+    updateThicknessOpacityPreviews();
     penToolPopover?.classList.remove("visible");
   });
 });
@@ -4251,43 +4739,106 @@ document.querySelectorAll(".pen-tool-opt").forEach((btn) => {
 fillToolBtn?.addEventListener("click", () => {
   drawShape = "fill";
   eraserMode = false;
+  clearSelectionToolState();
   setActiveToolOnly("fill");
   figuresPopover?.classList.remove("visible");
+  thicknessPopover?.classList.remove("visible");
+  opacityPopover?.classList.remove("visible");
 });
 
 eraserToolBtn?.addEventListener("click", () => {
   eraserMode = !eraserMode;
-  if (eraserMode) setActiveToolOnly("eraser");
-  else setActiveToolOnly("pen");
+  thicknessPopover?.classList.remove("visible");
+  opacityPopover?.classList.remove("visible");
+  if (eraserMode) {
+    clearSelectionToolState();
+    setActiveToolOnly("eraser");
+  } else setActiveToolOnly("pen");
 });
 colorToolBtn?.addEventListener("click", () => {
   colorPopover?.classList.toggle("visible");
   figuresPopover?.classList.remove("visible");
   penToolPopover?.classList.remove("visible");
+  thicknessPopover?.classList.remove("visible");
+  opacityPopover?.classList.remove("visible");
+});
+thicknessToolBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  thicknessPopover?.classList.toggle("visible");
+  opacityPopover?.classList.remove("visible");
+  colorPopover?.classList.remove("visible");
+  penToolPopover?.classList.remove("visible");
+  figuresPopover?.classList.remove("visible");
+});
+opacityToolBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  opacityPopover?.classList.toggle("visible");
+  thicknessPopover?.classList.remove("visible");
+  colorPopover?.classList.remove("visible");
+  penToolPopover?.classList.remove("visible");
+  figuresPopover?.classList.remove("visible");
 });
 const textToolBtn = document.getElementById("textToolBtn");
 textToolBtn?.addEventListener("click", () => {
   drawShape = "text";
   eraserMode = false;
+  clearSelectionToolState();
   setActiveToolOnly("text");
   figuresPopover?.classList.remove("visible");
+  thicknessPopover?.classList.remove("visible");
+  opacityPopover?.classList.remove("visible");
+});
+selectMoveBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  drawShape = "select";
+  eraserMode = false;
+  penToolPopover?.classList.remove("visible");
+  figuresPopover?.classList.remove("visible");
+  colorPopover?.classList.remove("visible");
+  thicknessPopover?.classList.remove("visible");
+  opacityPopover?.classList.remove("visible");
+  setActiveToolOnly("select");
 });
 figuresToolBtn?.addEventListener("click", (e) => {
   e.stopPropagation();
+  const wasOpen = figuresPopover?.classList.contains("visible");
   figuresPopover?.classList.toggle("visible");
   colorPopover?.classList.remove("visible");
   penToolPopover?.classList.remove("visible");
+  thicknessPopover?.classList.remove("visible");
+  opacityPopover?.classList.remove("visible");
+  if (!wasOpen) clearSelectionToolState();
 });
 document.addEventListener("click", (e) => {
   const inPen = penToolPopover?.contains(e.target) || penToolBtn?.contains(e.target) || penToolBtn?.closest(".toolbar-pen-group")?.contains(e.target);
   const inColor = colorPopover?.contains(e.target) || colorToolBtn?.contains(e.target);
   const inFigs = figuresPopover?.contains(e.target) || figuresToolBtn?.contains(e.target);
-  if (!inPen && !inColor && !inFigs) {
+  const inSelect = selectMoveBtn?.contains(e.target);
+  const inThickness = thicknessPopover?.contains(e.target) || thicknessToolBtn?.contains(e.target) || thicknessToolBtn?.closest(".toolbar-pen-group")?.contains(e.target);
+  const inOpacity = opacityPopover?.contains(e.target) || opacityToolBtn?.contains(e.target) || opacityToolBtn?.closest(".toolbar-pen-group")?.contains(e.target);
+  if (!inPen && !inColor && !inFigs && !inSelect && !inThickness && !inOpacity) {
     colorPopover?.classList.remove("visible");
     figuresPopover?.classList.remove("visible");
     penToolPopover?.classList.remove("visible");
+    thicknessPopover?.classList.remove("visible");
+    opacityPopover?.classList.remove("visible");
   }
 });
+
+function updateThicknessOpacityPreviews() {
+  if (thicknessToolBtn) thicknessToolBtn.style.color = drawColor;
+  const td = document.querySelector(".thickness-tool-dot");
+  if (td) {
+    const px = 3 + (drawLineWidth / 24) * 11;
+    td.style.width = px + "px";
+    td.style.height = px + "px";
+  }
+  const od = document.querySelector(".opacity-tool-dot");
+  if (od) {
+    od.style.background = drawColor;
+    od.style.opacity = String(strokeOpacity);
+  }
+}
 
 function hsvToHex(h, s, v) {
   const c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c;
@@ -4310,26 +4861,24 @@ function hexToHsv(hex) {
 }
 const colorWheelCanvas = document.getElementById("colorWheelCanvas");
 const colorWheelPreview = document.getElementById("colorWheelPreview");
-const colorBrightness = document.getElementById("colorBrightness");
-let colorWheelHue = 120, colorWheelSat = 0.8;
+let colorWheelHue = 120, colorWheelSat = 0.8, colorWheelVal = 1;
 (function initColorWheel() {
   if (!colorWheelCanvas) return;
   const ctx = colorWheelCanvas.getContext("2d");
   const R = 68;
   const draw = () => {
+    const v = colorWheelVal;
     for (let y = 0; y < 140; y++) for (let x = 0; x < 140; x++) {
       const dx = x - 70, dy = y - 70;
       const r = Math.hypot(dx, dy) / R;
       const a = (Math.atan2(dy, dx) * 180 / Math.PI + 450) % 360;
       if (r <= 1) {
-        const v = parseFloat(colorBrightness?.value || 100) / 100;
         ctx.fillStyle = hsvToHex(a, r, v);
         ctx.fillRect(x, y, 1, 1);
       }
     }
   };
   draw();
-  colorBrightness?.addEventListener("input", () => { draw(); applyColorFromWheel(); });
   colorWheelCanvas.addEventListener("mousedown", (e) => {
     const rect = colorWheelCanvas.getBoundingClientRect();
     const dx = (e.clientX - rect.left - 70) / R, dy = (e.clientY - rect.top - 70) / R;
@@ -4349,8 +4898,7 @@ let colorWheelHue = 120, colorWheelSat = 0.8;
     document.addEventListener("mouseup", up);
   });
   function applyColorFromWheel() {
-    const v = parseFloat(colorBrightness?.value || 100) / 100;
-    drawColor = hsvToHex(colorWheelHue, colorWheelSat, v);
+    drawColor = hsvToHex(colorWheelHue, colorWheelSat, colorWheelVal);
     if (toolbarColor) toolbarColor.value = drawColor;
     if (colorToolBtn) colorToolBtn.style.background = drawColor;
     if (colorWheelPreview) colorWheelPreview.style.background = drawColor;
@@ -4358,16 +4906,18 @@ let colorWheelHue = 120, colorWheelSat = 0.8;
     else if (pptxMode && pptxViewer) pptxCurrentStroke.color = drawColor;
     else currentStroke.color = drawColor;
     document.querySelectorAll(".color-preset").forEach((b) => b.classList.remove("active"));
+    updateThicknessOpacityPreviews();
   }
   window.applyColorFromWheel = applyColorFromWheel;
   const hv = hexToHsv(drawColor);
-  colorWheelHue = hv.h; colorWheelSat = hv.s;
-  if (colorBrightness) colorBrightness.value = Math.round(hv.v * 100);
+  colorWheelHue = hv.h; colorWheelSat = hv.s; colorWheelVal = hv.v;
   if (colorWheelPreview) colorWheelPreview.style.background = drawColor;
+  draw();
 })();
 
 document.querySelectorAll(".shape-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
+    clearSelectionToolState();
     document.querySelectorAll(".shape-btn").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     drawShape = btn.dataset.shape || "line";
@@ -4396,16 +4946,16 @@ document.querySelectorAll(".color-preset").forEach((btn) => {
     const hv = hexToHsv(c);
     colorWheelHue = hv.h;
     colorWheelSat = hv.s;
-    if (colorBrightness) colorBrightness.value = Math.round(hv.v * 100);
+    colorWheelVal = hv.v;
     if (colorWheelCanvas && colorWheelCanvas.getContext) {
       const ctx = colorWheelCanvas.getContext("2d");
       const R = 68;
+      const v = colorWheelVal;
       for (let y = 0; y < 140; y++) for (let x = 0; x < 140; x++) {
         const dx = x - 70, dy = y - 70;
         const r = Math.hypot(dx, dy) / R;
         const a = (Math.atan2(dy, dx) * 180 / Math.PI + 450) % 360;
         if (r <= 1) {
-          const v = parseFloat(colorBrightness?.value || 100) / 100;
           ctx.fillStyle = hsvToHex(a, r, v);
           ctx.fillRect(x, y, 1, 1);
         }
@@ -4419,6 +4969,7 @@ document.querySelectorAll(".color-preset").forEach((btn) => {
     if (toolbarColor) toolbarColor.value = c;
     if (colorToolBtn) colorToolBtn.style.background = c;
     if (colorWheelPreview) colorWheelPreview.style.background = c;
+    updateThicknessOpacityPreviews();
   });
 });
 
@@ -4428,14 +4979,20 @@ function applyCanvasBackground() {
 
 const toolbarOpacity = document.getElementById("toolbarOpacity");
 const toolbarThickness = document.getElementById("toolbarThickness");
-toolbarOpacity?.addEventListener("input", () => { strokeOpacity = parseFloat(toolbarOpacity.value) || 1; });
+toolbarOpacity?.addEventListener("input", () => {
+  strokeOpacity = parseFloat(toolbarOpacity.value) || 1;
+  updateThicknessOpacityPreviews();
+});
 toolbarThickness?.addEventListener("input", () => {
   drawLineWidth = parseInt(toolbarThickness.value, 10) || 4;
+  updateThicknessOpacityPreviews();
 });
 
 if (toolbarColor) toolbarColor.value = drawColor;
 if (colorToolBtn) colorToolBtn.style.background = drawColor;
 if (toolbarThickness) toolbarThickness.value = drawLineWidth;
+if (toolbarOpacity) toolbarOpacity.value = String(strokeOpacity);
+updateThicknessOpacityPreviews();
 updatePenToolUI?.();
 document.querySelectorAll(".color-preset").forEach((b) => {
   b.classList.toggle("active", (b.dataset.color || "").toLowerCase() === drawColor.toLowerCase());
@@ -4445,6 +5002,7 @@ document.querySelectorAll(".shape-btn").forEach((b) => {
 });
 fillToolBtn?.classList.toggle("active", drawShape === "fill");
 textToolBtn?.classList.toggle("active", drawShape === "text");
+selectMoveBtn?.classList.toggle("active", drawShape === "select");
 
 const textInputOverlay = document.getElementById("textInputOverlay");
 textInputOverlay?.addEventListener("keydown", (e) => {
@@ -4628,9 +5186,19 @@ gestureControlBtn?.addEventListener("click", () => {
   gestureControlEnabled = !gestureControlEnabled;
   gestureControlBtn.classList.toggle("active", gestureControlEnabled);
   gestureControlBtn.textContent = gestureControlEnabled ? "✋ Выкл. жесты" : "✋ Управление жестами";
+  drawToolbar?.classList.toggle("gestures-active", gestureControlEnabled);
   const handPref = document.getElementById("handPreferenceGroup");
   if (handPref) handPref.style.display = gestureControlEnabled ? "flex" : "none";
   if (gestureControlEnabled) {
+    eraserMode = false;
+    if (drawShape === "text") drawShape = "free";
+    if (drawShape === "fill") setActiveToolOnly("fill");
+    else if (drawShape === "select") setActiveToolOnly("select");
+    else if (["circle", "rect", "line", "ellipse", "triangle", "triangle_right", "arrow"].includes(drawShape)) setActiveToolOnly("figures");
+    else {
+      setActiveToolOnly("pen");
+      updatePenToolUI();
+    }
     const ot = document.getElementById("cameraOverlayText");
     const oh = document.getElementById("cameraOverlayHint");
     if (ot) ot.textContent = "Запуск камеры...";
@@ -4763,6 +5331,7 @@ canvasNextBtn?.addEventListener("click", () => {
 canvasAddPageBtn?.addEventListener("click", async () => {
   if (!isCanvasDocument || !currentCanvasShareToken) return;
   await saveCurrentCanvasPageToStorage();
+  clearSelectionToolState();
   canvasTotalPages++;
   const newPage = canvasTotalPages;
   canvasStrokesByPage[newPage] = { strokes: [], shapes: [], fillShapes: [] };
