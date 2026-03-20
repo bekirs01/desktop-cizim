@@ -10,32 +10,80 @@
   <link rel="stylesheet" href="style.css?v=3">
   <style>
     :root {
-      --dash-bg: #07070a;
-      --dash-surface: #111118;
-      --dash-surface-hover: #181822;
-      --dash-border: #1f1f2e;
-      --dash-border-hover: #2d2d44;
+      --dash-bg: #050508;
+      --dash-bg-end: #0f0a1a;
+      --dash-glass: rgba(255, 255, 255, 0.04);
+      --dash-glass-border: rgba(255, 255, 255, 0.08);
+      --dash-glass-hover: rgba(255, 255, 255, 0.07);
+      --dash-surface: rgba(17, 17, 24, 0.6);
+      --dash-surface-hover: rgba(24, 24, 34, 0.7);
+      --dash-border: rgba(255, 255, 255, 0.08);
+      --dash-border-hover: rgba(255, 255, 255, 0.15);
       --dash-accent: #6c5ce7;
       --dash-accent-light: #a29bfe;
-      --dash-accent-glow: rgba(108, 92, 231, 0.25);
+      --dash-accent-glow: rgba(108, 92, 231, 0.3);
       --dash-green: #00cec9;
-      --dash-green-glow: rgba(0, 206, 201, 0.2);
+      --dash-green-glow: rgba(0, 206, 201, 0.25);
       --dash-red: #ff6b6b;
       --dash-text: #e8e8f0;
-      --dash-text-dim: #6c6c88;
-      --dash-text-mid: #9999b0;
+      --dash-text-dim: #8a8aa0;
+      --dash-text-mid: #a0a0b8;
       --dash-radius: 16px;
-      --dash-radius-sm: 10px;
+      --dash-radius-sm: 12px;
       --dash-font: 'Inter', -apple-system, system-ui, sans-serif;
     }
 
     body {
       font-family: var(--dash-font);
-      background: var(--dash-bg);
+      background: linear-gradient(160deg, var(--dash-bg) 0%, var(--dash-bg-end) 50%, #0a0512 100%);
       color: var(--dash-text);
       min-height: 100vh;
       margin: 0;
       overflow-x: hidden;
+    }
+
+    .liquid-glass {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    .liquid-glass .blob {
+      position: absolute;
+      border-radius: 50%;
+      opacity: 0.85;
+    }
+
+    .liquid-glass .blob-1 {
+      top: -15%;
+      right: -10%;
+      width: 55%;
+      height: 65%;
+      background: radial-gradient(ellipse 80% 70% at 30% 40%, rgba(191,36,255,0.4) 0%, rgba(255,36,224,0.2) 35%, transparent 65%);
+      filter: blur(70px);
+      animation: blobFloat1 22s ease-in-out infinite;
+    }
+
+    .liquid-glass .blob-2 {
+      bottom: -20%;
+      left: -15%;
+      width: 50%;
+      height: 60%;
+      background: radial-gradient(ellipse 75% 65% at 60% 50%, rgba(36,142,255,0.35) 0%, rgba(108,92,231,0.15) 40%, transparent 65%);
+      filter: blur(65px);
+      animation: blobFloat2 28s ease-in-out infinite;
+    }
+
+    @keyframes blobFloat1 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(-5%, 4%) scale(1.03); }
+    }
+
+    @keyframes blobFloat2 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(4%, -5%) scale(1.04); }
     }
 
     body::before {
@@ -85,12 +133,14 @@
       width: 40px;
       height: 40px;
       border-radius: 12px;
-      background: linear-gradient(135deg, var(--dash-accent), var(--dash-green));
+      background: linear-gradient(135deg, rgba(108, 92, 231, 0.9), rgba(0, 206, 201, 0.8));
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(8px);
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 1.2rem;
-      box-shadow: 0 4px 20px var(--dash-accent-glow);
+      box-shadow: 0 4px 20px var(--dash-accent-glow), inset 0 1px 0 rgba(255,255,255,0.2);
     }
 
     .dash-brand-text {
@@ -120,8 +170,9 @@
       padding: 0.5rem 0.75rem;
       font-size: 0.8rem;
       border-radius: var(--dash-radius-sm);
-      border: 1px solid var(--dash-border);
-      background: var(--dash-surface);
+      border: 1px solid var(--dash-glass-border);
+      background: var(--dash-glass);
+      backdrop-filter: blur(12px);
       color: var(--dash-text);
       font-family: var(--dash-font);
     }
@@ -156,27 +207,30 @@
     }
 
     .dash-btn-primary {
-      background: var(--dash-accent);
+      background: linear-gradient(135deg, rgba(108, 92, 231, 0.9) 0%, rgba(108, 92, 231, 0.7) 100%);
       color: #fff;
-      box-shadow: 0 2px 12px var(--dash-accent-glow);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 4px 20px var(--dash-accent-glow), inset 0 1px 0 rgba(255,255,255,0.15);
     }
 
     .dash-btn-primary:hover {
-      background: #7c6df0;
-      box-shadow: 0 4px 24px var(--dash-accent-glow);
+      background: linear-gradient(135deg, rgba(124, 109, 240, 0.95) 0%, rgba(108, 92, 231, 0.8) 100%);
+      box-shadow: 0 6px 28px var(--dash-accent-glow), inset 0 1px 0 rgba(255,255,255,0.2);
       transform: translateY(-1px);
     }
 
     .dash-btn-ghost {
-      background: transparent;
+      background: var(--dash-glass);
       color: var(--dash-text-mid);
-      border: 1px solid var(--dash-border);
+      border: 1px solid var(--dash-glass-border);
+      backdrop-filter: blur(12px);
     }
 
     .dash-btn-ghost:hover {
       color: var(--dash-text);
+      background: var(--dash-glass-hover);
       border-color: var(--dash-border-hover);
-      background: var(--dash-surface);
     }
 
     .dash-btn-danger-ghost {
@@ -206,8 +260,11 @@
       position: relative;
       padding: 2rem;
       border-radius: var(--dash-radius);
-      border: 1px solid var(--dash-border);
+      border: 1px solid var(--dash-glass-border);
       background: var(--dash-surface);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
       cursor: pointer;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       overflow: hidden;
@@ -232,8 +289,9 @@
 
     .dash-hero-card:hover {
       border-color: var(--dash-border-hover);
+      background: var(--dash-surface-hover);
       transform: translateY(-2px);
-      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.08);
     }
 
     .dash-hero-card--draw::before {
@@ -318,8 +376,9 @@
       width: 36px;
       height: 36px;
       border-radius: 50%;
-      border: 2px solid var(--dash-accent);
-      background: var(--dash-accent);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      background: linear-gradient(135deg, rgba(108, 92, 231, 0.95), rgba(108, 92, 231, 0.8));
+      backdrop-filter: blur(8px);
       color: #fff;
       font-size: 1.4rem;
       font-weight: 700;
@@ -330,20 +389,24 @@
       justify-content: center;
       transition: all 0.25s;
       z-index: 2;
+      box-shadow: 0 4px 16px var(--dash-accent-glow), inset 0 1px 0 rgba(255,255,255,0.2);
     }
 
     .dash-hero-add-btn:hover {
       transform: scale(1.1);
-      box-shadow: 0 4px 20px var(--dash-accent-glow);
+      box-shadow: 0 6px 24px var(--dash-accent-glow), inset 0 1px 0 rgba(255,255,255,0.25);
     }
 
     /* ===== CAMERA SECTION ===== */
     .dash-camera-section {
       background: var(--dash-surface);
-      border: 1px solid var(--dash-border);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--dash-glass-border);
       border-radius: var(--dash-radius);
       margin-bottom: 1.5rem;
       overflow: hidden;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.04);
       transition: border-color 0.2s;
     }
 
@@ -386,8 +449,8 @@
       width: 28px;
       height: 28px;
       border-radius: 8px;
-      background: var(--dash-surface-hover);
-      border: 1px solid var(--dash-border);
+      background: var(--dash-glass);
+      border: 1px solid var(--dash-glass-border);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -421,8 +484,9 @@
     .dash-camera-frame {
       border-radius: var(--dash-radius-sm);
       overflow: hidden;
-      border: 1px solid var(--dash-border);
-      background: var(--dash-bg);
+      border: 1px solid var(--dash-glass-border);
+      background: rgba(5, 5, 8, 0.6);
+      backdrop-filter: blur(12px);
       min-height: 400px;
     }
 
@@ -443,8 +507,11 @@
     /* ===== LINK SECTION ===== */
     .dash-link-section {
       background: var(--dash-surface);
-      border: 1px solid var(--dash-border);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--dash-glass-border);
       border-radius: var(--dash-radius);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.04);
       padding: 1.5rem;
       margin-bottom: 2rem;
     }
@@ -491,8 +558,9 @@
       min-width: 0;
       padding: 0.65rem 1rem;
       border-radius: var(--dash-radius-sm);
-      border: 1px solid var(--dash-border);
-      background: var(--dash-bg);
+      border: 1px solid var(--dash-glass-border);
+      background: var(--dash-glass);
+      backdrop-filter: blur(12px);
       color: var(--dash-text);
       font-size: 0.9rem;
       font-family: var(--dash-font);
@@ -530,8 +598,9 @@
       font-size: 0.75rem;
       font-weight: 600;
       padding: 0.15rem 0.6rem;
-      background: var(--dash-surface);
-      border: 1px solid var(--dash-border);
+      background: var(--dash-glass);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--dash-glass-border);
       border-radius: 20px;
       color: var(--dash-text-dim);
     }
@@ -548,14 +617,18 @@
       gap: 1rem;
       padding: 1rem 1.25rem;
       background: var(--dash-surface);
-      border: 1px solid var(--dash-border);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--dash-glass-border);
       border-radius: var(--dash-radius);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.03);
       transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .dash-pdf-item:hover {
       border-color: var(--dash-border-hover);
       background: var(--dash-surface-hover);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.05);
     }
 
     .dash-pdf-icon {
@@ -676,19 +749,22 @@
     .dash-modal-backdrop {
       position: absolute;
       inset: 0;
-      background: rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(4px);
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
     }
 
     .dash-modal-content {
       position: relative;
       background: var(--dash-surface);
-      border: 1px solid var(--dash-border);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--dash-glass-border);
       border-radius: var(--dash-radius);
       padding: 1.5rem;
       max-width: 380px;
       width: 100%;
-      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.06);
       animation: fadeIn 0.2s ease;
     }
 
@@ -708,8 +784,9 @@
       width: 100%;
       padding: 0.65rem 1rem;
       border-radius: var(--dash-radius-sm);
-      border: 1px solid var(--dash-border);
-      background: var(--dash-bg);
+      border: 1px solid var(--dash-glass-border);
+      background: var(--dash-glass);
+      backdrop-filter: blur(12px);
       color: var(--dash-text);
       font-size: 0.95rem;
       font-family: var(--dash-font);
@@ -740,6 +817,10 @@
   </style>
 </head>
 <body>
+  <div class="liquid-glass" aria-hidden="true">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+  </div>
   <div class="dash-app">
     <nav class="dash-nav">
       <div class="dash-brand">
@@ -749,9 +830,9 @@
       <div class="dash-nav-actions">
         <div class="dash-upload-group">
           <label class="dash-upload-zone" id="uploadZone">
-            <input type="file" id="fileInput" accept="application/pdf">
+            <input type="file" id="fileInput" accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation">
             <button type="button" class="dash-btn dash-btn-primary" onclick="this.parentElement.querySelector('input').click()">
-              <span>+</span> Загрузить PDF
+              <span>+</span> Загрузить документ
             </button>
           </label>
           <input type="password" id="uploadPasswordInput" class="dash-upload-password" placeholder="Пароль (опц.)" title="Пароль для доступа по ссылке. Оставьте пустым — ссылка будет открыта всем." autocomplete="new-password">

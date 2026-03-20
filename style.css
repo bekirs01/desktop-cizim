@@ -94,7 +94,11 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   max-height: 100vh;
   aspect-ratio: auto !important;
 }
-.app.canvas-fullscreen .camera-wrapper.pdf-mode .pdf-container,
+.app.canvas-fullscreen .camera-wrapper.pdf-mode .pdf-container {
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
 .app.canvas-fullscreen .camera-wrapper.pptx-mode .pptx-container {
   align-items: center;
   justify-content: center;
@@ -102,11 +106,15 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
 }
 .app.canvas-fullscreen .camera-wrapper.pdf-mode .pdf-page-wrap {
   width: auto;
-  max-width: 100%;
+  max-width: none;
   margin: 0 auto;
+  flex-shrink: 0;
 }
 .app.canvas-fullscreen .camera-wrapper.pptx-mode .pptx-slide-wrap {
-  width: 100%;
+  width: auto;
+  max-width: none;
+  margin: 0 auto;
+  flex-shrink: 0;
 }
 .exit-fullscreen-btn { position: absolute; top: 8px; right: 8px; z-index: 60; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: rgba(0,0,0,0.6); color: #fff; font-size: 1.2rem; cursor: pointer; display: none; }
 .app.canvas-fullscreen .exit-fullscreen-btn { display: flex; align-items: center; justify-content: center; }
@@ -295,6 +303,17 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   min-height: 0;
 }
 
+.camera-wrapper.pdf-mode.pdf-loaded.pdf-landscape-fit {
+  flex: 0 0 auto;
+}
+
+.camera-wrapper.pptx-mode.pptx-loaded {
+  flex: 0 0 auto;
+  width: 100%;
+  align-self: stretch;
+  min-height: 0;
+}
+
 .pdf-overlay {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -404,7 +423,8 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
 .camera-wrapper.pptx-mode #drawCanvas { display: none !important; }
 
 .camera-wrapper.pptx-mode .eye-overlay { opacity: 0; }
-.camera-wrapper.pptx-mode { min-height: min(78vh, 860px); }
+.camera-wrapper.pptx-mode:not(.pptx-loaded) { min-height: min(78vh, 860px); }
+.camera-wrapper.pptx-mode.pptx-loaded { min-height: 0; }
 
 .pptx-overlay {
   position: absolute;

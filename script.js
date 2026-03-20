@@ -272,6 +272,7 @@ let pptxShapesByPage = {};
 let pptxCurrentStroke = { points: [], color: "#6c5ce7" };
 let pptxIsDrawing = false;
 let pptxAspectRatio = 16 / 9;
+let currentPptxShareToken = null;
 
 const OBJECT_COLORS = ["#6c5ce7", "#00cec9", "#ff6b6b", "#ffd93d", "#55efc4", "#74b9ff"];
 let objectIdCounter = 0;
@@ -1203,12 +1204,86 @@ function renderPdfToTempForFill(ctx, w, h, pdfCanvasEl, opts) {
   allSt.forEach((stroke) => drawStrokeWithTool(ctx, stroke, sxPdf, h));
 }
 
+function drawShapeToCtx(ctx, sh, w, h, sx) {
+  const c = sh.color || drawColor;
+  const lw = sh.lineWidth ?? drawLineWidth ?? 4;
+  const opacity = sh.opacity ?? 1;
+  ctx.strokeStyle = hexToRgba(c, opacity);
+  ctx.lineWidth = lw;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  if (sh.type === "circle") {
+    ctx.beginPath();
+    ctx.arc(sx(sh.cx), sh.cy * h, sh.r * Math.min(w, h), 0, Math.PI * 2);
+    if (sh.fill) { ctx.fillStyle = hexToRgba(c, 0.4 * opacity); ctx.fill(); }
+    ctx.stroke();
+  } else if (sh.type === "rect") {
+    const rx = (sh.w >= 0 ? sx(sh.x) : sx(sh.x + sh.w));
+    const ry = (sh.h >= 0 ? sh.y : sh.y + sh.h) * h;
+    const rw = Math.abs(sh.w) * w, rh = Math.abs(sh.h) * h;
+    if (sh.fill) { ctx.fillStyle = hexToRgba(c, 0.4 * opacity); ctx.fillRect(rx, ry, rw, rh); }
+    ctx.strokeRect(rx, ry, rw, rh);
+  } else if (sh.type === "line") {
+    ctx.beginPath();
+    ctx.moveTo(sx(sh.x1), sh.y1 * h);
+    ctx.lineTo(sx(sh.x2), sh.y2 * h);
+    ctx.stroke();
+  } else if (sh.type === "ellipse") {
+    const cx = sx(sh.x + sh.w / 2), cy = (sh.y + sh.h / 2) * h;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, (sh.w / 2) * w, (sh.h / 2) * h, 0, 0, Math.PI * 2);
+    if (sh.fill) { ctx.fillStyle = hexToRgba(c, 0.4 * opacity); ctx.fill(); }
+    ctx.stroke();
+  } else if (sh.type === "triangle") {
+    ctx.beginPath();
+    ctx.moveTo(sx(sh.x1), sh.y1 * h);
+    ctx.lineTo(sx(sh.x2), sh.y2 * h);
+    ctx.lineTo(sx(sh.x3), sh.y3 * h);
+    ctx.closePath();
+    if (sh.fill) { ctx.fillStyle = hexToRgba(c, 0.4 * opacity); ctx.fill(); }
+    ctx.stroke();
+  } else if (sh.type === "arrow") {
+    const x1 = sx(sh.x1), y1 = sh.y1 * h, x2 = sx(sh.x2), y2 = sh.y2 * h;
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const al = Math.min(len * 0.3, 20);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.moveTo(x2 - ux * al + uy * al * 0.4, y2 - uy * al - ux * al * 0.4);
+    ctx.lineTo(x2, y2);
+    ctx.lineTo(x2 - ux * al - uy * al * 0.4, y2 - uy * al + ux * al * 0.4);
+    ctx.stroke();
+  } else if (sh.type === "text" && sh.text) {
+    ctx.fillStyle = hexToRgba(c, opacity);
+    ctx.font = `${sh.fontSize || 24}px sans-serif`;
+    ctx.fillText(sh.text, sx(sh.x), sh.y * h);
+  }
+}
+
+function flattenDarkPixelsForFill(imgData, w, h, seedX, seedY, lumThreshold = 0.35) {
+  const d = imgData.data;
+  const si = (Math.floor(seedY) * w + Math.floor(seedX)) * 4;
+  const [sr, sg, sb] = [d[si], d[si + 1], d[si + 2]];
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i], g = d[i + 1], b = d[i + 2];
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    if (lum < lumThreshold) {
+      d[i] = sr; d[i + 1] = sg; d[i + 2] = sb;
+    }
+  }
+}
+
 function doFillAtPdf(px, py, w, h) {
   const tmp = document.createElement("canvas");
   tmp.width = w;
   tmp.height = h;
   const tctx = tmp.getContext("2d");
   renderPdfToTempForFill(tctx, w, h, pdfCanvas, { currentStroke: pdfCurrentStroke });
+  const imgData = tctx.getImageData(0, 0, w, h);
+  flattenDarkPixelsForFill(imgData, w, h, px, py);
+  tctx.putImageData(imgData, 0, 0);
   const before = tctx.getImageData(0, 0, w, h);
   const n = doFloodFill(tctx, px, py, drawColor, w, h);
   if (n === 0) return;
@@ -1525,16 +1600,33 @@ async function renderPdfPage(retry = 0) {
   maxW = maxW || 800;
   maxH = maxH || 600;
   const viewport = page.getViewport({ scale: 1 });
-  const fitW = maxW / viewport.width;
-  const fitH = maxH / viewport.height;
-  const isPortraitPage = viewport.height > viewport.width;
-  const baseScale = isCanvasFullscreenMode()
-    ? Math.max(0.1, Math.min(fitW, fitH))
-    : Math.max(0.1, isPortraitPage ? Math.min(fitW, fitH) : fitW);
+  const fs = isCanvasFullscreenMode();
+  const portraitPdf = viewport.height > viewport.width;
+  const section = pdfContainer?.closest(".camera-section");
+  const sectionW = Math.max(200, section?.clientWidth || maxW);
+  let baseScale;
+  if (fs) {
+    const fitW = maxW / viewport.width;
+    const fitH = maxH / viewport.height;
+    baseScale = Math.min(fitW, fitH);
+  } else if (portraitPdf) {
+    const fitW = maxW / viewport.width;
+    const fitH = maxH / viewport.height;
+    baseScale = Math.min(fitW, fitH);
+  } else {
+    baseScale = sectionW / viewport.width;
+  }
+  baseScale = Math.max(0.1, baseScale);
   const scale = baseScale * pdfZoomScale;
   const scaledViewport = page.getViewport({ scale });
   const w = Math.floor(scaledViewport.width);
   const h = Math.floor(scaledViewport.height);
+  if (cameraWrapper) {
+    cameraWrapper.style.width = "";
+    cameraWrapper.style.height = "";
+    cameraWrapper.style.maxWidth = "";
+    cameraWrapper.classList.toggle("pdf-landscape-fit", !fs && !portraitPdf);
+  }
   setWrapperAspect(w, h);
   pdfCanvas.width = w;
   pdfCanvas.height = h;
@@ -1799,6 +1891,8 @@ async function loadPdfFromShareToken(shareToken, password = null) {
       pdfLinkBtn.dataset.link = pdfLink;
       pdfLinkBtn.style.display = "inline-flex";
     }
+    const exportBtn = document.getElementById("exportDocBtn");
+    if (exportBtn) exportBtn.style.display = "inline-flex";
     if (canvasLinkBtn) canvasLinkBtn.style.display = "none";
     if (drawingControlsGroup) drawingControlsGroup.style.display = "flex";
     if (cameraControlsGroup) cameraControlsGroup.style.display = "none";
@@ -1879,6 +1973,125 @@ async function loadPdfFromShareToken(shareToken, password = null) {
     alert("PDF açılamadı: " + (err.message || "Bilinmeyen hata"));
     return false;
   }
+}
+
+async function loadPptxFromShareToken(shareToken, password = null) {
+  if (!shareToken || !supabase) return false;
+  try {
+    const { data, error } = await supabase.rpc("get_pdf_by_share_token", { token: shareToken, pwd: password || null });
+    if (error) throw new Error("Документ не найден");
+    const row = data?.[0];
+    if (!row) throw new Error("Документ не найден");
+    if (row.needs_password === true) return { needsPassword: true };
+    const storagePath = row.storage_path;
+    if (!storagePath) throw new Error("Документ не найден");
+    const { data: urlData } = supabase.storage.from("pdfs").getPublicUrl(storagePath);
+    const fileUrl = urlData?.publicUrl;
+    if (!fileUrl) throw new Error("URL недоступен");
+    const resp = await fetch(fileUrl);
+    if (!resp.ok) throw new Error("Не удалось загрузить файл");
+    const blob = await resp.blob();
+    const fileName = row.file_name || storagePath.split("/").pop() || "presentation.pptx";
+    const file = new File([blob], fileName, { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
+    for (let i = 0; i < 50 && !PPTXViewer; i++) await new Promise((r) => setTimeout(r, 100));
+    if (!PPTXViewer) throw new Error("Библиотека презентаций недоступна");
+    if (!pptxViewer) pptxViewer = new PPTXViewer({ canvas: pptxCanvas });
+    await pptxViewer.loadFile(file);
+    currentPptxShareToken = shareToken;
+    pptxTotalPages = pptxViewer.getSlideCount?.() ?? 1;
+    pptxPageNum = 1;
+    pptxStrokesByPage = {};
+    pptxShapesByPage = {};
+    pptxStrokes = [];
+    pptxShapes = [];
+    pptxCurrentStroke = { points: [], color: drawColor };
+    const pages = await fetchStrokes(shareToken);
+    if (pages?.length) {
+      for (const r of pages) {
+        const p = r.page_num;
+        if (!pptxStrokesByPage[p]) pptxStrokesByPage[p] = { strokes: [], shapes: [] };
+        for (const s of r.strokes || []) {
+          pptxStrokesByPage[p].strokes.push({
+            points: s.points || [],
+            color: s.color || drawColor,
+            lineWidth: s.lineWidth ?? drawLineWidth,
+          });
+        }
+        pptxStrokesByPage[p].shapes = (r.shapes || []).map(cloneShape);
+      }
+    }
+    pdfMode = false;
+    whiteSheetMode = false;
+    blackSheetMode = false;
+    pptxMode = true;
+    cameraWrapper?.classList.remove("white-sheet-mode", "black-sheet-mode", "pdf-mode");
+    cameraWrapper?.classList.add("pptx-mode", "pptx-loaded");
+    if (pdfNavGroup) pdfNavGroup.style.display = "flex";
+    if (pdfPageInfo) pdfPageInfo.textContent = `1 / ${pptxTotalPages}`;
+    if (pdfPrevBtn) pdfPrevBtn.disabled = pptxTotalPages <= 1;
+    if (pdfNextBtn) pdfNextBtn.disabled = pptxTotalPages <= 1;
+    if (pptxUploadGroup) pptxUploadGroup.style.display = "none";
+    if (pdfUploadGroup) pdfUploadGroup.style.display = "none";
+    if (pdfClearBtn) pdfClearBtn.disabled = false;
+    if (drawBtn) drawBtn.disabled = false;
+    if (clearDrawBtn) clearDrawBtn.disabled = false;
+    const base = getShareBaseUrl();
+    const link = `${base}/index.html?id=${shareToken}`;
+    if (pdfLinkBtn) { pdfLinkBtn.dataset.link = link; pdfLinkBtn.style.display = "inline-flex"; }
+    if (canvasLinkBtn) canvasLinkBtn.style.display = "none";
+    const exportBtn = document.getElementById("exportDocBtn");
+    if (exportBtn) exportBtn.style.display = "inline-flex";
+    if (drawingControlsGroup) drawingControlsGroup.style.display = "flex";
+    if (cameraControlsGroup) cameraControlsGroup.style.display = "none";
+    loadPptxPageState();
+    await renderPptxSlide();
+    updateDocumentOverlays();
+    updateHeaderTitle();
+    const sub = subscribeStrokes(shareToken, (payload) => {
+      if (payload?.type === "progress" && payload.pageNum === pptxPageNum) {
+        pptxRemoteCurrentStroke = payload.stroke;
+        drawStrokesToPptxCanvas(pptxDrawCanvas?.width || 1, pptxDrawCanvas?.height || 1);
+        return;
+      }
+      const r = payload?.new || payload?.newRecord || payload?.record;
+      if (!r || r.share_token !== shareToken) return;
+      const p = r.page_num;
+      const incomingStrokes = (r.strokes || []).map((s) => ({
+        points: s.points || [],
+        color: s.color || drawColor,
+        lineWidth: s.lineWidth ?? drawLineWidth,
+      }));
+      if (!pptxStrokesByPage[p]) pptxStrokesByPage[p] = { strokes: [], shapes: [] };
+      pptxStrokesByPage[p].strokes = incomingStrokes;
+      pptxStrokesByPage[p].shapes = (r.shapes || []).map(cloneShape);
+      if (p === pptxPageNum) {
+        pptxStrokes = pptxStrokesByPage[p].strokes || [];
+        pptxShapes = pptxStrokesByPage[p].shapes || [];
+        drawStrokesToPptxCanvas(pptxDrawCanvas?.width || 1, pptxDrawCanvas?.height || 1);
+      }
+    });
+    pptxRealtimeUnsubscribe = sub?.unsubscribe || sub;
+    pptxRealtimeBroadcast = sub?.broadcast;
+    pptxRealtimeBroadcastProgress = sub?.broadcastProgress;
+    setTimeout(() => scheduleDocRefitStable(), 100);
+    return true;
+  } catch (err) {
+    console.error("PPTX load error:", err);
+    alert("Не удалось загрузить презентацию: " + (err.message || "Неизвестная ошибка"));
+    return false;
+  }
+}
+
+let pptxRealtimeUnsubscribe = null;
+let pptxRealtimeBroadcast = null;
+let pptxRealtimeBroadcastProgress = null;
+let pptxRemoteCurrentStroke = null;
+
+async function savePptxStrokesAndBroadcast(pageNum, strokes, skipBroadcast = false) {
+  if (!currentPptxShareToken) return;
+  const sh = pptxStrokesByPage[pageNum]?.shapes ?? pptxShapes;
+  const ok = await savePageStrokes(currentPptxShareToken, pageNum, strokes, sh, []);
+  if (ok && pptxRealtimeBroadcast && !skipBroadcast) pptxRealtimeBroadcast(pageNum, strokes);
 }
 
 async function loadPdfFromFile(file) {
@@ -2213,7 +2426,12 @@ function clearPdf() {
   pdfStrokesByPage = {};
   pdfShapesByPage = {};
   pdfCurrentStroke = { points: [], color: drawColor };
-  if (cameraWrapper) cameraWrapper.classList.remove("pdf-loaded");
+  if (cameraWrapper) {
+    cameraWrapper.classList.remove("pdf-loaded", "pdf-landscape-fit");
+    cameraWrapper.style.width = "";
+    cameraWrapper.style.height = "";
+    cameraWrapper.style.maxWidth = "";
+  }
   if (pdfPageInfo) pdfPageInfo.textContent = "-";
   if (pdfPrevBtn) pdfPrevBtn.disabled = true;
   if (pdfNextBtn) pdfNextBtn.disabled = true;
@@ -2625,7 +2843,7 @@ function drawStrokesToPptxCanvas(w, h) {
       dctx.fillText(sh.text, sh.x * w, sh.y * h);
     }
   });
-  const allStrokes = [...pptxStrokes, pptxCurrentStroke.points.length > 0 ? pptxCurrentStroke : null].filter(Boolean);
+  const allStrokes = [...pptxStrokes, pptxCurrentStroke.points.length > 0 ? pptxCurrentStroke : null, pptxRemoteCurrentStroke].filter(Boolean);
   const sxPptx = (x) => x * w;
   allStrokes.forEach((stroke) => drawStrokeWithTool(dctx, stroke, sxPptx, h));
   drawCursorDot(dctx, w, h, true);
@@ -2634,13 +2852,19 @@ function drawStrokesToPptxCanvas(w, h) {
 async function renderPptxSlide() {
   if (!pptxViewer || !pptxCanvas || !pptxDrawCanvas) return;
   const container = pptxContainer;
-  const maxW = container?.clientWidth || 800;
+  const fs = isCanvasFullscreenMode();
+  let maxW;
+  if (fs) {
+    maxW = document.documentElement.clientWidth || window.innerWidth || screen.width;
+  } else {
+    maxW = container?.clientWidth || 800;
+  }
   const inferred = pptxViewer.getSlideSize?.() || pptxViewer.getPresentationSize?.() || pptxViewer.slideSize || pptxViewer.presentationSize;
   if (inferred && Number.isFinite(inferred.width) && Number.isFinite(inferred.height) && inferred.width > 0 && inferred.height > 0) {
     pptxAspectRatio = inferred.width / inferred.height;
   }
-  let targetW = maxW;
-  let targetH = Math.max(1, Math.round(targetW / pptxAspectRatio));
+  const targetW = Math.max(1, Math.ceil(maxW));
+  const targetH = Math.max(1, Math.round(targetW / pptxAspectRatio));
   setWrapperAspect(targetW, targetH);
   pptxCanvas.width = targetW;
   pptxCanvas.height = targetH;
@@ -2648,7 +2872,7 @@ async function renderPptxSlide() {
   pptxDrawCanvas.height = targetH;
   await pptxViewer.goToSlide(pptxPageNum - 1);
   await pptxViewer.render();
-  drawStrokesToPptxCanvas(targetW, targetH);
+  drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
 }
 
 async function loadPptxFromFile(file) {
@@ -2662,9 +2886,7 @@ async function loadPptxFromFile(file) {
     return;
   }
   try {
-    if (!pptxViewer) {
-      pptxViewer = new PPTXViewer({ canvas: pptxCanvas });
-    }
+    if (!pptxViewer) pptxViewer = new PPTXViewer({ canvas: pptxCanvas });
     await pptxViewer.loadFile(file);
     pptxTotalPages = pptxViewer.getSlideCount?.() ?? 1;
     pptxPageNum = 1;
@@ -2674,9 +2896,9 @@ async function loadPptxFromFile(file) {
     pptxShapes = [];
     pptxCurrentStroke = { points: [], color: drawColor };
     if (cameraWrapper) cameraWrapper.classList.add("pptx-loaded");
-    if (pptxPageInfo) pptxPageInfo.textContent = `1 / ${pptxTotalPages}`;
-    if (pptxPrevBtn) pptxPrevBtn.disabled = pptxTotalPages <= 1;
-    if (pptxNextBtn) pptxNextBtn.disabled = pptxTotalPages <= 1;
+    if (pdfPageInfo) pdfPageInfo.textContent = `1 / ${pptxTotalPages}`;
+    if (pdfPrevBtn) pdfPrevBtn.disabled = pptxTotalPages <= 1;
+    if (pdfNextBtn) pdfNextBtn.disabled = false;
     if (pptxClearBtn) pptxClearBtn.disabled = false;
     if (drawBtn) drawBtn.disabled = false;
     if (clearDrawBtn) clearDrawBtn.disabled = false;
@@ -2736,6 +2958,10 @@ function setupPptxDrawing() {
     if (pptxCurrentStroke.points.length > 1) {
       pptxStrokes.push({ ...pptxCurrentStroke });
       pushPptxHistory();
+      if (currentPptxShareToken) {
+        savePptxPageState();
+        savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
+      }
     }
     pptxCurrentStroke = { points: [], color: drawColor };
   };
@@ -2753,6 +2979,9 @@ function clearPptx() {
     pptxViewer?.dispose?.();
   } catch (_) {}
   pptxViewer = null;
+  currentPptxShareToken = null;
+  pptxRealtimeUnsubscribe?.();
+  pptxRealtimeUnsubscribe = null;
   pptxPageNum = 1;
   pptxTotalPages = 0;
   pptxStrokes = [];
@@ -3544,7 +3773,7 @@ modeCameraBtn?.addEventListener("click", (e) => {
   blackSheetMode = false;
   pdfMode = false;
   pptxMode = false;
-  cameraWrapper?.classList.remove("black-sheet-mode", "pdf-mode", "pdf-loaded", "pptx-mode", "pptx-loaded");
+  cameraWrapper?.classList.remove("black-sheet-mode", "pdf-mode", "pdf-loaded", "pdf-landscape-fit", "pptx-mode", "pptx-loaded");
   cameraWrapper?.classList.add("white-sheet-mode");
   modeCameraBtn?.classList.add("active");
   modeWhiteSheetBtn?.classList.remove("active");
@@ -3570,7 +3799,7 @@ modeWhiteSheetBtn?.addEventListener("click", () => {
   blackSheetMode = false;
   pdfMode = false;
   pptxMode = false;
-  cameraWrapper?.classList.remove("black-sheet-mode", "pdf-mode", "pdf-loaded", "pptx-mode", "pptx-loaded");
+  cameraWrapper?.classList.remove("black-sheet-mode", "pdf-mode", "pdf-loaded", "pdf-landscape-fit", "pptx-mode", "pptx-loaded");
   cameraWrapper?.classList.add("white-sheet-mode");
   modeCameraBtn?.classList.remove("active");
   modeWhiteSheetBtn?.classList.add("active");
@@ -3596,7 +3825,7 @@ modeBlackSheetBtn?.addEventListener("click", () => {
   blackSheetMode = true;
   pdfMode = false;
   pptxMode = false;
-  cameraWrapper?.classList.remove("pdf-mode", "pdf-loaded", "pptx-mode", "pptx-loaded");
+  cameraWrapper?.classList.remove("pdf-mode", "pdf-loaded", "pdf-landscape-fit", "pptx-mode", "pptx-loaded");
   cameraWrapper?.classList.add("white-sheet-mode", "black-sheet-mode");
   modeCameraBtn?.classList.remove("active");
   modeWhiteSheetBtn?.classList.remove("active");
@@ -3650,7 +3879,7 @@ modePptxBtn?.addEventListener("click", () => {
   blackSheetMode = false;
   pdfMode = false;
   pptxMode = true;
-  cameraWrapper?.classList.remove("white-sheet-mode", "black-sheet-mode", "pdf-mode", "pdf-loaded");
+  cameraWrapper?.classList.remove("white-sheet-mode", "black-sheet-mode", "pdf-mode", "pdf-loaded", "pdf-landscape-fit");
   cameraWrapper?.classList.add("pptx-mode");
   modeCameraBtn?.classList.remove("active");
   modeWhiteSheetBtn?.classList.remove("active");
@@ -4034,6 +4263,7 @@ clearPageConfirm?.addEventListener("click", () => {
     pptxShapes = [];
     pptxStrokesByPage[pptxPageNum] = { strokes: [], shapes: [] };
     pptxCurrentStroke = { points: [], color: drawColor };
+    if (currentPptxShareToken) deleteStrokesForPage(currentPptxShareToken, pptxPageNum);
     const dctx = pptxDrawCanvas.getContext("2d");
     dctx.clearRect(0, 0, pptxDrawCanvas.width, pptxDrawCanvas.height);
   } else {
@@ -4071,6 +4301,7 @@ clearDrawBtn?.addEventListener("click", () => {
     pptxShapes = [];
     pptxStrokesByPage[pptxPageNum] = { strokes: [], shapes: [] };
     pptxCurrentStroke = { points: [], color: drawColor };
+    if (currentPptxShareToken) deleteStrokesForPage(currentPptxShareToken, pptxPageNum);
     const dctx = pptxDrawCanvas.getContext("2d");
     dctx.clearRect(0, 0, pptxDrawCanvas.width, pptxDrawCanvas.height);
   } else {
@@ -4175,6 +4406,18 @@ pdfFileInput?.addEventListener("change", async (e) => {
 });
 
 pdfPrevBtn?.addEventListener("click", async () => {
+  if (pptxMode && pptxViewer) {
+    if (pptxPageNum <= 1) return;
+    savePptxPageState();
+    if (currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
+    pptxPageNum--;
+    loadPptxPageState();
+    if (pdfPageInfo) pdfPageInfo.textContent = `${pptxPageNum} / ${pptxTotalPages}`;
+    pdfPrevBtn.disabled = pptxPageNum <= 1;
+    pdfNextBtn.disabled = false;
+    await renderPptxSlide();
+    return;
+  }
   if (pdfPageNum <= 1 || !pdfDoc) return;
   savePdfPageState();
   pdfPageNum--;
@@ -4186,6 +4429,18 @@ pdfPrevBtn?.addEventListener("click", async () => {
 });
 
 pdfNextBtn?.addEventListener("click", async () => {
+  if (pptxMode && pptxViewer) {
+    if (pptxPageNum >= pptxTotalPages) return;
+    savePptxPageState();
+    if (currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
+    pptxPageNum++;
+    loadPptxPageState();
+    if (pdfPageInfo) pdfPageInfo.textContent = `${pptxPageNum} / ${pptxTotalPages}`;
+    pdfNextBtn.disabled = pptxPageNum >= pptxTotalPages;
+    pdfPrevBtn.disabled = false;
+    await renderPptxSlide();
+    return;
+  }
   if (pdfPageNum >= pdfTotalPages || !pdfDoc) return;
   savePdfPageState();
   pdfPageNum++;
@@ -4254,6 +4509,96 @@ pdfLinkBtn?.addEventListener("click", async () => {
     if (pdfLinkBtn) pdfLinkBtn.textContent = "Скопировано!";
     setTimeout(() => { if (pdfLinkBtn) pdfLinkBtn.textContent = orig; }, 1500);
   } catch (e) { console.warn(e); }
+});
+
+document.getElementById("exportDocBtn")?.addEventListener("click", async () => {
+  const btn = document.getElementById("exportDocBtn");
+  if (!btn || (!pdfMode && !pptxMode)) return;
+  btn.disabled = true;
+  btn.textContent = "...";
+  try {
+    if (pdfMode && pdfDoc) {
+      const { PDFDocument } = await import("https://esm.sh/pdf-lib@1.17.1");
+      const outPdf = await PDFDocument.create();
+      const PX_TO_PT = 72 / 96;
+      const EXPORT_BASE = 1200;
+      for (let p = 1; p <= pdfTotalPages; p++) {
+        const page = await pdfDoc.getPage(p);
+        const vp = page.getViewport({ scale: 1 });
+        const scale = EXPORT_BASE / Math.max(vp.width, vp.height);
+        const w = Math.floor(vp.width * scale);
+        const h = Math.floor(vp.height * scale);
+        const c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, w, h);
+        await page.render({ canvasContext: ctx, viewport: page.getViewport({ scale }) }).promise;
+        const layer = pdfStrokesByPage[p] || { strokes: [], shapes: [], fillShapes: [] };
+        layer.fillShapes?.forEach((f) => {
+          const t = document.createElement("canvas");
+          t.width = f.w; t.height = f.h;
+          t.getContext("2d").putImageData(f.data, 0, 0);
+          ctx.drawImage(t, 0, 0, f.w, f.h, 0, 0, w, h);
+        });
+        (layer.shapes || []).forEach((sh) => drawShapeToCtx(ctx, sh, w, h, (x) => x * w));
+        [...(layer.strokes || []), (p === pdfPageNum && pdfCurrentStroke.points?.length > 1) ? pdfCurrentStroke : null].filter(Boolean).forEach((s) => drawStrokeWithTool(ctx, s, (x) => x * w, h));
+        const wPt = w * PX_TO_PT;
+        const hPt = h * PX_TO_PT;
+        const pngBytes = await new Promise((resolve, reject) => {
+          c.toBlob((blob) => {
+            if (!blob) reject(new Error("PNG"));
+            else blob.arrayBuffer().then(resolve);
+          }, "image/png");
+        });
+        const png = await outPdf.embedPng(pngBytes);
+        const pdfPage = outPdf.addPage([wPt, hPt]);
+        pdfPage.drawImage(png, { x: 0, y: 0, width: wPt, height: hPt });
+      }
+      const pdfOut = await outPdf.save();
+      const blob = new Blob([pdfOut], { type: "application/pdf" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "document-with-drawings.pdf";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } else if (pptxMode && pptxViewer) {
+      const mod = await import("https://esm.sh/pptxgenjs?bundle");
+      const PptxGenJS = mod.default;
+      const pptx = new PptxGenJS();
+      pptx.layout = "LAYOUT_16x9";
+      const curPage = pptxPageNum;
+      const slideW = 10;
+      const slideH = 5.625;
+      for (let p = 1; p <= pptxTotalPages; p++) {
+        savePptxPageState();
+        pptxPageNum = p;
+        loadPptxPageState();
+        await pptxViewer.goToSlide(p - 1);
+        await pptxViewer.render();
+        const c = document.createElement("canvas");
+        c.width = pptxCanvas.width;
+        c.height = pptxCanvas.height;
+        c.getContext("2d").drawImage(pptxCanvas, 0, 0);
+        const ctx = c.getContext("2d");
+        const layer = pptxStrokesByPage[p] || { strokes: [], shapes: [] };
+        (layer.shapes || []).forEach((sh) => drawShapeToCtx(ctx, sh, c.width, c.height, (x) => x * c.width));
+        [...(layer.strokes || []), (p === curPage && pptxCurrentStroke.points?.length > 1) ? pptxCurrentStroke : null].filter(Boolean).forEach((s) => drawStrokeWithTool(ctx, s, (x) => x * c.width, c.height));
+        const slide = pptx.addSlide();
+        slide.addImage({ data: c.toDataURL("image/png"), x: 0, y: 0, w: slideW, h: slideH });
+      }
+      pptxPageNum = curPage;
+      loadPptxPageState();
+      await pptxViewer.goToSlide(curPage - 1);
+      await pptxViewer.render();
+      drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+      await pptx.writeFile({ fileName: "presentation-with-drawings.pptx" });
+    }
+  } catch (e) {
+    console.error("Export error:", e);
+    alert("Ошибка экспорта: " + (e?.message || "Неизвестная ошибка"));
+  }
+  if (btn) { btn.disabled = false; btn.textContent = "\u2193 Экспорт"; }
 });
 
 shareUrlSaveBtn?.addEventListener("click", () => {
@@ -4360,7 +4705,8 @@ function scheduleDocRefit() {
 
 function scheduleDocRefitStable() {
   scheduleDocRefit();
-  setTimeout(() => scheduleDocRefit(), 120);
+  setTimeout(() => scheduleDocRefit(), 150);
+  setTimeout(() => scheduleDocRefit(), 400);
 }
 
 window.addEventListener("resize", scheduleDocRefit);
@@ -4390,10 +4736,20 @@ if (shareId) {
   if (pdfOverlay) pdfOverlay.style.display = "none";
   const overlayText = document.getElementById("cameraOverlayText");
   const overlayHint = document.getElementById("cameraOverlayHint");
-  if (overlayText) overlayText.textContent = "Загрузка PDF...";
+  if (overlayText) overlayText.textContent = "Загрузка документа...";
   if (overlayHint) overlayHint.textContent = "";
   cameraOverlay?.classList.remove("hidden");
-  loadPdfFromShareToken(shareId).then((result) => {
+  (async () => {
+    let loader = loadPdfFromShareToken;
+    try {
+      const { data } = await supabase.rpc("get_pdf_by_share_token", { token: shareId, pwd: null });
+      const row = data?.[0];
+      if (row && !row.needs_password) {
+        const fn = (row.storage_path || row.file_name || "").toLowerCase();
+        if (fn.endsWith(".pptx")) loader = loadPptxFromShareToken;
+      }
+    } catch (_) {}
+    const result = await loader(shareId);
     document.documentElement.classList.remove("pdf-loading");
     if (result && typeof result === "object" && result.needsPassword) {
       cameraOverlay?.classList.add("hidden");
@@ -4409,7 +4765,11 @@ if (shareId) {
         const tryOpen = async () => {
           if (submitBtn) submitBtn.disabled = true;
           const pwd = input?.value?.trim() || null;
-          const res = await loadPdfFromShareToken(shareId, pwd);
+          const { data: authData } = await supabase.rpc("get_pdf_by_share_token", { token: shareId, pwd });
+          const authRow = authData?.[0];
+          const isPptx = authRow && !authRow.needs_password && ((authRow.storage_path || authRow.file_name || "").toLowerCase().endsWith(".pptx"));
+          const loadFn = isPptx ? loadPptxFromShareToken : loadPdfFromShareToken;
+          const res = await loadFn(shareId, pwd);
           if (submitBtn) submitBtn.disabled = false;
           if (res && typeof res === "object" && res.needsPassword) {
             if (errEl) { errEl.style.display = "block"; errEl.textContent = "Неверный пароль"; }
@@ -4439,7 +4799,7 @@ if (shareId) {
       cameraOverlay?.classList.add("hidden");
       drawMode = true;
     }
-  });
+  })();
 } else if (canvasId) {
   pdfMode = false;
   pptxMode = false;
@@ -4487,6 +4847,7 @@ if (shareId) {
               cameraControlsGroup.style.display = "none";
               if (canvasSharedToggleBtn) canvasSharedToggleBtn.style.display = "none";
               if (pdfLinkBtn) pdfLinkBtn.style.display = "none";
+              document.getElementById("exportDocBtn")?.style.setProperty("display", "none");
               updateCanvasSharedUI();
               cameraOverlay?.classList.add("hidden");
               drawMode = true;

@@ -13,7 +13,7 @@
       if(window.location.search.indexOf('id=')!==-1){
         document.documentElement.classList.add('pdf-loading');
         var s=document.createElement('style');
-        s.textContent='.pdf-loading #drawCanvas,.pdf-loading #output,.pdf-loading .white-sheet-bg,.pdf-loading #video{display:none!important}.pdf-loading .pdf-container{display:flex!important}.pdf-loading .pdf-overlay{display:none!important}.pdf-loading .camera-overlay{display:flex!important;z-index:50}.pdf-loading #drawingControlsGroup{display:none!important}';
+        s.textContent='.pdf-loading #drawCanvas,.pdf-loading #output,.pdf-loading .white-sheet-bg,.pdf-loading #video{display:none!important}.pdf-loading .pdf-container,.pdf-loading .pptx-container{display:flex!important}.pdf-loading .pdf-overlay{display:none!important}.pdf-loading .camera-overlay{display:flex!important;z-index:50}.pdf-loading #drawingControlsGroup{display:none!important}';
         document.head.appendChild(s);
       }
     })();
@@ -60,6 +60,7 @@
     <header class="header">
       <h1 id="appHeaderTitle">DrawFlow</h1>
       <div class="header-right">
+        <button id="exportDocBtn" class="btn btn-secondary btn-small" title="Экспорт с рисунками" style="display:none;margin-right:0.5rem">&#x2193; Экспорт</button>
         <a href="/dashboard.html" class="btn btn-secondary btn-small" style="margin-right:0.5rem;font-family:'Inter',sans-serif;">&larr; Документы</a>
         <button id="fullscreenBtn" class="btn-icon" title="Полный экран">&#x26F6;</button>
         <div class="fps-badge" id="fps">0 FPS</div>
@@ -191,7 +192,7 @@
             })();
           </script>
           <div class="pdf-overlay" id="pdfOverlay">
-            <p>Нажмите «Загрузить PDF» выше для загрузки PDF</p>
+            <p>Нажмите «Загрузить документ» выше для загрузки PDF или презентации</p>
             <p class="overlay-hint">После загрузки PDF можно рисовать поверх</p>
           </div>
           <script>

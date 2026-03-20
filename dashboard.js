@@ -175,7 +175,11 @@ async function loadDocuments() {
   }
   showUploadError("");
   const items = [
-    ...pdfData.map((r) => ({ ...r, type: "pdf", name: r.file_name || "PDF", date: r.created_at })),
+    ...pdfData.map((r) => {
+      const fn = r.file_name || r.storage_path || "";
+      const isPptx = fn.toLowerCase().endsWith(".pptx");
+      return { ...r, type: isPptx ? "pptx" : "pdf", name: r.file_name || (isPptx ? "Презентация" : "PDF"), date: r.created_at };
+    }),
     ...canvases.map((r) => ({ ...r, type: "canvas", name: r.name || "Çizim", date: r.created_at, share_password_hash: r.share_password_hash })),
   ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
@@ -197,9 +201,9 @@ async function loadDocuments() {
     div.style.animationDelay = `${0.05 * i}s`;
     const date = row.date ? new Date(row.date).toLocaleDateString("tr-TR") : "";
     const hasPwd = !!(row.share_password_hash);
-    const icon = row.type === "pdf" ? "&#x1F4C4;" : "&#x270F;&#xFE0F;";
-    const openHref = row.type === "pdf" ? `/index.html?id=${row.share_token}` : `/index.html?canvas=${row.share_token}`;
-    const deleteData = row.type === "pdf"
+    const icon = row.type === "pdf" ? "&#x1F4C4;" : row.type === "pptx" ? "&#x1F4FA;" : "&#x270F;&#xFE0F;";
+    const openHref = (row.type === "pdf" || row.type === "pptx") ? `/index.html?id=${row.share_token}` : `/index.html?canvas=${row.share_token}`;
+    const deleteData = (row.type === "pdf" || row.type === "pptx")
       ? `data-id="${row.id}" data-share="${row.share_token}" data-path="${escapeHtml(row.storage_path || "")}" data-type="pdf"`
       : `data-id="${row.id}" data-share="${row.share_token}" data-type="canvas"`;
     div.innerHTML = `
@@ -234,6 +238,12 @@ function showUploadError(msg) {
 fileInput.addEventListener("change", async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
+  const ext = (file.name || "").split(".").pop()?.toLowerCase();
+  if (ext !== "pdf" && ext !== "pptx") {
+    showUploadError("Поддерживаются только PDF и PPTX");
+    e.target.value = "";
+    return;
+  }
   showUploadError("");
   const sharePassword = document.getElementById("uploadPasswordInput")?.value?.trim() || null;
   const btnSpan = uploadZone.querySelector("button span");
@@ -272,11 +282,11 @@ pdfList.addEventListener("click", async (e) => {
     const share_token = delBtn.dataset.share;
     const type = delBtn.dataset.type || "pdf";
     if (!id || !share_token) return;
-    if (!confirm(type === "pdf" ? "Удалить этот PDF и все рисунки навсегда?" : "Удалить этот документ и все рисунки навсегда?")) return;
+    if (!confirm((type === "pdf" || type === "pptx") ? "Удалить этот документ и все рисунки навсегда?" : "Удалить этот документ и все рисунки навсегда?")) return;
     delBtn.disabled = true;
     delBtn.textContent = "...";
     let ok = false;
-    if (type === "pdf") {
+    if (type === "pdf" || type === "pptx") {
       ok = await deletePdfFromSupabase({ id, share_token, storage_path: delBtn.dataset.path || "" }, (err) => alert(err));
     } else {
       ok = await deleteCanvas({ id, share_token });

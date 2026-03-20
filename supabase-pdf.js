@@ -27,12 +27,15 @@ export async function uploadPdfToSupabase(file, onSuccess, onError, sharePasswor
     }
     const user = session.user;
     const shareId = crypto.randomUUID().replace(/-/g, "");
-    const ext = file.name.split(".").pop() || "pdf";
+    const ext = (file.name.split(".").pop() || "pdf").toLowerCase();
     const path = `${user.id}/${shareId}.${ext}`;
+    const contentType = ext === "pptx"
+      ? "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      : "application/pdf";
 
     const { error: uploadErr } = await supabase.storage.from("pdfs").upload(path, file, {
       upsert: true,
-      contentType: "application/pdf",
+      contentType,
     });
     if (uploadErr) throw new Error("Storage: " + (uploadErr.message || "Yükleme hatası"));
 
