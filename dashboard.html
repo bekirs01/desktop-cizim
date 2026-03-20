@@ -780,6 +780,13 @@
       line-height: 1.5;
     }
 
+    .dash-modal-field-label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--dash-text-dim);
+      margin-bottom: 0.35rem;
+    }
+
     .dash-modal-input {
       width: 100%;
       padding: 0.65rem 1rem;
@@ -835,7 +842,8 @@
               <span>+</span> Загрузить документ
             </button>
           </label>
-          <input type="password" id="uploadPasswordInput" class="dash-upload-password" placeholder="Пароль (опц.)" title="Пароль для доступа по ссылке. Оставьте пустым — ссылка будет открыта всем." autocomplete="new-password">
+          <input type="password" id="uploadPasswordInput" class="dash-upload-password" placeholder="Ведущий (опц.)" title="Полный доступ: рисование и управление. Пусто — без пароля ведущего." autocomplete="new-password">
+          <input type="password" id="uploadViewerPasswordInput" class="dash-upload-password" placeholder="Зритель (опц.)" title="Только просмотр полноэкранного слайда, без рисования. Пусто — не задан." autocomplete="new-password">
         </div>
         <button id="logoutBtn" class="dash-btn dash-btn-ghost">Выйти</button>
       </div>
@@ -891,12 +899,17 @@
     <div id="passwordModal" class="dash-modal" style="display:none">
       <div class="dash-modal-backdrop"></div>
       <div class="dash-modal-content">
-        <h3 class="dash-modal-title">&#x1F512; Пароль для ссылки</h3>
-        <p class="dash-modal-desc">Только те, кому вы дадите пароль, смогут открыть по ссылке.</p>
+        <h3 class="dash-modal-title">&#x1F512; Пароли ссылки</h3>
+        <p class="dash-modal-desc" id="passwordModalDesc">Для PDF/PPTX: два разных пароля — ведущий (рисует) и зритель (только смотрит). Для холста — один пароль.</p>
+        <label class="dash-modal-field-label" for="modalPasswordInput" id="modalPasswordLabel">Пароль</label>
         <input type="password" id="modalPasswordInput" class="dash-modal-input" placeholder="Введите пароль" autocomplete="new-password">
+        <div id="modalViewerPasswordWrap" style="display:none">
+          <label class="dash-modal-field-label" for="modalViewerPasswordInput">Пароль зрителя (только просмотр)</label>
+          <input type="password" id="modalViewerPasswordInput" class="dash-modal-input" placeholder="Опционально" autocomplete="new-password">
+        </div>
         <div class="dash-modal-actions">
           <button type="button" id="modalPasswordSave" class="dash-btn dash-btn-primary">Сохранить</button>
-          <button type="button" id="modalPasswordRemove" class="dash-btn dash-btn-ghost">Убрать пароль</button>
+          <button type="button" id="modalPasswordRemove" class="dash-btn dash-btn-ghost">Убрать пароли</button>
           <button type="button" id="modalPasswordCancel" class="dash-btn dash-btn-ghost">Отмена</button>
         </div>
       </div>

@@ -14,7 +14,8 @@ async function hashPassword(password) {
     .join("");
 }
 
-export async function uploadPdfToSupabase(file, onSuccess, onError, sharePassword = null) {
+/** sharePassword = öğretmen (çizim), viewerPassword = öğrenci (salt izleme) */
+export async function uploadPdfToSupabase(file, onSuccess, onError, sharePassword = null, viewerPassword = null) {
   if (!supabase) {
     onError?.("Supabase yapılandırılmamış");
     return null;
@@ -40,6 +41,7 @@ export async function uploadPdfToSupabase(file, onSuccess, onError, sharePasswor
     if (uploadErr) throw new Error("Storage: " + (uploadErr.message || "Yükleme hatası"));
 
     const sharePasswordHash = sharePassword ? await hashPassword(sharePassword) : null;
+    const viewerPasswordHash = viewerPassword ? await hashPassword(viewerPassword) : null;
     const insertRow = {
       user_id: user.id,
       storage_path: path,
@@ -47,8 +49,18 @@ export async function uploadPdfToSupabase(file, onSuccess, onError, sharePasswor
       file_name: file.name,
     };
     if (sharePasswordHash) insertRow.share_password_hash = sharePasswordHash;
+    if (viewerPasswordHash) insertRow.share_viewer_password_hash = viewerPasswordHash;
 
-    const { error: dbErr } = await supabase.from("pdfs").insert(insertRow);
+    let { error: dbErr } = await supabase.from("pdfs").insert(insertRow);
+    const msg = (dbErr?.message || "") + (dbErr?.details || "");
+    if (dbErr && viewerPasswordHash && /share_viewer_password_hash|schema cache/i.test(msg)) {
+      const fallback = { ...insertRow };
+      delete fallback.share_viewer_password_hash;
+      ({ error: dbErr } = await supabase.from("pdfs").insert(fallback));
+      if (!dbErr) {
+        console.warn("share_viewer_password_hash sütunu yok; izleyici şifresi kaydedilmedi. Supabase'de PDF_DUAL_PASSWORD_MIGRATION.sql çalıştırın.");
+      }
+    }
     if (dbErr) throw new Error("Veritabanı: " + (dbErr.message || "Kayıt hatası"));
 
     const link = `${getShareBaseUrl()}/index.html?id=${shareId}`;
@@ -60,7 +72,7 @@ export async function uploadPdfToSupabase(file, onSuccess, onError, sharePasswor
   }
 }
 
-/** PDF paylaşım şifresini ayarla veya kaldır (sadece sahip) */
+/** PDF paylaşım şifresini ayarla veya kaldır (sadece sahip) — sadece öğretmen şifresi */
 export async function setPdfSharePassword(shareToken, password) {
   if (!supabase) return false;
   const pwd = password && String(password).trim() ? String(password).trim() : null;
@@ -69,6 +81,84 @@ export async function setPdfSharePassword(shareToken, password) {
     pwd: pwd,
   });
   return !error && data === true;
+}
+
+function formatSupabaseErr(err) {
+  if (!err) return "";
+  const m = [err.message, err.details, err.hint, err.code].filter(Boolean).join(" — ");
+  return m || String(err);
+}
+
+/** Tabloya doğrudan yaz (RPC yok / RLS ile). pdfRowId varsa satır id ile eşleşir (daha güvenilir). */
+async function updatePdfPasswordsOnRow(shareToken, editorPassword, viewerPassword, pdfRowId = null) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
+  if (!user) return { ok: false, error: "Oturum yok; yeniden giriş yapın." };
+  const ed = editorPassword && String(editorPassword).trim() ? String(editorPassword).trim() : null;
+  const vw = viewerPassword && String(viewerPassword).trim() ? String(viewerPassword).trim() : null;
+  const edHash = ed ? await hashPassword(ed) : null;
+  const vwHash = vw ? await hashPassword(vw) : null;
+  const payload = {
+    share_password_hash: edHash,
+    share_viewer_password_hash: vwHash,
+  };
+  let q = supabase.from("pdfs").update(payload).eq("user_id", user.id);
+  if (pdfRowId) q = q.eq("id", pdfRowId);
+  else q = q.eq("share_token", shareToken);
+  let { data, error } = await q.select("id");
+  const errMsg = (error?.message || "") + (error?.details || "");
+  if (error && /share_viewer_password_hash|column|schema cache/i.test(errMsg)) {
+    const fallback = { share_password_hash: edHash };
+    let q2 = supabase.from("pdfs").update(fallback).eq("user_id", user.id);
+    if (pdfRowId) q2 = q2.eq("id", pdfRowId);
+    else q2 = q2.eq("share_token", shareToken);
+    ({ data, error } = await q2.select("id"));
+    if (!error) {
+      console.warn("İzleyici şifresi kaydedilemedi: share_viewer_password_hash sütunu yok. PDF_DUAL_PASSWORD_MIGRATION.sql çalıştırın.");
+    }
+  }
+  if (!error && Array.isArray(data) && data.length > 0) return { ok: true };
+  if (error) {
+    return { ok: false, error: formatSupabaseErr(error) || "Güncelleme başarısız" };
+  }
+  return {
+    ok: false,
+    error:
+      "Kayıt güncellenemedi (0 satır). Supabase SQL Editor’da pdfs için UPDATE politikası (pdfs_user_update) ve PDF_DUAL_PASSWORD_MIGRATION.sql çalıştırın.",
+  };
+}
+
+/** İki şifre: öğretmen (tam erişim) + öğrenci (salt izleme). Boş = o şifreyi kaldır. pdfRowId = pdfs.id (UUID) */
+export async function setPdfSharePasswords(shareToken, editorPassword, viewerPassword, pdfRowId = null) {
+  if (!supabase || !shareToken) return { ok: false, error: "Supabase veya token yok" };
+  const ed = editorPassword && String(editorPassword).trim() ? String(editorPassword).trim() : null;
+  const vw = viewerPassword && String(viewerPassword).trim() ? String(viewerPassword).trim() : null;
+
+  if (pdfRowId) {
+    const byId = await supabase.rpc("set_pdf_share_passwords_by_id", {
+      p_id: pdfRowId,
+      p_editor: ed,
+      p_viewer: vw,
+    });
+    if (!byId.error && byId.data === true) return { ok: true };
+    if (byId.error && !/function|does not exist|PGRST202|schema cache/i.test(formatSupabaseErr(byId.error))) {
+      console.warn("set_pdf_share_passwords_by_id:", byId.error);
+    }
+  }
+
+  const { data, error } = await supabase.rpc("set_pdf_share_passwords", {
+    p_token: shareToken,
+    p_editor: ed,
+    p_viewer: vw,
+  });
+
+  if (!error && data === true) return { ok: true };
+
+  if (error) {
+    console.warn("set_pdf_share_passwords RPC:", formatSupabaseErr(error));
+  }
+
+  return updatePdfPasswordsOnRow(shareToken, ed, vw, pdfRowId);
 }
 
 /** PDF'i Storage, pdf_strokes ve pdfs tablosundan tamamen siler */

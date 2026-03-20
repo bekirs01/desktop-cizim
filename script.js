@@ -75,8 +75,9 @@ const MIRROR_CAMERA = true;
 
 const PERFORMANCE_MODE = true;
 const DETECT_EVERY_N_FRAMES = PERFORMANCE_MODE ? 2 : 1;
-const VIDEO_WIDTH = 1920;
-const VIDEO_HEIGHT = 1080;
+/** 720p ideal — быстрее первый старт getUserMedia (особенно на macOS); качества хватает для MediaPipe */
+const VIDEO_WIDTH = 1280;
+const VIDEO_HEIGHT = 720;
 
 // DOM
 const video = document.getElementById("video");
@@ -93,17 +94,12 @@ const clearDrawBtn = document.getElementById("clearDrawBtn");
 const drawToolbar = document.getElementById("drawToolbar");
 let drawToolbarMouseInside = false;
 let drawToolbarGestureInside = false;
-let drawToolbarInteractTimer = null;
 function updateDrawToolbarOpenState() {
   if (!drawToolbar) return;
   const open = drawToolbarMouseInside || drawToolbarGestureInside;
   const was = drawToolbar.classList.contains("draw-toolbar--open");
   if (!open) {
-    if (drawToolbarInteractTimer) {
-      clearTimeout(drawToolbarInteractTimer);
-      drawToolbarInteractTimer = null;
-    }
-    drawToolbar.classList.remove("draw-toolbar--open", "draw-toolbar--interactive");
+    drawToolbar.classList.remove("draw-toolbar--open");
     if (was) {
       document.getElementById("colorPopover")?.classList.remove("visible");
       document.getElementById("penToolPopover")?.classList.remove("visible");
@@ -114,18 +110,6 @@ function updateDrawToolbarOpenState() {
     return;
   }
   drawToolbar.classList.add("draw-toolbar--open");
-  if (!was) {
-    drawToolbar.classList.remove("draw-toolbar--interactive");
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      drawToolbar.classList.add("draw-toolbar--interactive");
-    } else {
-      clearTimeout(drawToolbarInteractTimer);
-      drawToolbarInteractTimer = setTimeout(() => {
-        drawToolbar.classList.add("draw-toolbar--interactive");
-        drawToolbarInteractTimer = null;
-      }, 340);
-    }
-  }
 }
 drawToolbar?.addEventListener("mouseenter", () => {
   drawToolbarMouseInside = true;
@@ -199,6 +183,7 @@ const canvasPageInfo = document.getElementById("canvasPageInfo");
 let poseLandmarker = null;
 let faceLandmarker = null;
 let handLandmarker = null;
+let mediaPipeLoadPromise = null;
 let stream = null;
 let loopId = null;
 let lastVideoTime = -1;
@@ -281,6 +266,8 @@ let pdfCurrentStroke = { points: [], color: "#6c5ce7" };
 let pdfZoomScale = 1;
 let pdfIsDrawing = false;
 let currentPdfShareToken = null;
+/** Paylaşılan PDF/PPTX linkinde öğrenci şifresiyle açıldıysa true — çizim/yazma kapalı */
+let sharedDocReadOnly = false;
 let pointerPosition = null;
 let currentCanvasShareToken = null;
 let canvasRealtimeUnsubscribe = null;
@@ -305,6 +292,9 @@ let lastEraseSaveTime = 0;
 let lastEraseEndTime = 0;
 let lastLocalSaveTime = 0;
 let fadeAnimationRaf = null;
+/** Ограничиваем частоту перерисовки только из-за анимации исчезновения (без троттлинга самого рисования). */
+const FADE_REDRAW_MIN_MS = 1000 / 28;
+let lastFadeRedrawWallMs = 0;
 function savePageStrokes(...args) {
   lastLocalSaveTime = Date.now();
   return _savePageStrokes(...args);
@@ -324,13 +314,37 @@ function scheduleFadeTick() {
     let keepAnimating = false;
     if (pdfMode && pdfDrawCanvas) {
       keepAnimating = hasActiveFadeStrokes(pdfStrokes, now);
-      if (keepAnimating || hadActive) drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+      if (keepAnimating || hadActive) {
+        if (keepAnimating && now - lastFadeRedrawWallMs < FADE_REDRAW_MIN_MS) {
+          hadActive = keepAnimating;
+          fadeAnimationRaf = requestAnimationFrame(tick);
+          return;
+        }
+        lastFadeRedrawWallMs = now;
+        drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+      }
     } else if (pptxMode && pptxDrawCanvas) {
       keepAnimating = hasActiveFadeStrokes(pptxStrokes, now);
-      if (keepAnimating || hadActive) drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+      if (keepAnimating || hadActive) {
+        if (keepAnimating && now - lastFadeRedrawWallMs < FADE_REDRAW_MIN_MS) {
+          hadActive = keepAnimating;
+          fadeAnimationRaf = requestAnimationFrame(tick);
+          return;
+        }
+        lastFadeRedrawWallMs = now;
+        drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+      }
     } else if (drawCanvas) {
       keepAnimating = hasActiveFadeStrokes(strokes, now);
-      if (keepAnimating || hadActive) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+      if (keepAnimating || hadActive) {
+        if (keepAnimating && now - lastFadeRedrawWallMs < FADE_REDRAW_MIN_MS) {
+          hadActive = keepAnimating;
+          fadeAnimationRaf = requestAnimationFrame(tick);
+          return;
+        }
+        lastFadeRedrawWallMs = now;
+        drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+      }
     }
     hadActive = keepAnimating;
     if (keepAnimating) fadeAnimationRaf = requestAnimationFrame(tick);
@@ -385,7 +399,7 @@ function savePdfPageState() {
 }
 
 async function savePdfStrokesAndBroadcast(pageNum, strokes, skipBroadcast = false) {
-  if (!currentPdfShareToken) return;
+  if (!currentPdfShareToken || sharedDocReadOnly) return;
   const sh = pdfStrokesByPage[pdfPageNum]?.shapes ?? pdfShapes;
   const fsh = pdfStrokesByPage[pdfPageNum]?.fillShapes ?? pdfFillShapes;
   const ok = await savePageStrokes(currentPdfShareToken, pageNum, strokes, sh, fsh);
@@ -2193,6 +2207,35 @@ function drawPointerOnCanvas(canvas) {
   ctx.restore();
 }
 
+function applySharedDocViewerMode(on) {
+  sharedDocReadOnly = !!on;
+  document.body.classList.toggle("shared-doc-viewer", on);
+  if (on) {
+    drawMode = false;
+    drawBtn?.classList.remove("active");
+    if (pdfDrawCanvas) {
+      pdfDrawCanvas.style.pointerEvents = "none";
+      pdfDrawCanvas.style.cursor = "default";
+    }
+    if (pptxDrawCanvas) {
+      pptxDrawCanvas.style.pointerEvents = "none";
+      pptxDrawCanvas.style.cursor = "default";
+    }
+    setTimeout(() => {
+      if (!document.fullscreenElement) toggleCanvasFullscreen();
+    }, 450);
+  } else {
+    if (pdfDrawCanvas && pdfMode) {
+      pdfDrawCanvas.style.pointerEvents = "auto";
+      pdfDrawCanvas.style.cursor = "crosshair";
+    }
+    if (pptxDrawCanvas && pptxMode) {
+      pptxDrawCanvas.style.pointerEvents = "auto";
+      pptxDrawCanvas.style.cursor = "crosshair";
+    }
+  }
+}
+
 async function loadPdfFromShareToken(shareToken, password = null) {
   if (!shareToken || !supabase) return false;
   try {
@@ -2203,6 +2246,7 @@ async function loadPdfFromShareToken(shareToken, password = null) {
     if (row.needs_password === true) {
       return { needsPassword: true };
     }
+    const accessMode = row.access_mode || "editor";
     const storagePath = row.storage_path;
     if (!storagePath) throw new Error("PDF bulunamadı");
     const { data: urlData } = supabase.storage.from("pdfs").getPublicUrl(storagePath);
@@ -2323,9 +2367,12 @@ async function loadPdfFromShareToken(shareToken, password = null) {
     pdfRealtimeBroadcast = sub?.broadcast;
     pdfRealtimeBroadcastProgress = sub?.broadcastProgress;
     setTimeout(() => scheduleDocRefitStable(), 100);
+    applySharedDocViewerMode(accessMode === "viewer");
     return true;
   } catch (err) {
     console.error("PDF yükleme hatası:", err);
+    sharedDocReadOnly = false;
+    document.body.classList.remove("shared-doc-viewer");
     alert("PDF açılamadı: " + (err.message || "Bilinmeyen hata"));
     return false;
   }
@@ -2339,6 +2386,7 @@ async function loadPptxFromShareToken(shareToken, password = null) {
     const row = data?.[0];
     if (!row) throw new Error("Документ не найден");
     if (row.needs_password === true) return { needsPassword: true };
+    const accessMode = row.access_mode || "editor";
     const storagePath = row.storage_path;
     if (!storagePath) throw new Error("Документ не найден");
     const { data: urlData } = supabase.storage.from("pdfs").getPublicUrl(storagePath);
@@ -2438,9 +2486,12 @@ async function loadPptxFromShareToken(shareToken, password = null) {
     pptxRealtimeBroadcast = sub?.broadcast;
     pptxRealtimeBroadcastProgress = sub?.broadcastProgress;
     setTimeout(() => scheduleDocRefitStable(), 100);
+    applySharedDocViewerMode(accessMode === "viewer");
     return true;
   } catch (err) {
     console.error("PPTX load error:", err);
+    sharedDocReadOnly = false;
+    document.body.classList.remove("shared-doc-viewer");
     alert("Не удалось загрузить презентацию: " + (err.message || "Неизвестная ошибка"));
     return false;
   }
@@ -2452,7 +2503,7 @@ let pptxRealtimeBroadcastProgress = null;
 let pptxRemoteCurrentStroke = null;
 
 async function savePptxStrokesAndBroadcast(pageNum, strokes, skipBroadcast = false) {
-  if (!currentPptxShareToken) return;
+  if (!currentPptxShareToken || sharedDocReadOnly) return;
   const sh = pptxShapes;
   const fsh = pptxFillShapes;
   const ok = await savePageStrokes(currentPptxShareToken, pageNum, strokes, sh, fsh);
@@ -2506,6 +2557,7 @@ function setupPdfDrawing() {
   };
   let pdfEraserActive = false;
   const onStart = (e) => {
+    if (sharedDocReadOnly) return;
     if (!pdfMode || !pdfDoc) return;
     e.preventDefault();
     const p = getNorm(e);
@@ -3485,6 +3537,7 @@ function setupPptxDrawing() {
   };
   let pptxEraserActive = false;
   const onStart = (e) => {
+    if (sharedDocReadOnly) return;
     if (!pptxMode || !pptxViewer) return;
     e.preventDefault();
     const p = getNorm(e);
@@ -4279,6 +4332,49 @@ function detectLoop() {
   loopId = requestAnimationFrame(detectLoop);
 }
 
+async function ensureMediaPipeModelsLoaded() {
+  if (poseLandmarker && faceLandmarker && handLandmarker) return;
+  if (!mediaPipeLoadPromise) {
+    mediaPipeLoadPromise = (async () => {
+      const vision = await FilesetResolver.forVisionTasks(WASM);
+      const [p, f, h] = await Promise.all([
+        PoseLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: POSE_MODEL, delegate: "GPU" },
+          runningMode: "VIDEO",
+          numPoses: 1,
+          minPoseDetectionConfidence: 0.4,
+          minPosePresenceConfidence: 0.25,
+          minTrackingConfidence: 0.25,
+        }),
+        FaceLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: FACE_MODEL, delegate: "GPU" },
+          runningMode: "VIDEO",
+          numFaces: 1,
+          outputFaceBlendshapes: true,
+        }),
+        HandLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: HAND_MODEL, delegate: "GPU" },
+          runningMode: "VIDEO",
+          numHands: 2,
+          minHandDetectionConfidence: 0.2,
+          minHandPresenceConfidence: 0.2,
+          minTrackingConfidence: 0.2,
+        }),
+      ]);
+      poseLandmarker = p;
+      faceLandmarker = f;
+      handLandmarker = h;
+    })();
+  }
+  try {
+    await mediaPipeLoadPromise;
+  } catch (err) {
+    mediaPipeLoadPromise = null;
+    poseLandmarker = faceLandmarker = handLandmarker = null;
+    console.error("Ошибка загрузки модели:", err);
+  }
+}
+
 // ========== ЗАПУСК КАМЕРЫ ==========
 async function startCamera() {
   try {
@@ -4294,11 +4390,13 @@ async function startCamera() {
       throw new Error("Ваш браузер не поддерживает камеру. Используйте Chrome или Firefox.");
     }
 
+    ensureMediaPipeModelsLoaded().catch(() => {});
+
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: "user",
-        width: { ideal: VIDEO_WIDTH },
-        height: { ideal: VIDEO_HEIGHT },
+        width: { ideal: VIDEO_WIDTH, max: 1920 },
+        height: { ideal: VIDEO_HEIGHT, max: 1080 },
       },
       audio: false,
     });
@@ -4347,39 +4445,6 @@ async function startCamera() {
 
     lastVideoTime = -1;
     detectLoop();
-
-    // Загрузка моделей в фоне — камера работает сразу
-    if (!poseLandmarker) {
-      (async () => {
-        try {
-          const vision = await FilesetResolver.forVisionTasks(WASM);
-          poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-            baseOptions: { modelAssetPath: POSE_MODEL, delegate: "GPU" },
-            runningMode: "VIDEO",
-            numPoses: 1,
-            minPoseDetectionConfidence: 0.4,
-            minPosePresenceConfidence: 0.25,
-            minTrackingConfidence: 0.25,
-          });
-          faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-            baseOptions: { modelAssetPath: FACE_MODEL, delegate: "GPU" },
-            runningMode: "VIDEO",
-            numFaces: 1,
-            outputFaceBlendshapes: true,
-          });
-          handLandmarker = await HandLandmarker.createFromOptions(vision, {
-            baseOptions: { modelAssetPath: HAND_MODEL, delegate: "GPU" },
-            runningMode: "VIDEO",
-            numHands: 2,
-            minHandDetectionConfidence: 0.2,
-            minHandPresenceConfidence: 0.2,
-            minTrackingConfidence: 0.2,
-          });
-        } catch (modelErr) {
-          console.error("Ошибка загрузки модели:", modelErr);
-        }
-      })();
-    }
   } catch (err) {
     console.error("Ошибка камеры:", err);
     startBtn.textContent = "Запустить камеру";
@@ -5019,6 +5084,11 @@ textInputOverlay?.addEventListener("blur", () => {
   else textInputOverlay.style.display = "none";
 });
 function commitTextInput() {
+  if (sharedDocReadOnly) {
+    textInputOverlay.style.display = "none";
+    textInputOverlay.value = "";
+    return;
+  }
   const txt = textInputOverlay?.value?.trim();
   const x = parseFloat(textInputOverlay?.dataset.pendingX || "0");
   const y = parseFloat(textInputOverlay?.dataset.pendingY || "0");
@@ -5785,18 +5855,12 @@ if (urlParams.get("embed") === "1") {
   if (dashLink) dashLink.target = "_top";
 }
 
-(function startFadeLoop() {
-  let lastTick = 0;
-  function fadeTick(ts) {
-    if (canvasFadeEnabled && ts - lastTick > 50) {
-      lastTick = ts;
-      if (pdfMode && pdfDoc && pdfStrokes.some(s => s._ts) && pdfDrawCanvas) {
-        drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
-      } else if (!pdfMode && strokes.some(s => s._ts) && drawCanvas) {
-        drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
-      }
-    }
-    requestAnimationFrame(fadeTick);
+(function scheduleMediaPipePrefetch() {
+  const run = () => ensureMediaPipeModelsLoaded().catch(() => {});
+  if (typeof requestIdleCallback !== "undefined") {
+    requestIdleCallback(run, { timeout: 12000 });
+  } else {
+    setTimeout(run, 2000);
   }
-  requestAnimationFrame(fadeTick);
 })();
+

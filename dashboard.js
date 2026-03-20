@@ -2,7 +2,7 @@
  * Dashboard - PDF ve çizim belgeleri
  */
 import { supabase } from "./supabase-config.js";
-import { uploadPdfToSupabase, deletePdfFromSupabase, setPdfSharePassword } from "./supabase-pdf.js";
+import { uploadPdfToSupabase, deletePdfFromSupabase, setPdfSharePasswords } from "./supabase-pdf.js";
 import { createCanvas, deleteCanvas, listCanvases, setCanvasSharePassword } from "./supabase-canvas.js";
 
 if (!supabase) {
@@ -164,7 +164,7 @@ async function loadDocuments() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
   const [pdfRes, canvases] = await Promise.all([
-    supabase.from("pdfs").select("id, file_name, share_token, storage_path, created_at, share_password_hash").eq("user_id", user.id).order("created_at", { ascending: false }),
+    supabase.from("pdfs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
     listCanvases(),
   ]);
   const pdfError = pdfRes.error;
@@ -200,7 +200,7 @@ async function loadDocuments() {
     div.className = "dash-pdf-item";
     div.style.animationDelay = `${0.05 * i}s`;
     const date = row.date ? new Date(row.date).toLocaleDateString("tr-TR") : "";
-    const hasPwd = !!(row.share_password_hash);
+    const hasPwd = !!(row.share_password_hash || row.share_viewer_password_hash);
     const icon = row.type === "pdf" ? "&#x1F4C4;" : row.type === "pptx" ? "&#x1F4FA;" : "&#x270F;&#xFE0F;";
     const openHref = (row.type === "pdf" || row.type === "pptx") ? `/index.html?id=${row.share_token}` : `/index.html?canvas=${row.share_token}`;
     const deleteData = (row.type === "pdf" || row.type === "pptx")
@@ -214,7 +214,7 @@ async function loadDocuments() {
       </div>
       <div class="dash-pdf-actions">
         <a href="${openHref}" class="dash-btn dash-btn-primary" style="font-size:0.8rem;padding:0.5rem 1rem;">Открыть</a>
-        <button type="button" class="dash-btn dash-btn-ghost doc-password-btn" style="font-size:0.8rem;padding:0.5rem 0.8rem;" data-share="${row.share_token}" data-type="${row.type}" title="${hasPwd ? 'Изменить пароль' : 'Добавить пароль'}">&#x1F512;</button>
+        <button type="button" class="dash-btn dash-btn-ghost doc-password-btn" style="font-size:0.8rem;padding:0.5rem 0.8rem;" data-share="${row.share_token}" data-doc-id="${row.type === "canvas" ? "" : (row.id || "")}" data-type="${row.type}" title="${hasPwd ? 'Изменить пароль' : 'Добавить пароль'}">&#x1F512;</button>
         <button type="button" class="dash-btn dash-btn-danger-ghost doc-delete-btn" style="font-size:0.8rem;padding:0.5rem 0.8rem;" ${deleteData} title="Удалить">Удалить</button>
       </div>
     `;
@@ -246,13 +246,14 @@ fileInput.addEventListener("change", async (e) => {
   }
   showUploadError("");
   const sharePassword = document.getElementById("uploadPasswordInput")?.value?.trim() || null;
+  const viewerPassword = document.getElementById("uploadViewerPasswordInput")?.value?.trim() || null;
   const btnSpan = uploadZone.querySelector("button span");
   const btnText = uploadZone.querySelector("button");
   if (btnText) btnText.style.opacity = "0.6";
   if (btnSpan) btnSpan.textContent = "...";
   let err = null;
   try {
-    const result = await uploadPdfToSupabase(file, null, (e) => { err = e; }, sharePassword);
+    const result = await uploadPdfToSupabase(file, null, (e) => { err = e; }, sharePassword, viewerPassword);
     if (btnText) btnText.style.opacity = "1";
     if (btnSpan) btnSpan.textContent = "+";
     e.target.value = "";
@@ -299,17 +300,34 @@ pdfList.addEventListener("click", async (e) => {
   if (pwdBtn) {
     e.preventDefault();
     passwordModalType = pwdBtn.dataset.type || "pdf";
-    openPasswordModal(pwdBtn.dataset.share);
+    const docId = (pwdBtn.dataset.docId || "").trim();
+    openPasswordModal(pwdBtn.dataset.share, docId || null);
   }
 });
 
 let passwordModalShareToken = null;
-function openPasswordModal(shareToken) {
+/** PDF/PPTX satırı için pdfs.id (UUID); canvas’ta null */
+let passwordModalPdfId = null;
+function openPasswordModal(shareToken, pdfRowId) {
   passwordModalShareToken = shareToken;
+  passwordModalPdfId = pdfRowId || null;
   const modal = document.getElementById("passwordModal");
   const input = document.getElementById("modalPasswordInput");
+  const viewerWrap = document.getElementById("modalViewerPasswordWrap");
+  const label = document.getElementById("modalPasswordLabel");
+  const desc = document.getElementById("passwordModalDesc");
+  const vIn = document.getElementById("modalViewerPasswordInput");
   if (modal && input) {
     input.value = "";
+    if (vIn) vIn.value = "";
+    if (viewerWrap) viewerWrap.style.display = passwordModalType === "canvas" ? "none" : "block";
+    if (label) label.textContent = passwordModalType === "canvas" ? "Пароль" : "Пароль ведущего (полный доступ)";
+    if (desc) {
+      desc.style.display = "block";
+      desc.textContent = passwordModalType === "canvas"
+        ? "Только владелец и те, кому вы дадите пароль, откроют документ."
+        : "Ведущий: рисование и управление. Зритель: только просмотр полноэкранной презентации.";
+    }
     modal.style.display = "flex";
     input.focus();
   }
@@ -317,6 +335,7 @@ function openPasswordModal(shareToken) {
 
 function closePasswordModal() {
   passwordModalShareToken = null;
+  passwordModalPdfId = null;
   const modal = document.getElementById("passwordModal");
   const input = document.getElementById("modalPasswordInput");
   if (modal) modal.style.display = "none";
@@ -324,28 +343,35 @@ function closePasswordModal() {
 }
 
 document.getElementById("modalPasswordSave")?.addEventListener("click", async () => {
-  const pwd = document.getElementById("modalPasswordInput")?.value?.trim();
   if (!passwordModalShareToken) return;
-  if (!pwd) {
-    alert("Введите пароль");
+  if (passwordModalType === "canvas") {
+    const pwd = document.getElementById("modalPasswordInput")?.value?.trim();
+    if (!pwd) {
+      alert("Введите пароль");
+      return;
+    }
+    const ok = await setCanvasSharePassword(passwordModalShareToken, pwd);
+    closePasswordModal();
+    if (ok) await loadDocuments();
+    else alert("Ошибка сохранения пароля");
     return;
   }
-  const ok = passwordModalType === "canvas"
-    ? await setCanvasSharePassword(passwordModalShareToken, pwd)
-    : await setPdfSharePassword(passwordModalShareToken, pwd);
+  const ed = document.getElementById("modalPasswordInput")?.value?.trim() || null;
+  const vw = document.getElementById("modalViewerPasswordInput")?.value?.trim() || null;
+  const res = await setPdfSharePasswords(passwordModalShareToken, ed, vw, passwordModalPdfId);
   closePasswordModal();
-  if (ok) await loadDocuments();
-  else alert("Ошибка сохранения пароля");
+  if (res.ok) await loadDocuments();
+  else alert(res.error || "Ошибка сохранения паролей");
 });
 
 document.getElementById("modalPasswordRemove")?.addEventListener("click", async () => {
   if (!passwordModalShareToken) return;
-  const ok = passwordModalType === "canvas"
-    ? await setCanvasSharePassword(passwordModalShareToken, "")
-    : await setPdfSharePassword(passwordModalShareToken, "");
+  const res = passwordModalType === "canvas"
+    ? { ok: await setCanvasSharePassword(passwordModalShareToken, "") }
+    : await setPdfSharePasswords(passwordModalShareToken, "", "", passwordModalPdfId);
   closePasswordModal();
-  if (ok) await loadDocuments();
-  else alert("Ошибка удаления пароля");
+  if (res.ok) await loadDocuments();
+  else alert(res.error || "Ошибка удаления пароля");
 });
 
 document.getElementById("modalPasswordCancel")?.addEventListener("click", closePasswordModal);

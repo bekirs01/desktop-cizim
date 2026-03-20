@@ -7,6 +7,8 @@
   <title>DrawFlow | Рисование</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://storage.googleapis.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script>
     (function(){
@@ -18,7 +20,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
   <script type="module">
     import { supabase } from './supabase-config.js';
     if (supabase) {
@@ -182,7 +184,7 @@
           <div id="pdfPasswordOverlay" class="pdf-password-overlay" style="display:none">
             <div class="pdf-password-box">
               <h3 id="passwordOverlayTitle">&#x1F512; Пароль для доступа</h3>
-              <p id="passwordOverlayDesc">Этот документ защищён паролем. Введите пароль, чтобы открыть.</p>
+              <p id="passwordOverlayDesc">Документ защищён. Введите пароль ведущего (полный доступ) или пароль зрителя (только просмотр).</p>
               <input type="password" id="pdfPasswordInput" placeholder="Пароль" autocomplete="current-password">
               <p id="pdfPasswordError" class="pdf-password-error" style="display:none">Неверный пароль</p>
               <button type="button" id="pdfPasswordSubmit" class="btn btn-primary">Открыть</button>
@@ -273,6 +275,6 @@
       </section>
     </main>
   </div>
-  <script type="module" src="script.js?v=4"></script>
+  <script type="module" src="script.js?v=5"></script>
 </body>
 </html>

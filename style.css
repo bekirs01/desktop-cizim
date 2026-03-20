@@ -581,14 +581,13 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   max-height: min(92vh, 1100px);
   opacity: 1;
   pointer-events: auto;
+  overflow: visible;
 }
 
-.draw-toolbar.draw-toolbar--open:not(.draw-toolbar--interactive) .toolbar-compact {
-  pointer-events: none;
-}
-
-.draw-toolbar.draw-toolbar--open.draw-toolbar--interactive .toolbar-compact {
+/* Кнопки должны быть кликабельны сразу при открытии панели (раньше ждали 340ms + класс --interactive). */
+.draw-toolbar.draw-toolbar--open .toolbar-compact {
   pointer-events: auto;
+  overflow: visible;
 }
 
 .draw-toolbar:not(.draw-toolbar--open) .toolbar-compact {
@@ -612,6 +611,7 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   }
   .draw-toolbar .toolbar-compact {
     pointer-events: auto !important;
+    overflow: visible !important;
   }
 }
 
@@ -764,6 +764,9 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
 .toolbar-popover.visible { display: block; }
 .toolbar-popover-wide { min-width: 220px; }
 .toolbar-popover-slider { min-width: 200px; padding: 12px 14px; }
+.draw-toolbar .toolbar-popover.visible {
+  z-index: 100;
+}
 .thickness-tool-btn,
 .opacity-tool-btn {
   display: flex;
@@ -1373,6 +1376,25 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
 
 .tool-btns { display: flex; flex-direction: row; flex-wrap: wrap; gap: 0.35rem; }
 .toolbar-row .shape-btns { display: flex; flex-wrap: wrap; gap: 0.35rem; max-height: none; overflow: visible; }
+
+/* ========== Paylaşılan belge — öğrenci (salt izleme) ========== */
+body.shared-doc-viewer #drawToolbar,
+body.shared-doc-viewer #pdfZoomGroup {
+  display: none !important;
+}
+body.shared-doc-viewer #exportDocBtn,
+body.shared-doc-viewer #pdfLinkBtn,
+body.shared-doc-viewer #gestureControlBtn,
+body.shared-doc-viewer #handPreferenceGroup,
+body.shared-doc-viewer #canvasSharedToggleBtn,
+body.shared-doc-viewer #canvasLinkBtn {
+  display: none !important;
+}
+body.shared-doc-viewer #clearPageBtn,
+body.shared-doc-viewer #undoBtn,
+body.shared-doc-viewer #redoBtn {
+  display: none !important;
+}
 
 /* ========== Scrollbar ========== */
 ::-webkit-scrollbar { width: 6px; }
