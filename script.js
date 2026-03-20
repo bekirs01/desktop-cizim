@@ -2853,18 +2853,27 @@ async function renderPptxSlide() {
   if (!pptxViewer || !pptxCanvas || !pptxDrawCanvas) return;
   const container = pptxContainer;
   const fs = isCanvasFullscreenMode();
-  let maxW;
-  if (fs) {
-    maxW = document.documentElement.clientWidth || window.innerWidth || screen.width;
-  } else {
-    maxW = container?.clientWidth || 800;
-  }
   const inferred = pptxViewer.getSlideSize?.() || pptxViewer.getPresentationSize?.() || pptxViewer.slideSize || pptxViewer.presentationSize;
   if (inferred && Number.isFinite(inferred.width) && Number.isFinite(inferred.height) && inferred.width > 0 && inferred.height > 0) {
     pptxAspectRatio = inferred.width / inferred.height;
   }
-  const targetW = Math.max(1, Math.ceil(maxW));
-  const targetH = Math.max(1, Math.round(targetW / pptxAspectRatio));
+  let targetW, targetH;
+  if (fs) {
+    const rect = container?.getBoundingClientRect();
+    const availW = rect?.width || window.innerWidth || screen.width;
+    const availH = rect?.height || window.innerHeight || screen.height;
+    targetW = Math.round(availW);
+    targetH = Math.round(targetW / pptxAspectRatio);
+    if (targetH > availH) {
+      targetH = Math.round(availH);
+      targetW = Math.round(targetH * pptxAspectRatio);
+    }
+  } else {
+    targetW = Math.ceil(container?.clientWidth || 800);
+    targetH = Math.round(targetW / pptxAspectRatio);
+  }
+  targetW = Math.max(1, targetW);
+  targetH = Math.max(1, targetH);
   setWrapperAspect(targetW, targetH);
   pptxCanvas.width = targetW;
   pptxCanvas.height = targetH;
