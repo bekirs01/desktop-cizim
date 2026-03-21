@@ -116,6 +116,14 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   margin: 0 auto;
   flex-shrink: 0;
 }
+/* Match pdf-loaded flex fill in fullscreen; pptx-loaded alone used flex:0 0 auto and could confuse layout. */
+.app.canvas-fullscreen .camera-wrapper.pptx-mode.pptx-loaded {
+  flex: 1 1 0;
+  min-height: 0;
+  align-self: stretch;
+  width: 100%;
+  max-width: none;
+}
 .exit-fullscreen-btn { position: absolute; top: 8px; right: 8px; z-index: 60; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: rgba(0,0,0,0.6); color: #fff; font-size: 1.2rem; cursor: pointer; display: none; }
 .app.canvas-fullscreen .exit-fullscreen-btn { display: flex; align-items: center; justify-content: center; }
 

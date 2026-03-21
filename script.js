@@ -1936,7 +1936,10 @@ function updateHeaderTitle() {
 
 function isCanvasFullscreenMode() {
   const app = document.querySelector(".app");
-  return !!document.fullscreenElement && document.fullscreenElement === app;
+  return !!(
+    app?.classList.contains("canvas-fullscreen") ||
+    (document.fullscreenElement && document.fullscreenElement === app)
+  );
 }
 
 function setWrapperAspect(width, height) {
@@ -3462,34 +3465,47 @@ async function renderPptxSlide() {
   if (!pptxViewer || !pptxCanvas || !pptxDrawCanvas) return;
   const container = pptxContainer;
   const fs = isCanvasFullscreenMode();
-  const inferred = pptxViewer.getSlideSize?.() || pptxViewer.getPresentationSize?.() || pptxViewer.slideSize || pptxViewer.presentationSize;
-  if (inferred && Number.isFinite(inferred.width) && Number.isFinite(inferred.height) && inferred.width > 0 && inferred.height > 0) {
-    pptxAspectRatio = inferred.width / inferred.height;
+  // pptxviewjs centers the slide with Math.min(scaleX, scaleY); canvas aspect must match slide EMU aspect
+  // or gutters appear inside the bitmap and ink no longer lines up. Prefer getSlideDimensions() (cx/cy).
+  const emu = pptxViewer.getSlideDimensions?.();
+  if (emu && Number.isFinite(emu.cx) && Number.isFinite(emu.cy) && emu.cx > 0 && emu.cy > 0) {
+    pptxAspectRatio = emu.cx / emu.cy;
+  } else {
+    const inferred = pptxViewer.getSlideSize?.() || pptxViewer.getPresentationSize?.() || pptxViewer.slideSize || pptxViewer.presentationSize;
+    if (inferred && Number.isFinite(inferred.width) && Number.isFinite(inferred.height) && inferred.width > 0 && inferred.height > 0) {
+      pptxAspectRatio = inferred.width / inferred.height;
+    }
   }
   let targetW, targetH;
-  if (fs) {
-    const rect = container?.getBoundingClientRect();
-    const availW = rect?.width || window.innerWidth || screen.width;
-    const availH = rect?.height || window.innerHeight || screen.height;
-    targetW = Math.round(availW);
-    targetH = Math.round(targetW / pptxAspectRatio);
-    if (targetH > availH) {
-      targetH = Math.round(availH);
-      targetW = Math.round(targetH * pptxAspectRatio);
-    }
-  } else {
-    targetW = Math.ceil(container?.clientWidth || 800);
-    targetH = Math.round(targetW / pptxAspectRatio);
-  }
-  targetW = Math.max(1, targetW);
-  targetH = Math.max(1, targetH);
+  const availW = fs
+    ? (cameraWrapper?.clientWidth || container?.clientWidth || window.innerWidth || screen.width)
+    : (container?.clientWidth || 800);
+  targetW = Math.max(1, Math.ceil(availW));
+  targetH = Math.max(1, Math.round(targetW / pptxAspectRatio));
   setWrapperAspect(targetW, targetH);
+  pptxCanvas.style.width = "";
+  pptxCanvas.style.height = "";
+  pptxDrawCanvas.style.width = "";
+  pptxDrawCanvas.style.height = "";
   pptxCanvas.width = targetW;
   pptxCanvas.height = targetH;
   pptxDrawCanvas.width = targetW;
   pptxDrawCanvas.height = targetH;
   await pptxViewer.goToSlide(pptxPageNum - 1);
   await pptxViewer.render();
+  const dpr = typeof window !== "undefined" && window.devicePixelRatio ? window.devicePixelRatio : 1;
+  let lw = parseFloat(pptxCanvas.style.width);
+  let lh = parseFloat(pptxCanvas.style.height);
+  if (!(lw > 0 && lh > 0)) {
+    lw = Math.max(1, Math.round(pptxCanvas.width / dpr));
+    lh = Math.max(1, Math.round(pptxCanvas.height / dpr));
+  }
+  lw = Math.max(1, Math.round(lw));
+  lh = Math.max(1, Math.round(lh));
+  if (pptxDrawCanvas.width !== lw || pptxDrawCanvas.height !== lh) {
+    pptxDrawCanvas.width = lw;
+    pptxDrawCanvas.height = lh;
+  }
   drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
 }
 
