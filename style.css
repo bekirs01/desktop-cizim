@@ -1295,6 +1295,78 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
 
 .pdf-password-box .btn { width: 100%; }
 
+/* Share link + QR (script.js) */
+.share-link-qr-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.share-link-qr-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  max-width: 380px;
+  width: 100%;
+  box-shadow: var(--shadow-lg);
+}
+
+.share-link-qr-box h3 {
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem;
+}
+
+.share-link-qr-input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  margin-bottom: 1rem;
+  box-sizing: border-box;
+}
+
+.share-link-qr-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.share-link-qr-img-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.share-link-qr-img {
+  display: block;
+  width: 220px;
+  height: 220px;
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+
+.share-link-qr-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.share-link-qr-btns .btn {
+  flex: 1;
+  min-width: 120px;
+}
+
 /* ========== Error / Warning ========== */
 .error-message {
   position: absolute;

@@ -26,6 +26,7 @@ const ROUTES = {
   "/": "/index.html",
   "/dashboard": "/dashboard.html",
   "/login": "/login.html",
+  "/help": "/help.html",
 };
 
 const server = http.createServer((req, res) => {

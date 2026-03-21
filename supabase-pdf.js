@@ -14,6 +14,12 @@ async function hashPassword(password) {
     .join("");
 }
 
+function editorAndViewerPasswordsConflict(editorPassword, viewerPassword) {
+  const ed = editorPassword && String(editorPassword).trim() ? String(editorPassword).trim() : null;
+  const vw = viewerPassword && String(viewerPassword).trim() ? String(viewerPassword).trim() : null;
+  return !!(ed && vw && ed === vw);
+}
+
 /** sharePassword = öğretmen (çizim), viewerPassword = öğrenci (salt izleme) */
 export async function uploadPdfToSupabase(file, onSuccess, onError, sharePassword = null, viewerPassword = null) {
   if (!supabase) {
@@ -21,6 +27,10 @@ export async function uploadPdfToSupabase(file, onSuccess, onError, sharePasswor
     return null;
   }
   try {
+    if (editorAndViewerPasswordsConflict(sharePassword, viewerPassword)) {
+      onError?.("Пароли ведущего и зрителя не должны совпадать.");
+      return null;
+    }
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       onError?.("Giriş yapılmamış");
@@ -94,6 +104,9 @@ async function updatePdfPasswordsOnRow(shareToken, editorPassword, viewerPasswor
   const { data: { session } } = await supabase.auth.getSession();
   const user = session?.user;
   if (!user) return { ok: false, error: "Oturum yok; yeniden giriş yapın." };
+  if (editorAndViewerPasswordsConflict(editorPassword, viewerPassword)) {
+    return { ok: false, error: "Пароли ведущего и зрителя не должны совпадать." };
+  }
   const ed = editorPassword && String(editorPassword).trim() ? String(editorPassword).trim() : null;
   const vw = viewerPassword && String(viewerPassword).trim() ? String(viewerPassword).trim() : null;
   const edHash = ed ? await hashPassword(ed) : null;
@@ -131,6 +144,9 @@ async function updatePdfPasswordsOnRow(shareToken, editorPassword, viewerPasswor
 /** İki şifre: öğretmen (tam erişim) + öğrenci (salt izleme). Boş = o şifreyi kaldır. pdfRowId = pdfs.id (UUID) */
 export async function setPdfSharePasswords(shareToken, editorPassword, viewerPassword, pdfRowId = null) {
   if (!supabase || !shareToken) return { ok: false, error: "Supabase veya token yok" };
+  if (editorAndViewerPasswordsConflict(editorPassword, viewerPassword)) {
+    return { ok: false, error: "Пароли ведущего и зрителя не должны совпадать." };
+  }
   const ed = editorPassword && String(editorPassword).trim() ? String(editorPassword).trim() : null;
   const vw = viewerPassword && String(viewerPassword).trim() ? String(viewerPassword).trim() : null;
 

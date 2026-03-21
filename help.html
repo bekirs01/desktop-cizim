@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DrawFlow | Справка</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --dash-bg: #050508;
+      --dash-bg-end: #0f0a1a;
+      --dash-glass: rgba(255, 255, 255, 0.04);
+      --dash-glass-border: rgba(255, 255, 255, 0.08);
+      --dash-glass-hover: rgba(255, 255, 255, 0.07);
+      --dash-surface: rgba(17, 17, 24, 0.6);
+      --dash-border-hover: rgba(255, 255, 255, 0.15);
+      --dash-accent: #6c5ce7;
+      --dash-accent-light: #a29bfe;
+      --dash-accent-glow: rgba(108, 92, 231, 0.3);
+      --dash-green: #00cec9;
+      --dash-text: #e8e8f0;
+      --dash-text-dim: #8a8aa0;
+      --dash-text-mid: #a0a0b8;
+      --dash-radius: 16px;
+      --dash-radius-sm: 12px;
+      --dash-font: 'Inter', -apple-system, system-ui, sans-serif;
+    }
+
+    body {
+      font-family: var(--dash-font);
+      background: linear-gradient(160deg, var(--dash-bg) 0%, var(--dash-bg-end) 50%, #0a0512 100%);
+      color: var(--dash-text);
+      min-height: 100vh;
+      margin: 0;
+    }
+
+    .liquid-glass {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+    .liquid-glass .blob {
+      position: absolute;
+      border-radius: 50%;
+      opacity: 0.85;
+    }
+    .liquid-glass .blob-1 {
+      top: -15%;
+      right: -10%;
+      width: 55%;
+      height: 65%;
+      background: radial-gradient(ellipse 80% 70% at 30% 40%, rgba(191,36,255,0.35) 0%, transparent 65%);
+      filter: blur(70px);
+    }
+    .liquid-glass .blob-2 {
+      bottom: -20%;
+      left: -15%;
+      width: 50%;
+      height: 60%;
+      background: radial-gradient(ellipse 75% 65% at 60% 50%, rgba(36,142,255,0.3) 0%, transparent 65%);
+      filter: blur(65px);
+    }
+
+    .dash-app {
+      position: relative;
+      z-index: 1;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    .dash-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 0;
+      margin-bottom: 2rem;
+    }
+
+    .dash-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .dash-brand-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(108, 92, 231, 0.9), rgba(0, 206, 201, 0.8));
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      box-shadow: 0 4px 20px var(--dash-accent-glow);
+    }
+
+    .dash-brand-text {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, var(--dash-accent-light), var(--dash-green));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .dash-btn {
+      padding: 0.6rem 1.2rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      font-family: var(--dash-font);
+      border: none;
+      border-radius: var(--dash-radius-sm);
+      cursor: pointer;
+      transition: all 0.25s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      text-decoration: none;
+    }
+
+    .dash-btn-ghost {
+      background: var(--dash-glass);
+      color: var(--dash-text-mid);
+      border: 1px solid var(--dash-glass-border);
+      backdrop-filter: blur(12px);
+    }
+
+    .dash-btn-ghost:hover {
+      color: var(--dash-text);
+      background: var(--dash-glass-hover);
+      border-color: var(--dash-border-hover);
+    }
+
+    .help-main {
+      background: var(--dash-surface);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--dash-glass-border);
+      border-radius: var(--dash-radius);
+      padding: 1.75rem 2rem 2.25rem;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+    }
+
+    .help-main h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin: 0 0 0.75rem;
+    }
+
+    .help-section-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0 0 0.5rem;
+    }
+
+    .help-section-title.spaced {
+      margin-top: 2rem;
+    }
+
+    .help-hotkeys-list {
+      margin: 0 0 1rem;
+      padding-left: 1.2rem;
+      font-size: 0.9rem;
+      color: var(--dash-text-dim);
+      line-height: 1.6;
+    }
+
+    .help-hotkeys-list li {
+      margin-bottom: 0.4rem;
+    }
+
+    .help-hotkeys-list kbd {
+      display: inline-block;
+      padding: 0.12em 0.45em;
+      font-size: 0.82em;
+      font-family: ui-monospace, monospace;
+      background: var(--dash-glass);
+      border: 1px solid var(--dash-glass-border);
+      border-radius: 4px;
+      color: var(--dash-text);
+    }
+
+    .help-camera-wrap {
+      width: 100%;
+      margin-top: 0.5rem;
+      border-radius: var(--dash-radius-sm);
+      overflow: hidden;
+      border: 1px solid var(--dash-glass-border);
+      background: #0a0a0f;
+      height: clamp(340px, min(56vw, 62vh), 720px);
+    }
+
+    .help-camera-wrap iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+    }
+
+    .help-camera-hint {
+      font-size: 0.82rem;
+      color: var(--dash-text-dim);
+      margin: 0.85rem 0 0.35rem;
+      line-height: 1.5;
+      max-width: 68ch;
+    }
+
+    .help-gesture-tips {
+      margin: 0;
+      padding-left: 1.15rem;
+      font-size: 0.8rem;
+      color: var(--dash-text-dim);
+      line-height: 1.55;
+      max-width: 68ch;
+    }
+
+    .help-gesture-tips li {
+      margin-bottom: 0.35rem;
+    }
+
+    @media (max-width: 640px) {
+      .help-main { padding: 1.25rem 1.25rem 1.5rem; }
+      .help-camera-wrap { height: clamp(260px, 48vh, 420px); }
+    }
+  </style>
+</head>
+<body>
+  <div class="liquid-glass" aria-hidden="true">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+  </div>
+  <div class="dash-app">
+    <nav class="dash-nav">
+      <div class="dash-brand">
+        <div class="dash-brand-icon">&#x270D;</div>
+        <span class="dash-brand-text">DrawFlow</span>
+      </div>
+      <a href="/dashboard.html" class="dash-btn dash-btn-ghost">&larr; К документам</a>
+    </nav>
+
+    <main class="help-main">
+      <h1>Справка</h1>
+
+      <h2 class="help-section-title">Горячие клавиши</h2>
+      <ul class="help-hotkeys-list">
+        <li><kbd>←</kbd> <kbd>↑</kbd> <kbd>Page Up</kbd> — предыдущий слайд или страница холста</li>
+        <li><kbd>→</kbd> <kbd>↓</kbd> <kbd>Page Down</kbd> — следующий</li>
+        <li><kbd>F4</kbd> — включить или выключить управление жестами</li>
+        <li><kbd>Esc</kbd> — выход из полноэкранного режима</li>
+      </ul>
+
+      <h2 class="help-section-title spaced">Демонстрация жестов</h2>
+      <div class="help-camera-wrap">
+        <iframe id="helpCameraIframe" src="about:blank" title="Камера и жесты"></iframe>
+      </div>
+      <p class="help-camera-hint">Камера отслеживает движения рук. Здесь для наглядности показываются обе руки; на странице рисования (PDF, презентация, холст) выбор левой или правой руки — в панели инструментов.</p>
+      <ul class="help-gesture-tips">
+        <li><strong>Рисование:</strong> сомкните указательный и большой палец («щепотка») и ведите рукой — линия рисуется, пока палец сжат.</li>
+        <li><strong>Стирание:</strong> вытяните указательный и средний вместе, как «ножницы» — в этом положении работает ластик.</li>
+      </ul>
+    </main>
+  </div>
+  <script type="module" src="help.js"></script>
+</body>
+</html>

@@ -15,6 +15,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 import { supabase, getShareBaseUrl } from "./supabase-config.js";
 import { uploadPdfToSupabase } from "./supabase-pdf.js";
+import { showShareLinkWithQr } from "./share-qr.js";
 import { savePageStrokes as _savePageStrokes, deleteStrokesForPage, fetchStrokes, subscribeStrokes, deserializeFillShapes } from "./supabase-strokes.js";
 import { getCanvasByShareToken } from "./supabase-canvas.js";
 
@@ -149,6 +150,7 @@ const pdfUploadGroup = document.getElementById("pdfUploadGroup");
 const pdfOverlay = document.getElementById("pdfOverlay");
 const pdfPrevBtn = document.getElementById("pdfPrevBtn");
 const pdfNextBtn = document.getElementById("pdfNextBtn");
+const pdfNavGroup = document.getElementById("pdfNavGroup");
 const pdfPageInfo = document.getElementById("pdfPageInfo");
 const pdfClearBtn = document.getElementById("pdfClearBtn");
 const pdfCopyLinkBtn = document.getElementById("pdfCopyLinkBtn");
@@ -2302,7 +2304,6 @@ async function loadPdfFromShareToken(shareToken, password = null) {
     pptxMode = false;
     cameraWrapper?.classList.remove("white-sheet-mode", "black-sheet-mode", "pptx-mode", "pptx-loaded");
     cameraWrapper?.classList.add("pdf-mode");
-    const pdfNavGroup = document.getElementById("pdfNavGroup");
     if (pdfNavGroup) pdfNavGroup.style.display = "flex";
     const pdfZoomGroup = document.getElementById("pdfZoomGroup");
     if (pdfZoomGroup) pdfZoomGroup.style.display = "flex";
@@ -3308,6 +3309,7 @@ async function createOrCopyCanvasLink() {
       if (canvasLinkBtn) canvasLinkBtn.textContent = "Скопировано!";
       setTimeout(() => { if (canvasLinkBtn) canvasLinkBtn.textContent = orig; }, 1500);
     } catch (_) {}
+    await showShareLinkWithQr(link);
   }
 }
 
@@ -3853,10 +3855,14 @@ function detectLoop() {
           const handedness = handRes.handedness || [];
           handLandmarks = [];
           for (let i = 0; i < rawLm.length; i++) {
-            const h = handedness[i];
-            const label = (h?.[0]?.categoryName || h?.[0]?.display_name || (typeof h === "string" ? h : "") || "").toLowerCase();
-            if (label === preferredHand) {
+            if (embedTrackBothHands) {
               handLandmarks.push(rawLm[i]);
+            } else {
+              const h = handedness[i];
+              const label = (h?.[0]?.categoryName || h?.[0]?.display_name || (typeof h === "string" ? h : "") || "").toLowerCase();
+              if (label === preferredHand) {
+                handLandmarks.push(rawLm[i]);
+              }
             }
           }
           cachedHandLandmarks = handLandmarks;
@@ -4533,6 +4539,70 @@ function stopCamera() {
   }
 }
 
+// ========== Горячие клавиши (PDF / PPTX / многостраничный холст) ==========
+function isTextEntryShortcutTarget(el) {
+  if (!el || el.nodeType !== 1) return false;
+  const tag = el.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  if (el.isContentEditable) return true;
+  return false;
+}
+
+function shouldIgnoreDrawflowHotkeys(e) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return true;
+  if (isTextEntryShortcutTarget(e.target)) return true;
+  if (e.target.closest?.("#shareLinkQrOverlay")) return true;
+  const ti = document.getElementById("textInputOverlay");
+  if (ti && ti.style.display === "block") return true;
+  const pdfPwd = document.getElementById("pdfPasswordOverlay");
+  if (pdfPwd && pdfPwd.style.display === "flex") return true;
+  const clearM = document.getElementById("clearPageModal");
+  if (clearM && clearM.style.display === "flex") return true;
+  return false;
+}
+
+function tryNavigateCanvasPagePrev() {
+  if (!isCanvasDocument || !canvasPageNavGroup || canvasPageNavGroup.style.display === "none") return false;
+  if (canvasPrevBtn?.disabled) return false;
+  canvasPrevBtn.click();
+  return true;
+}
+
+function tryNavigateCanvasPageNext() {
+  if (!isCanvasDocument || !canvasPageNavGroup || canvasPageNavGroup.style.display === "none") return false;
+  if (canvasNextBtn?.disabled) return false;
+  canvasNextBtn.click();
+  return true;
+}
+
+function tryNavigatePdfPptxPrev() {
+  const docOk = (pdfMode && pdfDoc) || (pptxMode && pptxViewer);
+  if (!docOk) return false;
+  if (pdfNavGroup && pdfNavGroup.style.display === "none") return false;
+  if (pdfPrevBtn?.disabled) return false;
+  pdfPrevBtn.click();
+  return true;
+}
+
+function tryNavigatePdfPptxNext() {
+  const docOk = (pdfMode && pdfDoc) || (pptxMode && pptxViewer);
+  if (!docOk) return false;
+  if (pdfNavGroup && pdfNavGroup.style.display === "none") return false;
+  if (pdfNextBtn?.disabled) return false;
+  pdfNextBtn.click();
+  return true;
+}
+
+function tryNavigateDocPrev() {
+  if (tryNavigateCanvasPagePrev()) return true;
+  return tryNavigatePdfPptxPrev();
+}
+
+function tryNavigateDocNext() {
+  if (tryNavigateCanvasPageNext()) return true;
+  return tryNavigatePdfPptxNext();
+}
+
 // ========== ОБРАБОТЧИКИ СОБЫТИЙ ==========
 const fullscreenBtn = document.getElementById("fullscreenBtn");
 const exitFullscreenBtn = document.getElementById("exitFullscreenBtn");
@@ -4572,8 +4642,32 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (document.querySelector(".app.canvas-fullscreen")) toggleCanvasFullscreen();
     else if (document.fullscreenElement) document.exitFullscreen?.();
+    return;
+  }
+
+  if (shouldIgnoreDrawflowHotkeys(e)) return;
+
+  if (e.code === "F4") {
+    if (sharedDocReadOnly) return;
+    const gc = gestureControlBtn;
+    if (!gc || gc.offsetParent === null) return;
+    e.preventDefault();
+    gc.click();
+    return;
+  }
+
+  const prevKeys = e.key === "ArrowLeft" || e.key === "ArrowUp" || e.key === "PageUp";
+  const nextKeys = e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === "PageDown";
+  if (prevKeys) {
+    if (tryNavigateDocPrev()) e.preventDefault();
+    return;
+  }
+  if (nextKeys) {
+    if (tryNavigateDocNext()) e.preventDefault();
+    return;
   }
 });
+
 document.addEventListener("fullscreenchange", () => {
   if (!document.fullscreenElement) {
     document.querySelector(".app")?.classList.remove("canvas-fullscreen");
@@ -5434,6 +5528,7 @@ pdfLinkBtn?.addEventListener("click", async () => {
     if (pdfLinkBtn) pdfLinkBtn.textContent = "Скопировано!";
     setTimeout(() => { if (pdfLinkBtn) pdfLinkBtn.textContent = orig; }, 1500);
   } catch (e) { console.warn(e); }
+  await showShareLinkWithQr(link);
 });
 
 document.getElementById("exportDocBtn")?.addEventListener("click", async () => {
@@ -5557,6 +5652,7 @@ pdfCopyLinkBtn?.addEventListener("click", async () => {
   } catch (e) {
     console.warn("Kopyalama hatası:", e);
   }
+  await showShareLinkWithQr(link);
 });
 
 pptxFileInput?.addEventListener("change", (e) => {
@@ -5650,6 +5746,8 @@ const urlParams = new URLSearchParams(window.location.search);
 const shareId = urlParams.get("id");
 const canvasId = urlParams.get("canvas");
 const isCameraMode = urlParams.get("mode") === "camera";
+/** Страница справки: embed + hands=both — показывать обе руки, не фильтровать по preferredHand */
+const embedTrackBothHands = urlParams.get("embed") === "1" && urlParams.get("hands") === "both";
 
 if (shareId) {
   pdfMode = true;

@@ -144,20 +144,6 @@ document.getElementById("newCanvasModal")?.querySelector(".dash-modal-backdrop")
   document.getElementById("newCanvasModal").style.display = "none";
 });
 
-const cameraSection = document.getElementById("cameraSection");
-const cameraSectionToggle = document.getElementById("cameraSectionToggle");
-const cameraIframe = document.getElementById("cameraIframe");
-if (cameraSection && cameraSectionToggle && cameraIframe) {
-  cameraSectionToggle.addEventListener("click", () => {
-    const expanded = cameraSection.classList.toggle("expanded");
-    if (expanded && cameraIframe.src === "about:blank") {
-      cameraIframe.src = "/index.html?mode=camera&embed=1";
-    } else if (!expanded) {
-      cameraIframe.contentWindow?.postMessage({ type: "camera-section-collapsed" }, "*");
-    }
-  });
-}
-
 let passwordModalType = "pdf";
 
 async function loadDocuments() {
