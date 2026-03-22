@@ -1654,7 +1654,6 @@ html.touch-draw-ui .draw-toolbar .toolbar-popover-wide {
     font-size: 16px;
   }
 }
-
 @media (max-width: 900px) {
   .camera-section {
     gap: 0.35rem;
@@ -1663,3 +1662,4 @@ html.touch-draw-ui .draw-toolbar .toolbar-popover-wide {
     min-height: min(55vh, 520px);
   }
 }
+

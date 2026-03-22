@@ -4487,6 +4487,10 @@ async function startCamera() {
     startBtn.textContent = "Запустить камеру";
 
     lastVideoTime = -1;
+    if (gestureControlEnabled) {
+      drawMode = true;
+      drawBtn?.classList.add("active");
+    }
     detectLoop();
   } catch (err) {
     console.error("Ошибка камеры:", err);
