@@ -39,8 +39,11 @@ body {
   background: var(--bg-primary);
   color: var(--text-primary);
   min-height: 100vh;
+  min-height: 100dvh;
   line-height: 1.5;
   overflow-x: hidden;
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
 }
 
 body::before {
@@ -63,9 +66,12 @@ body::before {
   max-width: 100%;
   margin: 0;
   padding: 0.75rem;
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
 }
 
 html.canvas-fullscreen,
@@ -238,6 +244,7 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   object-position: center;
   pointer-events: none;
   z-index: 10;
+  touch-action: none;
 }
 
 .camera-wrapper:not(.pdf-mode):not(.pptx-mode) #drawCanvas {
@@ -293,6 +300,7 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   top: 0; left: 0;
   pointer-events: auto;
   cursor: crosshair;
+  touch-action: none;
 }
 
 .camera-wrapper.pdf-mode .pdf-container { display: flex; }
@@ -420,6 +428,7 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   top: 0; left: 0;
   pointer-events: auto;
   cursor: crosshair;
+  touch-action: none;
 }
 
 .camera-wrapper.pptx-mode .pptx-container { display: flex; }
@@ -1481,3 +1490,176 @@ body.shared-doc-viewer #redoBtn {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
+
+/* ========== Touch / phone / tablet (syncTouchDrawLayout in script.js) ========== */
+
+html.force-toolbar-open .draw-toolbar .draw-toolbar-chip {
+  display: none !important;
+}
+html.force-toolbar-open .draw-toolbar .toolbar-compact-outer {
+  max-height: min(92vh, 1100px) !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  overflow: visible !important;
+  transition: none;
+}
+html.force-toolbar-open .draw-toolbar .toolbar-compact {
+  pointer-events: auto !important;
+  overflow: visible !important;
+}
+
+html.touch-draw-ui .draw-toolbar {
+  top: auto;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  transform: none;
+  width: 100%;
+  max-width: none;
+  flex-direction: column-reverse;
+  align-items: stretch;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  z-index: 40;
+}
+html.touch-draw-ui .draw-toolbar:not(.draw-toolbar--open) .draw-toolbar-reveal {
+  width: 100% !important;
+  min-height: 0;
+}
+html.touch-draw-ui .draw-toolbar.draw-toolbar--open .draw-toolbar-reveal {
+  width: 100% !important;
+}
+html.touch-draw-ui .draw-toolbar .toolbar-compact-outer {
+  max-height: none !important;
+  overflow: visible !important;
+}
+html.touch-draw-ui .draw-toolbar .toolbar-compact {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  min-height: 56px;
+  padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-radius: 16px 16px 0 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: none;
+}
+html.touch-draw-ui .draw-toolbar .toolbar-divider {
+  display: none;
+}
+html.touch-draw-ui body:not(.shared-doc-viewer) .app:not(.embed-camera) .camera-wrapper {
+  padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+}
+html.touch-draw-ui .draw-toolbar .toolbar-icon-btn {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 14px;
+}
+html.touch-draw-ui .draw-toolbar .toolbar-fade-toggle {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+}
+html.touch-draw-ui .draw-toolbar .toolbar-pen-group {
+  flex-shrink: 0;
+}
+html.touch-draw-ui .draw-toolbar .toolbar-popover {
+  position: fixed;
+  left: 50% !important;
+  right: auto !important;
+  top: auto !important;
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  margin-left: 0 !important;
+  transform: translateX(-50%);
+  max-width: min(calc(100vw - 20px), 360px);
+  max-height: min(46vh, 300px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  z-index: 150;
+}
+html.touch-draw-ui .draw-toolbar .toolbar-popover-wide {
+  min-width: 0;
+  width: min(calc(100vw - 24px), 320px);
+}
+
+@media (min-width: 640px) and (max-width: 1024px) {
+  html.force-toolbar-open:not(.touch-draw-ui) .draw-toolbar {
+    left: max(10px, env(safe-area-inset-left, 0px));
+  }
+  html.force-toolbar-open:not(.touch-draw-ui) .toolbar-icon-btn {
+    width: 46px;
+    height: 46px;
+  }
+}
+
+@media (max-width: 640px) {
+  .header {
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.35rem 0.4rem;
+  }
+  .header h1 {
+    font-size: 0.95rem;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .header-right {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    width: 100%;
+  }
+  .header-right .btn-small {
+    font-size: 0.8rem !important;
+    padding: 0.45rem 0.55rem !important;
+  }
+  .fps-badge {
+    display: none;
+  }
+  .controls {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+    gap: 0.5rem;
+  }
+  .drawing-controls,
+  .controls-group {
+    width: 100%;
+    justify-content: center;
+  }
+  .btn,
+  .btn-mode {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+  .mode-toggle {
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+  }
+  .mode-toggle .btn-mode {
+    flex: 1 1 auto;
+    min-width: min(140px, 45%);
+    text-align: center;
+  }
+  .share-url-row {
+    width: 100%;
+    min-width: 0;
+  }
+  .text-input-overlay {
+    max-width: calc(100vw - 24px);
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 900px) {
+  .camera-section {
+    gap: 0.35rem;
+  }
+  .camera-wrapper {
+    min-height: min(55vh, 520px);
+  }
+}

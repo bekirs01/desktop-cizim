@@ -117,11 +117,29 @@ drawToolbar?.addEventListener("mouseenter", () => {
   updateDrawToolbarOpenState();
 });
 drawToolbar?.addEventListener("mouseleave", () => {
+  if (document.documentElement.classList.contains("force-toolbar-open")) return;
   drawToolbarMouseInside = false;
   const ae = document.activeElement;
   if (ae && drawToolbar.contains(ae)) ae.blur();
   updateDrawToolbarOpenState();
 });
+
+function syncTouchDrawLayout() {
+  const html = document.documentElement;
+  const hasTouch = typeof navigator !== "undefined" && navigator.maxTouchPoints > 0;
+  const coarse = window.matchMedia("(pointer: coarse)").matches;
+  const noHover = window.matchMedia("(hover: none)").matches;
+  const tabletOrNarrow = window.matchMedia("(max-width: 1024px)").matches;
+  const phoneBar = window.matchMedia("(max-width: 900px)").matches;
+  const forceToolbarOpen = hasTouch && (coarse || noHover || tabletOrNarrow);
+  const useBottomToolbar = hasTouch && phoneBar;
+  html.classList.toggle("force-toolbar-open", forceToolbarOpen);
+  html.classList.toggle("touch-draw-ui", useBottomToolbar);
+  if (drawToolbar && forceToolbarOpen) drawToolbar.classList.add("draw-toolbar--open");
+}
+syncTouchDrawLayout();
+window.addEventListener("resize", syncTouchDrawLayout, { passive: true });
+window.addEventListener("orientationchange", () => setTimeout(syncTouchDrawLayout, 250));
 const toolbarContent = document.getElementById("toolbarContent");
 const gestureCursor = document.getElementById("gestureCursor");
 const toolbarColor = document.getElementById("toolbarColor");
@@ -2748,6 +2766,7 @@ function setupPdfDrawing() {
   pdfDrawCanvas.addEventListener("touchstart", onStart, { passive: false });
   pdfDrawCanvas.addEventListener("touchmove", onMove, { passive: false });
   pdfDrawCanvas.addEventListener("touchend", onEnd, { passive: false });
+  pdfDrawCanvas.addEventListener("touchcancel", onEnd, { passive: false });
 }
 
 function setupCanvasDrawing() {
@@ -2950,6 +2969,7 @@ function setupCanvasDrawing() {
   drawCanvas.addEventListener("touchstart", onStart, { passive: false });
   drawCanvas.addEventListener("touchmove", onMove, { passive: false });
   drawCanvas.addEventListener("touchend", onEnd, { passive: false });
+  drawCanvas.addEventListener("touchcancel", onEnd, { passive: false });
 }
 
 function clearPdf() {
@@ -3746,6 +3766,7 @@ function setupPptxDrawing() {
   pptxDrawCanvas.addEventListener("touchstart", onStart, { passive: false });
   pptxDrawCanvas.addEventListener("touchmove", onMove, { passive: false });
   pptxDrawCanvas.addEventListener("touchend", onEnd, { passive: false });
+  pptxDrawCanvas.addEventListener("touchcancel", onEnd, { passive: false });
 }
 
 function clearPptx() {
