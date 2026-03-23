@@ -19,6 +19,49 @@ import { showShareLinkWithQr } from "./share-qr.js";
 import { savePageStrokes as _savePageStrokes, deleteStrokesForPage, fetchStrokes, subscribeStrokes, deserializeFillShapes } from "./supabase-strokes.js";
 import { getCanvasByShareToken } from "./supabase-canvas.js";
 
+import {
+  POSE_MODEL,
+  FACE_MODEL,
+  HAND_MODEL,
+  WASM,
+  DETECT_EVERY_N_FRAMES,
+  VIDEO_WIDTH,
+  VIDEO_HEIGHT,
+  MIN_VIS,
+} from "./app/config/mediapipeConstants.js";
+import { cloneStroke, cloneShape, clonePageLayer } from "./app/drawing/cloneLayer.js";
+import { hexToRgba, parseHex, colorMatch } from "./app/drawing/colorUtils.js";
+import { eraseLayerAtPosition } from "./app/drawing/eraseLayer.js";
+import {
+  pickSelectionInRect,
+  selectionUnionBBoxFromSel,
+  pointInNormRect,
+  applySelectionOffset,
+  pointSegDistNorm,
+  getActivePinchDepthRel,
+  isThumbIndexSpreadGate,
+  getOffHandForSelectGate,
+  applySelectionScale,
+  screenRectFromNormMarquee,
+} from "./app/drawing/selectionNorm.js";
+import {
+  isTwoFingersExtended,
+  getTwoFingerPosition,
+  isFistClenched,
+  getHandGrabPoint,
+  getThumbIndexDistance,
+  getHandSize,
+  getPinchStartThreshold,
+  getPinchReleaseThreshold,
+  isIndexThumbPinch,
+  getPinchCursorPosition,
+  getThumbIndexSize,
+} from "./app/gestures/handGeometry.js";
+import { toPx } from "./app/overlay/coords.js";
+import { drawHandLandmarks } from "./app/overlay/handDraw.js";
+import { drawPoseSkeleton } from "./app/overlay/poseDraw.js";
+import { drawEyeContours, checkEyesClosed } from "./app/overlay/faceDraw.js";
+
 let PPTXViewer = null;
 (async () => {
   const urls = [
@@ -36,49 +79,7 @@ let PPTXViewer = null;
   }
 })();
 
-// Model URL'leri
-const POSE_MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
-const FACE_MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
-const HAND_MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task";
-const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm";
-
-// Pose landmark indeksleri
-const POSE = {
-  NOSE: 0, LEFT_SHOULDER: 11, RIGHT_SHOULDER: 12,
-  LEFT_ELBOW: 13, RIGHT_ELBOW: 14, LEFT_WRIST: 15, RIGHT_WRIST: 16,
-  LEFT_HIP: 23, RIGHT_HIP: 24, LEFT_KNEE: 25, RIGHT_KNEE: 26,
-  LEFT_ANKLE: 27, RIGHT_ANKLE: 28
-};
-
-// El 21 landmark - her parmak ayrı renkte
-const HAND_CONNECTIONS = [
-  [0, 1], [1, 2], [2, 3], [3, 4],           // Başparmak
-  [0, 5], [5, 6], [6, 7], [7, 8],           // İşaret
-  [0, 9], [9, 10], [10, 11], [11, 12],      // Orta
-  [0, 13], [13, 14], [14, 15], [15, 16],   // Yüzük
-  [0, 17], [17, 18], [18, 19], [19, 20],   // Serçe
-  [5, 9], [9, 13], [13, 17]                 // Avuç
-];
-const FINGER_COLORS = {
-  thumb: "#ff6b6b", index: "#4ecdc4", middle: "#ffe66d", ring: "#95e1d3", pinky: "#dda0dd"
-};
-
-// Pose iskelet bağlantıları
-const POSE_CONNECTIONS = [
-  [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
-  [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28],
-  [0, 1], [1, 2], [2, 3], [3, 7], [0, 4], [4, 5], [5, 6], [6, 8], [9, 10],
-  [15, 17], [15, 19], [15, 21], [16, 18], [16, 20], [16, 22]
-];
-
-const MIN_VIS = 0.15;
 const MIRROR_CAMERA = true;
-
-const PERFORMANCE_MODE = true;
-const DETECT_EVERY_N_FRAMES = PERFORMANCE_MODE ? 2 : 1;
-/** 720p ideal — быстрее первый старт getUserMedia (особенно на macOS); качества хватает для MediaPipe */
-const VIDEO_WIDTH = 1280;
-const VIDEO_HEIGHT = 720;
 
 // DOM
 const video = document.getElementById("video");
@@ -223,6 +224,12 @@ let selectMarqueeNorm = null;
 let selectState = null;
 let selectDragging = false;
 let selectDragAnchor = null;
+/** Tercih dışı el (select + pinch kapısı / derinlik zoom için) — ham detect çıktısı */
+let cachedOffHandLandmark = null;
+/** Seçili nesneyi tutarken: kapı açıkken aktif el pinch Z referansı */
+let selectScaleLastZ = null;
+let selectScaleZSmooth = null;
+let selectScaleGateMissFrames = 0;
 let canvasFadeEnabled = false;
 const FADE_DURATION_MS = 1500;
 let shapeFill = false;
@@ -393,23 +400,6 @@ let currentPptxShareToken = null;
 const OBJECT_COLORS = ["#6c5ce7", "#00cec9", "#ff6b6b", "#ffd93d", "#55efc4", "#74b9ff"];
 let objectIdCounter = 0;
 
-function cloneStroke(stroke) {
-  if (!stroke) return stroke;
-  const points = Array.isArray(stroke.points) ? stroke.points.map((p) => ({ x: p.x, y: p.y })) : [];
-  return { ...stroke, points };
-}
-
-function cloneShape(shape) {
-  return shape ? { ...shape } : shape;
-}
-
-function clonePageLayer(strokesArr = [], shapesArr = []) {
-  return {
-    strokes: strokesArr.map(cloneStroke),
-    shapes: shapesArr.map(cloneShape)
-  };
-}
-
 function savePdfPageState() {
   if (!pdfDoc) return;
   const pageLayer = clonePageLayer(pdfStrokes, pdfShapes);
@@ -574,56 +564,6 @@ function loadPptxPageState() {
   pushPptxHistory();
 }
 
-function eraseLayerAtPosition(strokesArr, shapesArr, eraseX, eraseY, radius = 0.07, fillShapesArr = []) {
-  const r2 = radius * radius;
-  let nextFillShapes = fillShapesArr || [];
-  if (fillShapesArr?.length > 0) {
-    for (let i = fillShapesArr.length - 1; i >= 0; i--) {
-      const f = fillShapesArr[i];
-      if (!f?.data || !f.w || !f.h) continue;
-      const px = Math.floor(eraseX * f.w);
-      const py = Math.floor(eraseY * f.h);
-      if (px < 0 || py < 0 || px >= f.w || py >= f.h) continue;
-      const idx = (py * f.w + px) * 4;
-      if (f.data.data[idx + 3] > 10) {
-        nextFillShapes = fillShapesArr.slice(0, i).concat(fillShapesArr.slice(i + 1));
-        break;
-      }
-    }
-  }
-  const nextShapes = shapesArr.filter((sh) => {
-    let dx, dy;
-    if (sh.type === "circle") { dx = sh.cx - eraseX; dy = sh.cy - eraseY; }
-    else if (sh.type === "rect" || sh.type === "ellipse") { dx = (sh.x + sh.w / 2) - eraseX; dy = (sh.y + sh.h / 2) - eraseY; }
-    else if (sh.type === "line" || sh.type === "arrow") { dx = (sh.x1 + sh.x2) / 2 - eraseX; dy = (sh.y1 + sh.y2) / 2 - eraseY; }
-    else if (sh.type === "triangle") { dx = (sh.x1 + sh.x2 + sh.x3) / 3 - eraseX; dy = (sh.y1 + sh.y2 + sh.y3) / 3 - eraseY; }
-    else if (sh.type === "text") { dx = sh.x - eraseX; dy = sh.y - eraseY; }
-    else return true;
-    return dx * dx + dy * dy > r2;
-  });
-  const nextStrokes = [];
-  for (const stroke of strokesArr) {
-    const pts = stroke.points || stroke;
-    const color = stroke.color || drawColor;
-    const lw = stroke.lineWidth ?? drawLineWidth;
-    const opacity = stroke.opacity ?? 1;
-    const segments = [];
-    let seg = [];
-    for (const pt of pts) {
-      const d2 = (pt.x - eraseX) ** 2 + (pt.y - eraseY) ** 2;
-      if (d2 < r2) {
-        if (seg.length > 1) segments.push({ points: seg, color, lineWidth: lw, opacity });
-        seg = [];
-      } else {
-        seg.push(pt);
-      }
-    }
-    if (seg.length > 1) segments.push({ points: seg, color, lineWidth: lw, opacity });
-    for (const s of segments) nextStrokes.push({ points: s.points, color: s.color, lineWidth: s.lineWidth, opacity: s.opacity });
-  }
-  return { strokes: nextStrokes, shapes: nextShapes, fillShapes: nextFillShapes };
-}
-
 function createObject(x, y, r = 0.05) {
   objectIdCounter++;
   const color = OBJECT_COLORS[(objectIdCounter - 1) % OBJECT_COLORS.length];
@@ -643,94 +583,6 @@ let VIRTUAL_OBJECTS = [
 let lastGrabPos = null;
 const grabHistory = [];
 const GRAB_HISTORY_MAX = 5;
-
-// Koordinat dönüşümü (video/canvas piksel)
-function toPx(p, w, h) {
-  const x = MIRROR_CAMERA ? (1 - p.x) * w : p.x * w;
-  return { x, y: p.y * h };
-}
-
-// ========== EL 21 LANDMARK - HER PARMAK AYRI TAKİP ==========
-function getFingerColor(idx) {
-  if (idx <= 4) return FINGER_COLORS.thumb;
-  if (idx <= 8) return FINGER_COLORS.index;
-  if (idx <= 12) return FINGER_COLORS.middle;
-  if (idx <= 16) return FINGER_COLORS.ring;
-  return FINGER_COLORS.pinky;
-}
-
-function drawHandLandmarks(ctx, hands, w, h) {
-  if (!hands || hands.length === 0) return;
-  hands.forEach((hand) => {
-    if (!hand || hand.length < 21) return;
-    // Bağlantı çizgileri - her parmak kendi rengi
-    ctx.lineWidth = 2;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    HAND_CONNECTIONS.forEach(([i, j]) => {
-      const a = hand[i], b = hand[j];
-      if (a && b) {
-        const p1 = toPx(a, w, h), p2 = toPx(b, w, h);
-        ctx.strokeStyle = getFingerColor(i);
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.stroke();
-      }
-    });
-    hand.forEach((p, i) => {
-      if (!p) return;
-      const pt = toPx(p, w, h);
-      const isTip = [4, 8, 12, 16, 20].includes(i);
-      ctx.fillStyle = getFingerColor(i);
-      ctx.beginPath();
-      ctx.arc(pt.x, pt.y, isTip ? 7 : 4, 0, Math.PI * 2);
-      ctx.fill();
-    });
-  });
-}
-
-function isTwoFingersExtended(hand) {
-  if (!hand || hand.length < 21) return false;
-  const idxTip = hand[8], midTip = hand[12], idxPip = hand[6], midPip = hand[10];
-  const ringTip = hand[16], pinkyTip = hand[20];
-  const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-  const handSize = d(hand[0], hand[9]);
-  const lenIdx = d(idxTip, hand[5]);
-  const lenMid = d(midTip, hand[9]);
-  const lenRing = d(ringTip, hand[13]);
-  const lenPinky = d(pinkyTip, hand[17]);
-  const distIdxMid = d(idxTip, midTip);
-  const minExtended = Math.max(0.025, handSize * 0.12);
-  const minVGap = Math.max(0.01, handSize * 0.2);
-  const maxVGap = handSize * 1.5;
-  const tipToPipMin = Math.max(0.018, handSize * 0.1);
-  const tipToPipIdx = d(idxTip, idxPip);
-  const tipToPipMid = d(midTip, midPip);
-  const maxBentLen = handSize * 0.5;
-  const minRatio = 1.35;
-  return lenIdx >= minExtended && lenMid >= minExtended &&
-         tipToPipIdx > tipToPipMin && tipToPipMid > tipToPipMin &&
-         lenRing < maxBentLen && lenPinky < maxBentLen &&
-         lenIdx > lenRing * minRatio && lenMid > lenRing * minRatio &&
-         lenIdx > lenPinky * minRatio && lenMid > lenPinky * minRatio &&
-         distIdxMid > minVGap && distIdxMid < maxVGap;
-}
-
-function getTwoFingerPosition(hand) {
-  if (!hand || hand.length < 13 || !isTwoFingersExtended(hand)) return null;
-  const idx = hand[8], mid = hand[12];
-  return { x: (idx.x + mid.x) / 2, y: (idx.y + mid.y) / 2 };
-}
-
-// Центр, расстояние и вектор между большим и указательным (для размера фигуры)
-function getThumbIndexSize(hand) {
-  if (!hand || hand.length < 9) return null;
-  const thumb = hand[4], idx = hand[8];
-  const dx = idx.x - thumb.x, dy = idx.y - thumb.y;
-  const dist = Math.hypot(dx, dy);
-  return { center: { x: (thumb.x + idx.x) / 2, y: (thumb.y + idx.y) / 2 }, size: dist, dx, dy };
-}
 
 function normToClient(normX, normY, w, h) {
   const px = MIRROR_CAMERA ? (1 - normX) * w : normX * w;
@@ -797,145 +649,6 @@ function updateGestureCursor(clientX, clientY, visible) {
   } else {
     gestureCursor.classList.remove("visible");
   }
-}
-
-// İşaret parmağı uzatılmış mı? Yumrukta çizim yok
-function isIndexFingerExtended(hand) {
-  if (!hand || hand.length < 21) return false;
-  const idxTip = hand[8], idxMcp = hand[5];
-  const midTip = hand[12], ringTip = hand[16];
-  const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-  const lenIdx = d(idxTip, idxMcp);
-  const distToMid = d(idxTip, midTip);
-  const distToRing = d(idxTip, ringTip);
-  if (distToMid < 0.07 || distToRing < 0.07) return false;
-  const lenMid = d(midTip, hand[9]);
-  const lenRing = d(ringTip, hand[13]);
-  return lenIdx > 0.04 && lenIdx > lenMid * 0.8 && lenIdx > lenRing * 0.8;
-}
-
-// ========== POSE İSKELET ==========
-function drawPoseSkeleton(ctx, lm, w, h) {
-  if (!lm || lm.length < 29) return;
-  ctx.strokeStyle = "#6c5ce7";
-  ctx.lineWidth = 3;
-  ctx.lineCap = "round";
-  POSE_CONNECTIONS.forEach(([i, j]) => {
-    const a = lm[i], b = lm[j];
-    const va = a?.visibility ?? 1, vb = b?.visibility ?? 1;
-    if (a && b && va > MIN_VIS && vb > MIN_VIS) {
-      const p1 = toPx(a, w, h), p2 = toPx(b, w, h);
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
-    }
-  });
-  ctx.fillStyle = "#6c5ce7";
-  lm.forEach((p) => {
-    if ((p?.visibility ?? 1) > MIN_VIS) {
-      const pt = toPx(p, w, h);
-      ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  });
-}
-
-// ========== GÖZ - Belirgin çerçeve, yüz net görünsün ==========
-const EYE_LEFT = [33, 160, 159, 158, 157, 173, 133];
-const EYE_RIGHT = [362, 385, 386, 387, 388, 466, 263];
-
-function drawEyeContours(ctx, pts, w, h) {
-  if (!pts || pts.length < 400) return;
-  ctx.strokeStyle = "rgba(0,255,159,0.75)";
-  ctx.lineWidth = 2;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  [EYE_LEFT, EYE_RIGHT].forEach((indices) => {
-    ctx.beginPath();
-    indices.forEach((i, j) => {
-      const p = pts[i];
-      if (p) {
-        const pt = toPx(p, w, h);
-        ctx[j ? "lineTo" : "moveTo"](pt.x, pt.y);
-      }
-    });
-    ctx.closePath();
-    ctx.stroke();
-  });
-}
-
-function checkEyesClosed(faceResults) {
-  if (!faceResults?.faceBlendshapes?.[0]) return false;
-  let l = 0, r = 0;
-  for (const b of faceResults.faceBlendshapes[0]) {
-    if (b.categoryName === "eyeBlinkLeft") l = b.score;
-    if (b.categoryName === "eyeBlinkRight") r = b.score;
-  }
-  return (l + r) / 2 > 0.4;
-}
-
-// ========== EL TUTMA VE ÇİZİM ==========
-// Yumruk sıkılı mı? (tüm parmak uçları birbirine yakın)
-function isFistClenched(hand) {
-  if (!hand || hand.length < 21) return false;
-  const idx = hand[8], mid = hand[12], ring = hand[16], pinky = hand[20];
-  const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-  const maxDist = 0.12;
-  return d(idx, mid) < maxDist && d(mid, ring) < maxDist && d(ring, pinky) < maxDist && d(idx, pinky) < 0.16;
-}
-
-function getHandGrabPoint(hand) {
-  if (!hand || hand.length < 21) return null;
-  if (!isFistClenched(hand)) return null;
-  const idx = hand[8], mid = hand[12], ring = hand[16], pinky = hand[20];
-  return {
-    x: (idx.x + mid.x + ring.x + pinky.x) / 4,
-    y: (idx.y + mid.y + ring.y + pinky.y) / 4
-  };
-}
-
-function getIndexFingerTip(hand, requireExtended = false) {
-  if (!hand || hand.length < 9) return null;
-  const tip = hand[8];
-  if (!tip) return null;
-  if (requireExtended && !isIndexFingerExtended(hand)) return null;
-  return { x: tip.x, y: tip.y };
-}
-
-// Thumb-index distance (for hysteresis)
-function getThumbIndexDistance(hand) {
-  if (!hand || hand.length < 9) return Infinity;
-  const idxTip = hand[8], thumbTip = hand[4];
-  return Math.hypot(idxTip.x - thumbTip.x, idxTip.y - thumbTip.y);
-}
-
-function getHandSize(hand) {
-  if (!hand || hand.length < 10) return 0.2;
-  return Math.hypot(hand[0].x - hand[9].x, hand[0].y - hand[9].y);
-}
-
-function getPinchStartThreshold(hand) {
-  const hs = hand ? getHandSize(hand) : 0.2;
-  return Math.max(0.025, Math.min(0.1, hs * 0.28));
-}
-
-function getPinchReleaseThreshold(hand) {
-  const hs = hand ? getHandSize(hand) : 0.2;
-  return Math.max(0.04, Math.min(0.14, hs * 0.4));
-}
-
-// Legacy pinch check (toolbar etc.) — uses hand-scaled threshold
-function isIndexThumbPinch(hand) {
-  return getThumbIndexDistance(hand) < getPinchStartThreshold(hand);
-}
-
-function getPinchCursorPosition(hand) {
-  if (!hand || hand.length < 9) return null;
-  if (isTwoFingersExtended(hand)) return null;
-  const idxTip = hand[8];
-  return { x: idxTip.x, y: idxTip.y };
 }
 
 function updateObjects(hands, dt) {
@@ -1046,7 +759,7 @@ function drawObjects(ctx, w, h) {
     if (obj.flying && obj.trail.length > 1) {
       ctx.beginPath();
       obj.trail.forEach((t, i) => {
-        const pt = toPx({ x: t.x, y: t.y }, w, h);
+        const pt = toPx({ x: t.x, y: t.y }, w, h, MIRROR_CAMERA);
         ctx[i ? "lineTo" : "moveTo"](pt.x, pt.y);
       });
       ctx.strokeStyle = obj.color;
@@ -1057,7 +770,7 @@ function drawObjects(ctx, w, h) {
       ctx.stroke();
       ctx.globalAlpha = 1;
     }
-    const pt = toPx({ x: obj.x, y: obj.y }, w, h);
+    const pt = toPx({ x: obj.x, y: obj.y }, w, h, MIRROR_CAMERA);
     const r = obj.r * Math.min(w, h);
     ctx.beginPath();
     ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
@@ -1127,22 +840,6 @@ function smoothStrokePoints(pts, alpha = 0.25) {
     });
   }
   return out;
-}
-
-// Renk hex -> rgba
-function hexToRgba(hex, a) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r},${g},${b},${a})`;
-}
-
-function parseHex(hex) {
-  return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
-}
-
-function colorMatch(a, b, tol = 72) {
-  return Math.abs(a[0] - b[0]) <= tol && Math.abs(a[1] - b[1]) <= tol && Math.abs(a[2] - b[2]) <= tol;
 }
 
 function doFloodFill(ctx, x, y, fillColor, w, h) {
@@ -1685,19 +1382,19 @@ function drawStrokesToCanvas(w, h) {
 }
 
 function eraseAtPosition(eraseX, eraseY, radius = 0.07) {
-  const next = eraseLayerAtPosition(strokes, shapes, eraseX, eraseY, radius, fillShapes);
+  const next = eraseLayerAtPosition(strokes, shapes, eraseX, eraseY, radius, fillShapes, drawColor, drawLineWidth);
   strokes = next.strokes;
   shapes = next.shapes;
   fillShapes = next.fillShapes || fillShapes;
 }
 function erasePdfAtPosition(eraseX, eraseY, radius = 0.07) {
-  const next = eraseLayerAtPosition(pdfStrokes, pdfShapes, eraseX, eraseY, radius, pdfFillShapes);
+  const next = eraseLayerAtPosition(pdfStrokes, pdfShapes, eraseX, eraseY, radius, pdfFillShapes, drawColor, drawLineWidth);
   pdfStrokes = next.strokes;
   pdfShapes = next.shapes;
   pdfFillShapes = next.fillShapes || pdfFillShapes;
 }
 function erasePptxAtPosition(eraseX, eraseY, radius = 0.07) {
-  const next = eraseLayerAtPosition(pptxStrokes, pptxShapes, eraseX, eraseY, radius, pptxFillShapes);
+  const next = eraseLayerAtPosition(pptxStrokes, pptxShapes, eraseX, eraseY, radius, pptxFillShapes, drawColor, drawLineWidth);
   pptxStrokes = next.strokes;
   pptxShapes = next.shapes;
   pptxFillShapes = next.fillShapes || pptxFillShapes;
@@ -1708,142 +1405,10 @@ function clearSelectionToolState() {
   selectState = null;
   selectDragging = false;
   selectDragAnchor = null;
-}
-
-function normRectsIntersect(a, b) {
-  const ax0 = Math.min(a.x0, a.x1), ax1 = Math.max(a.x0, a.x1);
-  const ay0 = Math.min(a.y0, a.y1), ay1 = Math.max(a.y0, a.y1);
-  const bx0 = Math.min(b.x0, b.x1), bx1 = Math.max(b.x0, b.x1);
-  const by0 = Math.min(b.y0, b.y1), by1 = Math.max(b.y0, b.y1);
-  return ax0 < bx1 && ax1 > bx0 && ay0 < by1 && ay1 > by0;
-}
-
-function strokeNormBBox(stroke) {
-  const pts = stroke?.points;
-  if (!pts?.length) return null;
-  let minX = pts[0].x, maxX = pts[0].x, minY = pts[0].y, maxY = pts[0].y;
-  for (const pt of pts) {
-    minX = Math.min(minX, pt.x); maxX = Math.max(maxX, pt.x);
-    minY = Math.min(minY, pt.y); maxY = Math.max(maxY, pt.y);
-  }
-  return { x0: minX, y0: minY, x1: maxX, y1: maxY };
-}
-
-function shapeNormBBox(sh) {
-  if (!sh?.type) return null;
-  if (sh.type === "circle") {
-    const pad = sh.r || 0.02;
-    return { x0: sh.cx - pad, y0: sh.cy - pad, x1: sh.cx + pad, y1: sh.cy + pad };
-  }
-  if (sh.type === "rect" || sh.type === "ellipse") {
-    const x0 = Math.min(sh.x, sh.x + sh.w), x1 = Math.max(sh.x, sh.x + sh.w);
-    const y0 = Math.min(sh.y, sh.y + sh.h), y1 = Math.max(sh.y, sh.y + sh.h);
-    return { x0, y0, x1, y1 };
-  }
-  if (sh.type === "line" || sh.type === "arrow") {
-    return {
-      x0: Math.min(sh.x1, sh.x2), y0: Math.min(sh.y1, sh.y2),
-      x1: Math.max(sh.x1, sh.x2), y1: Math.max(sh.y1, sh.y2),
-    };
-  }
-  if (sh.type === "triangle") {
-    return {
-      x0: Math.min(sh.x1, sh.x2, sh.x3), y0: Math.min(sh.y1, sh.y2, sh.y3),
-      x1: Math.max(sh.x1, sh.x2, sh.x3), y1: Math.max(sh.y1, sh.y2, sh.y3),
-    };
-  }
-  if (sh.type === "text" && sh.text) {
-    const approxW = Math.min(0.35, (String(sh.text).length || 1) * 0.018);
-    const approxH = ((sh.fontSize || 24) / 480);
-    return { x0: sh.x, y0: sh.y - approxH, x1: sh.x + approxW, y1: sh.y + approxH * 0.35 };
-  }
-  return null;
-}
-
-function pickSelectionInRect(rect, strokesArr, shapesArr) {
-  const strokeIdx = [];
-  const shapeIdx = [];
-  strokesArr.forEach((st, i) => {
-    const bb = strokeNormBBox(st);
-    if (bb && normRectsIntersect(rect, bb)) strokeIdx.push(i);
-  });
-  shapesArr.forEach((sh, i) => {
-    const bb = shapeNormBBox(sh);
-    if (bb && normRectsIntersect(rect, bb)) shapeIdx.push(i);
-  });
-  return { strokeIdx, shapeIdx };
-}
-
-function selectionUnionBBoxFromSel(sel, strokesArr, shapesArr) {
-  if (!sel || (!sel.strokeIdx.length && !sel.shapeIdx.length)) return null;
-  let bb = null;
-  const grow = (b) => {
-    if (!b) return;
-    if (!bb) bb = { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 };
-    else {
-      bb.x0 = Math.min(bb.x0, b.x0); bb.y0 = Math.min(bb.y0, b.y0);
-      bb.x1 = Math.max(bb.x1, b.x1); bb.y1 = Math.max(bb.y1, b.y1);
-    }
-  };
-  for (const i of sel.strokeIdx) grow(strokeNormBBox(strokesArr[i]));
-  for (const i of sel.shapeIdx) grow(shapeNormBBox(shapesArr[i]));
-  return bb;
-}
-
-function pointInNormRect(px, py, r, pad = 0.012) {
-  const x0 = Math.min(r.x0, r.x1) - pad, x1 = Math.max(r.x0, r.x1) + pad;
-  const y0 = Math.min(r.y0, r.y1) - pad, y1 = Math.max(r.y0, r.y1) + pad;
-  return px >= x0 && px <= x1 && py >= y0 && py <= y1;
-}
-
-function clampNorm(v) {
-  return Math.max(0, Math.min(1, v));
-}
-
-function offsetStrokeNorm(stroke, dx, dy) {
-  if (!stroke?.points) return;
-  stroke.points = stroke.points.map((p) => ({ x: clampNorm(p.x + dx), y: clampNorm(p.y + dy) }));
-}
-
-function offsetShapeNorm(sh, dx, dy) {
-  if (sh.type === "circle") {
-    sh.cx = clampNorm(sh.cx + dx); sh.cy = clampNorm(sh.cy + dy);
-  } else if (sh.type === "rect" || sh.type === "ellipse") {
-    sh.x = clampNorm(sh.x + dx); sh.y = clampNorm(sh.y + dy);
-  } else if (sh.type === "line" || sh.type === "arrow") {
-    sh.x1 = clampNorm(sh.x1 + dx); sh.y1 = clampNorm(sh.y1 + dy);
-    sh.x2 = clampNorm(sh.x2 + dx); sh.y2 = clampNorm(sh.y2 + dy);
-  } else if (sh.type === "triangle") {
-    sh.x1 = clampNorm(sh.x1 + dx); sh.y1 = clampNorm(sh.y1 + dy);
-    sh.x2 = clampNorm(sh.x2 + dx); sh.y2 = clampNorm(sh.y2 + dy);
-    sh.x3 = clampNorm(sh.x3 + dx); sh.y3 = clampNorm(sh.y3 + dy);
-  } else if (sh.type === "text") {
-    sh.x = clampNorm(sh.x + dx); sh.y = clampNorm(sh.y + dy);
-  }
-}
-
-function applySelectionOffset(sel, dx, dy, strokesArr, shapesArr) {
-  if (!sel) return;
-  for (const i of sel.strokeIdx) {
-    const st = strokesArr[i];
-    if (st?.points) offsetStrokeNorm(st, dx, dy);
-  }
-  for (const i of sel.shapeIdx) {
-    const sh = shapesArr[i];
-    if (sh) offsetShapeNorm(sh, dx, dy);
-  }
-}
-
-function screenRectFromNormMarquee(x0, y0, x1, y1, w, h, sx) {
-  const xd0 = Math.min(x0, x1), xd1 = Math.max(x0, x1);
-  const yd0 = Math.min(y0, y1), yd1 = Math.max(y0, y1);
-  const px0 = sx(xd0), px1 = sx(xd1);
-  return {
-    left: Math.min(px0, px1),
-    top: yd0 * h,
-    rw: Math.max(1, Math.abs(px1 - px0)),
-    rh: Math.max(1, (yd1 - yd0) * h),
-  };
+  cachedOffHandLandmark = null;
+  selectScaleLastZ = null;
+  selectScaleZSmooth = null;
+  selectScaleGateMissFrames = 0;
 }
 
 function drawSelectOverlay(dctx, w, h, sx) {
@@ -1888,6 +1453,9 @@ function finalizeSelectGestureEnd() {
   if (selectDragging && selectState) {
     selectDragging = false;
     selectDragAnchor = null;
+    selectScaleLastZ = null;
+    selectScaleZSmooth = null;
+    selectScaleGateMissFrames = 0;
     if (pdfMode && pdfDoc) {
       pushPdfHistory();
       savePdfPageState();
@@ -3861,7 +3429,7 @@ function detectLoop() {
           lowLightWarning.classList.remove("visible");
           lm = poseRes.landmarks[0];
           cachedLm = lm;
-          if (showSkeleton) drawPoseSkeleton(ctx, lm, w, h);
+          if (showSkeleton) drawPoseSkeleton(ctx, lm, w, h, MIRROR_CAMERA, MIN_VIS);
         } else {
           lowLightWarning.classList.add("visible");
           cachedLm = null;
@@ -3875,7 +3443,7 @@ function detectLoop() {
           if (faceRes.faceLandmarks?.length > 0) {
             window.eyesClosed = checkEyesClosed(faceRes);
             cachedEyesClosed = window.eyesClosed;
-            if (showSkeleton) drawEyeContours(ctx, faceRes.faceLandmarks[0], w, h);
+            if (showSkeleton) drawEyeContours(ctx, faceRes.faceLandmarks[0], w, h, MIRROR_CAMERA);
           } else {
             window.eyesClosed = false;
             cachedEyesClosed = false;
@@ -3890,6 +3458,17 @@ function detectLoop() {
           const handRes = handLandmarker.detectForVideo(video, t);
           const rawLm = handRes.landmarks || [];
           const handedness = handRes.handedness || [];
+          cachedOffHandLandmark = null;
+          if (drawMode && drawShape === "select" && !embedTrackBothHands) {
+            for (let i = 0; i < rawLm.length; i++) {
+              const h = handedness[i];
+              const label = (h?.[0]?.categoryName || h?.[0]?.display_name || (typeof h === "string" ? h : "") || "").toLowerCase();
+              if (label && label !== preferredHand) {
+                cachedOffHandLandmark = rawLm[i];
+                break;
+              }
+            }
+          }
           handLandmarks = [];
           for (let i = 0; i < rawLm.length; i++) {
             if (embedTrackBothHands) {
@@ -3903,15 +3482,15 @@ function detectLoop() {
             }
           }
           cachedHandLandmarks = handLandmarks;
-          if (showSkeleton) drawHandLandmarks(ctx, handLandmarks, w, h);
+          if (showSkeleton) drawHandLandmarks(ctx, handLandmarks, w, h, MIRROR_CAMERA);
         } catch (_) {}
       }
     } else {
       lm = cachedLm;
       window.eyesClosed = cachedEyesClosed;
       handLandmarks = cachedHandLandmarks || [];
-      if (lm && showSkeleton) drawPoseSkeleton(ctx, lm, w, h);
-      if (handLandmarks?.length && showSkeleton) drawHandLandmarks(ctx, handLandmarks, w, h);
+      if (lm && showSkeleton) drawPoseSkeleton(ctx, lm, w, h, MIRROR_CAMERA, MIN_VIS);
+      if (handLandmarks?.length && showSkeleton) drawHandLandmarks(ctx, handLandmarks, w, h, MIRROR_CAMERA);
     }
 
     if (objectsMode) {
@@ -4042,7 +3621,7 @@ function detectLoop() {
         window.drawCursor = null;
         const eraseX = (pdfMode && pdfDoc) || (pptxMode && pptxViewer) ? toDocNormX(smoothedErasePos.x) : smoothedErasePos.x;
         const activeFills = pdfMode ? pdfFillShapes : (pptxMode ? pptxFillShapes : fillShapes);
-        const erased = eraseLayerAtPosition(activeStrokes, activeShapes, eraseX, smoothedErasePos.y, 0.09, activeFills);
+        const erased = eraseLayerAtPosition(activeStrokes, activeShapes, eraseX, smoothedErasePos.y, 0.09, activeFills, drawColor, drawLineWidth);
         activeStrokes = erased.strokes;
         activeShapes = erased.shapes;
         if (pdfMode && pdfDoc) { pdfStrokes = erased.strokes; pdfShapes = erased.shapes; pdfFillShapes = erased.fillShapes || pdfFillShapes; }
@@ -4158,6 +3737,9 @@ function detectLoop() {
                 selectDragging = true;
                 selectDragAnchor = { x: px, y: py };
                 selectMarqueeNorm = null;
+                selectScaleLastZ = null;
+                selectScaleZSmooth = null;
+                selectScaleGateMissFrames = 0;
               } else {
                 selectState = null;
                 selectDragging = false;
@@ -4169,6 +3751,58 @@ function detectLoop() {
               const dy = py - selectDragAnchor.y;
               selectDragAnchor = { x: px, y: py };
               applySelectionOffset(selectState, dx, dy, activeStrokes, activeShapes);
+              // Diğer el: başparmak–işaret AÇIK (O/daire); aktif el pinch kameraya göre ileri/geri → büyüt/küçült
+              const offHand = getOffHandForSelectGate(handLandmarks, handIdx, embedTrackBothHands, cachedOffHandLandmark);
+              const gateOK =
+                offHand &&
+                offHand.length >= 9 &&
+                isThumbIndexSpreadGate(offHand) &&
+                hand &&
+                hand.length >= 9 &&
+                isPinchActive;
+              if (gateOK) {
+                selectScaleGateMissFrames = 0;
+                const gt = offHand[4], gi = offHand[8];
+                const midAx = (hand[4].x + hand[8].x) / 2;
+                const midAy = (hand[4].y + hand[8].y) / 2;
+                const gateDist = pointSegDistNorm(midAx, midAy, gt.x, gt.y, gi.x, gi.y);
+                const hsOff = getHandSize(offHand);
+                const gateTol = Math.max(0.16, hsOff * 0.85);
+                if (gateDist < gateTol) {
+                  const zRaw = getActivePinchDepthRel(hand);
+                  if (selectScaleZSmooth == null) selectScaleZSmooth = zRaw;
+                  else selectScaleZSmooth = selectScaleZSmooth * 0.72 + zRaw * 0.28;
+                  const Z_TH = 0.00115;
+                  const STEP = 1.04;
+                  if (selectScaleLastZ == null) {
+                    selectScaleLastZ = selectScaleZSmooth;
+                  } else {
+                    const dz = selectScaleZSmooth - selectScaleLastZ;
+                    // Bileğe göre: pinch kameraya yaklaşınca genelde rel Z azalır → büyüt
+                    if (dz > Z_TH) {
+                      applySelectionScale(selectState, 1 / STEP, activeStrokes, activeShapes);
+                      selectScaleLastZ = selectScaleZSmooth;
+                      activeRedraw();
+                    } else if (dz < -Z_TH) {
+                      applySelectionScale(selectState, STEP, activeStrokes, activeShapes);
+                      selectScaleLastZ = selectScaleZSmooth;
+                      activeRedraw();
+                    }
+                  }
+                } else {
+                  selectScaleGateMissFrames++;
+                  if (selectScaleGateMissFrames > 18) {
+                    selectScaleLastZ = null;
+                    selectScaleZSmooth = null;
+                  }
+                }
+              } else {
+                selectScaleGateMissFrames++;
+                if (selectScaleGateMissFrames > 18) {
+                  selectScaleLastZ = null;
+                  selectScaleZSmooth = null;
+                }
+              }
             } else if (selectMarqueeNorm) {
               selectMarqueeNorm.x1 = px;
               selectMarqueeNorm.y1 = py;
@@ -4343,7 +3977,7 @@ function detectLoop() {
         pctx.save();
         pctx.translate(sx, sy);
         pctx.scale(sw / w, sh / h);
-        drawHandLandmarks(pctx, handLandmarks, w, h);
+        drawHandLandmarks(pctx, handLandmarks, w, h, MIRROR_CAMERA);
         pctx.restore();
       }
     }
