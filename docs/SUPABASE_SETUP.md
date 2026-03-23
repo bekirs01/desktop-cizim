@@ -82,4 +82,4 @@ WITH CHECK (bucket_id = 'pdfs');
 
 1. Project Settings → API
 2. **Project URL** ve **anon public** key'i kopyala
-3. `supabase-config.js` dosyasına yapıştır
+3. `public/supabase-config.js` dosyasına yapıştır

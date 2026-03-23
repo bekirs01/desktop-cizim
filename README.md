@@ -1,42 +1,32 @@
-# Система отслеживания движений в реальном времени
+# Desktop Çizim (DrawFlow)
 
-Electron-приложение для рисования жестами на рабочем столе.
+Electron + web: masaüstü üzerinde jest ile çizim, PDF/PPTX ve Supabase ile paylaşım.
 
-## Установка
+## Hızlı başlangıç
 
 ```bash
 npm install
+npm start          # HTTP sunucu (varsayılan port 3000) — public/ kökü
+npm run desktop    # Electron şeffaf overlay (public/desktop-overlay.html)
+npm run web        # serve ile public/ (port 8080)
 ```
 
-## Запуск
+## Dokümantasyon
 
-### Electron (десктоп)
-```bash
-npm start
-```
-Откроется полноэкранное прозрачное окно. Закрыть: **Cmd+Shift+Q** (Mac) или **Ctrl+Shift+Q** (Windows)
+- [Genel kullanım ve özellikler](docs/README.md) (Rusça özgün README)
+- [Supabase kurulumu](docs/SUPABASE_SETUP.md)
+- [Railway deploy](docs/RAILWAY_DEPLOY.md)
 
-### Web (в браузере)
-```bash
-npm run web
-```
-Откройте в браузере **http://localhost:8080** и файл `desktop-overlay.html`.
+## Klasör yapısı
 
-**Важно:** Открытие по file:// не работает. Используйте HTTP-сервер.
+| Klasör | İçerik |
+|--------|--------|
+| `public/` | HTML, CSS, istemci JS (tarayıcı + Electron yüklemesi) |
+| `server/` | `server.js` — production HTTP sunucusu |
+| `database/` | SQL: `setup/`, `migrations/`, `policies/`, `fixes/`, `schemas/` |
+| `docs/` | README, kurulum ve deploy notları |
+| `config/` | `serve.json` (lokal `serve` için) |
+| `supabase/functions/` | Edge Functions (OTP) |
+| `review-needed/` | İncelenmesi önerilen / geçici not dosyaları |
 
-## Возможности
-
-- ✅ Поток с камеры в реальном времени
-- ✅ MediaPipe Hands 21 landmark (все суставы и кончики пальцев)
-- ✅ Отрисовка скелета позы
-- ✅ Face Mesh контур глаз
-- ✅ Режим рисования указательным пальцем
-- ✅ Распознавание движений (русский)
-- ✅ Захват и перемещение виртуальных объектов
-
-## Использование
-
-1. **Запустить камеру** — Разрешите доступ к камере
-2. **Режим рисования** — Направьте указательный палец на камеру и двигайте
-3. **Очистить** — Удаляет все рисунки
-4. Объекты можно захватывать и перемещать, соединив 3 пальца
+Deploy için `railway.json` ve `nixpacks.toml` proje kökünde kalır.

@@ -1,13 +1,13 @@
 /**
  * Railway deploy için basit static server
- * index.html varsayılan, dizin listesi yok
+ * Statik dosyalar public/ altında; index.html varsayılan, dizin listesi yok
  */
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
 const PORT = process.env.PORT || 3000;
-const ROOT = __dirname;
+const ROOT = path.join(__dirname, "..", "public");
 
 const MIME = {
   ".html": "text/html",
@@ -27,6 +27,7 @@ const ROUTES = {
   "/dashboard": "/dashboard.html",
   "/login": "/login.html",
   "/help": "/help.html",
+  "/view": "/view.html",
 };
 
 const server = http.createServer((req, res) => {

@@ -3,7 +3,9 @@
   "rewrites": [
     { "source": "/", "destination": "/index.html" },
     { "source": "/dashboard", "destination": "/dashboard.html" },
-    { "source": "/login", "destination": "/login.html" }
+    { "source": "/login", "destination": "/login.html" },
+    { "source": "/help", "destination": "/help.html" },
+    { "source": "/view", "destination": "/view.html" }
   ],
   "cleanUrls": false
 }

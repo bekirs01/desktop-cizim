@@ -4,13 +4,13 @@
   "description": "Рисование жестами на рабочем столе",
   "main": "electron-main.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node server/server.js",
     "desktop": "electron .",
     "electron": "electron .",
-    "web": "serve -l 8080",
-    "dev": "npx serve -l 3457",
+    "web": "serve public -l 8080 -c config/serve.json",
+    "dev": "npx serve public -l 3457 -c config/serve.json",
     "tunnel": "npx --yes localtunnel --port 3457",
-    "share": "npx --yes concurrently -n dev,tunnel -c blue,green \"serve -l 3457\" \"npx --yes localtunnel --port 3457\""
+    "share": "npx --yes concurrently -n dev,tunnel -c blue,green \"npx serve public -l 3457 -c config/serve.json\" \"npx --yes localtunnel --port 3457\""
   },
   "engines": {
     "node": ">=18"

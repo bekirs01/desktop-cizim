@@ -6,4 +6,4 @@ nixPkgs = ["nodejs_20"]
 cmds = ["npm install --ignore-scripts"]
 
 [start]
-cmd = "node server.js"
+cmd = "node server/server.js"

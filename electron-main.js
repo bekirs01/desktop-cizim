@@ -25,7 +25,7 @@ function createWindow() {
   });
 
   mainWindow.setIgnoreMouseEvents(false);
-  mainWindow.loadFile(path.join(__dirname, "desktop-overlay.html"));
+  mainWindow.loadFile(path.join(__dirname, "public", "desktop-overlay.html"));
   mainWindow.setFullScreenable(true);
 
   mainWindow.on("closed", () => { mainWindow = null; });
