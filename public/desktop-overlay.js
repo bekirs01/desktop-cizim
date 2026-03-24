@@ -2,6 +2,8 @@
  * Оверлей рабочего стола — рисование жестами
  */
 import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/vision_bundle.mjs";
+import { trySnapFreehandToShape } from "./app/drawing/sketchHoldSnap.js";
+import { tickSketchSnapHold, resetSnapHoldState } from "./app/drawing/sketchSnapHold.js";
 
 const HAND_MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task";
 const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm";
@@ -41,6 +43,40 @@ const PINCH_RELEASE_FRAMES = 10;
 const DIST_SMOOTH_ALPHA = 0.35;
 const FINGER_LOST_THRESHOLD = 10;
 const MIN_STROKE_DIST = 0.002;
+const SKETCH_SNAP_HOLD_MS = 1300;
+const SKETCH_SNAP_MIN_POINTS = 6;
+const FREEHAND_SNAP_SIGNIFICANT_STEP = 0.009;
+const SKETCH_SNAP_POLL_MS = 50;
+let overlaySnapPollCursor = null;
+let overlayPinchDrawingFree = false;
+let overlaySnapTimerId = null;
+let overlaySnapHoldState = { holdMs: 0, holdRef: null };
+let overlayFreehandSignificantAt = 0;
+
+function stopOverlaySnapPoll() {
+  if (overlaySnapTimerId != null) {
+    clearInterval(overlaySnapTimerId);
+    overlaySnapTimerId = null;
+  }
+  resetSnapHoldState(overlaySnapHoldState);
+}
+
+function pollOverlaySketchSnap() {
+  if (!overlayPinchDrawingFree || drawShape !== "free") return;
+  const pts = currentStroke.points;
+  const ptr = overlaySnapPollCursor;
+  if (
+    tickSketchSnapHold(overlaySnapHoldState, ptr, overlayFreehandSignificantAt, pts.length, SKETCH_SNAP_MIN_POINTS, SKETCH_SNAP_HOLD_MS, SKETCH_SNAP_POLL_MS)
+  ) {
+    const draft = { ...currentStroke, points: [...pts], opacity: 1 };
+    const sh = trySnapFreehandToShape(draft, false);
+    if (sh) {
+      shapes.push(sh);
+      currentStroke = { points: [], color: drawColor };
+      resetSnapHoldState(overlaySnapHoldState);
+    }
+  }
+}
 
 function getThumbIndexDistance(hand) {
   if (!hand || hand.length < 9) return 1;
@@ -461,15 +497,25 @@ function detectLoop() {
               y: last.y + (smoothedCursor.y - last.y) * t
             });
           }
+          overlayFreehandSignificantAt = performance.now();
           currentStroke.color = currentStroke.color || drawColor;
           currentStroke.lineWidth = currentStroke.lineWidth ?? drawLineWidth;
         } else if (smoothedCursor.x >= 0 && smoothedCursor.x <= 1 && smoothedCursor.y >= 0 && smoothedCursor.y <= 1) {
-          if (!last || dist > MIN_STROKE_DIST) {
+          const lp = currentStroke.points[currentStroke.points.length - 1];
+          const d = lp ? Math.hypot(smoothedCursor.x - lp.x, smoothedCursor.y - lp.y) : 1;
+          if (!lp || d > MIN_STROKE_DIST) {
             currentStroke.points.push({ x: smoothedCursor.x, y: smoothedCursor.y });
-            currentStroke.color = currentStroke.color || drawColor;
-            currentStroke.lineWidth = currentStroke.lineWidth ?? drawLineWidth;
+            if (!lp || d >= FREEHAND_SNAP_SIGNIFICANT_STEP) overlayFreehandSignificantAt = performance.now();
           }
+          currentStroke.color = currentStroke.color || drawColor;
+          currentStroke.lineWidth = currentStroke.lineWidth ?? drawLineWidth;
         }
+      }
+      if (drawShape === "free" && smoothedCursor) {
+        overlaySnapPollCursor = { x: smoothedCursor.x, y: smoothedCursor.y };
+        overlayPinchDrawingFree = true;
+      } else {
+        overlayPinchDrawingFree = false;
       }
       wasPinching = true;
     } else {
@@ -506,9 +552,16 @@ function detectLoop() {
         shapeInProgress = null;
       }
       wasPinching = false;
+      overlayPinchDrawingFree = false;
       fingerLostFrames++;
       if (fingerLostFrames >= FINGER_LOST_THRESHOLD && currentStroke.points.length > 0) {
-        strokes.push({ points: [...currentStroke.points], color: currentStroke.color || drawColor, lineWidth: currentStroke.lineWidth ?? drawLineWidth });
+        strokes.push({
+          points: [...currentStroke.points],
+          color: currentStroke.color || drawColor,
+          lineWidth: currentStroke.lineWidth ?? drawLineWidth,
+        });
+        resetSnapHoldState(overlaySnapHoldState);
+        overlayFreehandSignificantAt = 0;
         currentStroke = { points: [], color: drawColor };
       }
     }
@@ -517,6 +570,7 @@ function detectLoop() {
     smoothedCursor = null;
     smoothedPinch = null;
     wasPinching = false;
+    overlayPinchDrawingFree = false;
     wasToolbarPinch = false;
     shapeInProgress = null;
     wasTwoFingersClick = false;
@@ -524,7 +578,13 @@ function detectLoop() {
     pinchReleaseFrames = 0;
     fingerLostFrames++;
     if (fingerLostFrames >= FINGER_LOST_THRESHOLD && currentStroke.points.length > 0) {
-      strokes.push({ points: [...currentStroke.points], color: currentStroke.color || drawColor, lineWidth: currentStroke.lineWidth ?? drawLineWidth });
+      strokes.push({
+        points: [...currentStroke.points],
+        color: currentStroke.color || drawColor,
+        lineWidth: currentStroke.lineWidth ?? drawLineWidth,
+      });
+      resetSnapHoldState(overlaySnapHoldState);
+      overlayFreehandSignificantAt = 0;
       currentStroke = { points: [], color: drawColor };
     }
   }
@@ -583,6 +643,9 @@ async function init() {
     previewCanvas.height = 75;
 
     lastVideoTime = -1;
+    if (overlaySnapTimerId == null) {
+      overlaySnapTimerId = setInterval(pollOverlaySketchSnap, SKETCH_SNAP_POLL_MS);
+    }
     detectLoop();
   } catch (err) {
     console.error("Kamera hatası:", err);

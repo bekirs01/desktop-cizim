@@ -44,6 +44,8 @@ import {
   applySelectionScale,
   screenRectFromNormMarquee,
 } from "./app/drawing/selectionNorm.js";
+import { trySnapFreehandToShape } from "./app/drawing/sketchHoldSnap.js";
+import { tickSketchSnapHold, resetSnapHoldState } from "./app/drawing/sketchSnapHold.js";
 import {
   isTwoFingersExtended,
   getTwoFingerPosition,
@@ -270,6 +272,15 @@ const PINCH_RELEASE_FRAMES = 4;
 const DIST_SMOOTH_ALPHA = 0.6;
 const FINGER_LOST_THRESHOLD = 6;
 const MIN_STROKE_DIST = 0.002;
+/** Шаг от последней точки ≥ этого (норм.) — «заметное» продолжение; микроточки не продлевают «тишину» для snap */
+const FREEHAND_SNAP_SIGNIFICANT_STEP = 0.009;
+/** Удержание в конце штриха: круг или линия (логика в sketchSnapHold.js) */
+const SKETCH_SNAP_HOLD_MS = 1300;
+const SKETCH_SNAP_MIN_POINTS = 6;
+const SKETCH_SNAP_POLL_MS = 50;
+let gestureSnapHoldState = { holdMs: 0, holdRef: null };
+let gestureFreehandSignificantAt = 0;
+let gestureSnapHoldFrameAt = 0;
 let cachedLm = null;
 let cachedEyesClosed = false;
 let cachedHandLandmarks = [];
@@ -434,6 +445,15 @@ function savePptxPageState() {
   if (pptxCurrentStroke.points.length > 1) pageLayer.strokes.push(cloneStroke(pptxCurrentStroke));
   pageLayer.fillShapes = pptxFillShapes.map((f) => ({ data: new ImageData(new Uint8ClampedArray(f.data.data), f.w, f.h), w: f.w, h: f.h }));
   pptxStrokesByPage[pptxPageNum] = pageLayer;
+}
+
+function tryCommitSketchedShapeFromHold(strokesArr, shapesArr, strokeDraft) {
+  if (drawShape !== "free") return false;
+  const enriched = { ...strokeDraft, opacity: strokeDraft.opacity != null ? strokeDraft.opacity : strokeOpacity };
+  const sh = trySnapFreehandToShape(enriched, shapeFill);
+  if (!sh) return false;
+  shapesArr.push(sh);
+  return true;
 }
 
 function pushCanvasHistory() {
@@ -2146,6 +2166,36 @@ function setupPdfDrawing() {
     };
   };
   let pdfEraserActive = false;
+  let pdfLastPtrNorm = null;
+  let pdfSnapTimerId = null;
+  let pdfSnapHoldState = { holdMs: 0, holdRef: null };
+  let pdfFreehandSignificantAt = 0;
+  const stopPdfSnapPoll = () => {
+    if (pdfSnapTimerId != null) {
+      clearInterval(pdfSnapTimerId);
+      pdfSnapTimerId = null;
+    }
+    resetSnapHoldState(pdfSnapHoldState);
+  };
+  const pollPdfSketchSnap = () => {
+    if (!pdfIsDrawing || drawShape !== "free" || !pdfCurrentStroke?.points?.length) return;
+    const pts = pdfCurrentStroke.points;
+    const ptr = pdfLastPtrNorm;
+    if (
+      tickSketchSnapHold(pdfSnapHoldState, ptr, pdfFreehandSignificantAt, pts.length, SKETCH_SNAP_MIN_POINTS, SKETCH_SNAP_HOLD_MS, SKETCH_SNAP_POLL_MS)
+    ) {
+      const draft = { ...pdfCurrentStroke, points: [...pts] };
+      if (tryCommitSketchedShapeFromHold(pdfStrokes, pdfShapes, draft)) {
+        pushPdfHistory();
+        if (currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
+        pdfCurrentStroke = { points: [], color: drawColor };
+        pdfIsDrawing = false;
+        pdfRemoteCurrentStroke = null;
+        stopPdfSnapPoll();
+        drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+      }
+    }
+  };
   const onStart = (e) => {
     if (sharedDocReadOnly) return;
     if (!pdfMode || !pdfDoc) return;
@@ -2200,6 +2250,10 @@ function setupPdfDrawing() {
     }
     pdfIsDrawing = true;
     pdfCurrentStroke = { points: [{ x: p.x, y: p.y }], color: drawColor, lineWidth: drawLineWidth, opacity: strokeOpacity, toolType: drawToolType };
+    pdfLastPtrNorm = { x: p.x, y: p.y };
+    pdfFreehandSignificantAt = performance.now();
+    stopPdfSnapPoll();
+    pdfSnapTimerId = setInterval(pollPdfSketchSnap, SKETCH_SNAP_POLL_MS);
   };
   let lastBroadcastProgress = 0;
   const onMove = (e) => {
@@ -2240,7 +2294,13 @@ function setupPdfDrawing() {
     if (!pdfIsDrawing || !pdfCurrentStroke.points.length) return;
     e.preventDefault();
     if (p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1) {
-      pdfCurrentStroke.points.push({ x: p.x, y: p.y });
+      pdfLastPtrNorm = { x: p.x, y: p.y };
+      const lastPt = pdfCurrentStroke.points[pdfCurrentStroke.points.length - 1];
+      const step = lastPt ? Math.hypot(p.x - lastPt.x, p.y - lastPt.y) : 1;
+      if (!lastPt || step >= MIN_STROKE_DIST) {
+        pdfCurrentStroke.points.push({ x: p.x, y: p.y });
+        if (!lastPt || step >= FREEHAND_SNAP_SIGNIFICANT_STEP) pdfFreehandSignificantAt = performance.now();
+      }
       drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
       const now = Date.now();
       if (currentPdfShareToken && pdfRealtimeBroadcastProgress && (now - lastBroadcastProgress >= 50 || pdfCurrentStroke.points.length % 5 === 0)) {
@@ -2251,6 +2311,7 @@ function setupPdfDrawing() {
   };
   const onEnd = (e) => {
     pdfEraserActive = false;
+    stopPdfSnapPoll();
     if (drawShape === "select") {
       e.preventDefault();
       if (selectDragging) {
@@ -2349,6 +2410,38 @@ function setupCanvasDrawing() {
   };
   let canvasIsDrawing = false;
   let eraserActive = false;
+  let canvasLastPtrNorm = null;
+  let canvasSnapTimerId = null;
+  let canvasSnapHoldState = { holdMs: 0, holdRef: null };
+  let canvasFreehandSignificantAt = 0;
+  const stopCanvasSnapPoll = () => {
+    if (canvasSnapTimerId != null) {
+      clearInterval(canvasSnapTimerId);
+      canvasSnapTimerId = null;
+    }
+    resetSnapHoldState(canvasSnapHoldState);
+  };
+  const pollCanvasSketchSnap = () => {
+    if (!canvasIsDrawing || drawShape !== "free" || !currentStroke?.points?.length) return;
+    const pts = currentStroke.points;
+    const ptr = canvasLastPtrNorm;
+    if (
+      tickSketchSnapHold(canvasSnapHoldState, ptr, canvasFreehandSignificantAt, pts.length, SKETCH_SNAP_MIN_POINTS, SKETCH_SNAP_HOLD_MS, SKETCH_SNAP_POLL_MS)
+    ) {
+      const draft = { ...currentStroke, points: [...pts] };
+      if (tryCommitSketchedShapeFromHold(strokes, shapes, draft)) {
+        pushCanvasHistory();
+        if (currentCanvasShareToken && supabase) {
+          savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
+        }
+        currentStroke = { points: [], color: drawColor };
+        canvasIsDrawing = false;
+        canvasRemoteCurrentStroke = null;
+        stopCanvasSnapPoll();
+        drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+      }
+    }
+  };
   const onStart = (e) => {
     if (pdfMode || pptxMode) return;
     e.preventDefault();
@@ -2404,6 +2497,10 @@ function setupCanvasDrawing() {
     }
     canvasIsDrawing = true;
     currentStroke = { points: [{ x: p.x, y: p.y }], color: drawColor, lineWidth: drawLineWidth, opacity: strokeOpacity, toolType: drawToolType };
+    canvasLastPtrNorm = { x: p.x, y: p.y };
+    canvasFreehandSignificantAt = performance.now();
+    stopCanvasSnapPoll();
+    canvasSnapTimerId = setInterval(pollCanvasSketchSnap, SKETCH_SNAP_POLL_MS);
   };
   const onMove = (e) => {
     const p = getNorm(e);
@@ -2443,7 +2540,13 @@ function setupCanvasDrawing() {
     if (!canvasIsDrawing || !currentStroke.points.length) return;
     e.preventDefault();
     if (p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1) {
-      currentStroke.points.push({ x: p.x, y: p.y });
+      canvasLastPtrNorm = { x: p.x, y: p.y };
+      const lastPt = currentStroke.points[currentStroke.points.length - 1];
+      const step = lastPt ? Math.hypot(p.x - lastPt.x, p.y - lastPt.y) : 1;
+      if (!lastPt || step >= MIN_STROKE_DIST) {
+        currentStroke.points.push({ x: p.x, y: p.y });
+        if (!lastPt || step >= FREEHAND_SNAP_SIGNIFICANT_STEP) canvasFreehandSignificantAt = performance.now();
+      }
       drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
       const now = Date.now();
       if (currentCanvasShareToken && canvasRealtimeBroadcastProgress && (now - lastCanvasBroadcastProgress >= 50 || currentStroke.points.length % 5 === 0)) {
@@ -2454,6 +2557,7 @@ function setupCanvasDrawing() {
   };
   const onEnd = (e) => {
     eraserActive = false;
+    stopCanvasSnapPoll();
     if (drawShape === "select") {
       e.preventDefault();
       if (selectDragging) {
@@ -3142,6 +3246,39 @@ function setupPptxDrawing() {
     return { x: (clientX - rect.left) / rect.width, y: (clientY - rect.top) / rect.height };
   };
   let pptxEraserActive = false;
+  let pptxLastPtrNorm = null;
+  let pptxSnapTimerId = null;
+  let pptxSnapHoldState = { holdMs: 0, holdRef: null };
+  let pptxFreehandSignificantAt = 0;
+  const stopPptxSnapPoll = () => {
+    if (pptxSnapTimerId != null) {
+      clearInterval(pptxSnapTimerId);
+      pptxSnapTimerId = null;
+    }
+    resetSnapHoldState(pptxSnapHoldState);
+  };
+  const pollPptxSketchSnap = () => {
+    if (!pptxIsDrawing || drawShape !== "free" || !pptxCurrentStroke?.points?.length) return;
+    const pts = pptxCurrentStroke.points;
+    const ptr = pptxLastPtrNorm;
+    if (
+      tickSketchSnapHold(pptxSnapHoldState, ptr, pptxFreehandSignificantAt, pts.length, SKETCH_SNAP_MIN_POINTS, SKETCH_SNAP_HOLD_MS, SKETCH_SNAP_POLL_MS)
+    ) {
+      const draft = { ...pptxCurrentStroke, points: [...pts] };
+      if (tryCommitSketchedShapeFromHold(pptxStrokes, pptxShapes, draft)) {
+        pushPptxHistory();
+        if (currentPptxShareToken) {
+          savePptxPageState();
+          savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
+        }
+        pptxCurrentStroke = { points: [], color: drawColor };
+        pptxIsDrawing = false;
+        pptxRemoteCurrentStroke = null;
+        stopPptxSnapPoll();
+        drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+      }
+    }
+  };
   const onStart = (e) => {
     if (sharedDocReadOnly) return;
     if (!pptxMode || !pptxViewer) return;
@@ -3195,6 +3332,10 @@ function setupPptxDrawing() {
     }
     pptxIsDrawing = true;
     pptxCurrentStroke = { points: [{ x: p.x, y: p.y }], color: drawColor, lineWidth: drawLineWidth, opacity: strokeOpacity, toolType: drawToolType };
+    pptxLastPtrNorm = { x: p.x, y: p.y };
+    pptxFreehandSignificantAt = performance.now();
+    stopPptxSnapPoll();
+    pptxSnapTimerId = setInterval(pollPptxSketchSnap, SKETCH_SNAP_POLL_MS);
   };
   let lastBroadcastProgress = 0;
   const onMove = (e) => {
@@ -3235,7 +3376,13 @@ function setupPptxDrawing() {
     if (!pptxIsDrawing || !pptxCurrentStroke.points.length) return;
     e.preventDefault();
     if (p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1) {
-      pptxCurrentStroke.points.push({ x: p.x, y: p.y });
+      pptxLastPtrNorm = { x: p.x, y: p.y };
+      const lastPt = pptxCurrentStroke.points[pptxCurrentStroke.points.length - 1];
+      const step = lastPt ? Math.hypot(p.x - lastPt.x, p.y - lastPt.y) : 1;
+      if (!lastPt || step >= MIN_STROKE_DIST) {
+        pptxCurrentStroke.points.push({ x: p.x, y: p.y });
+        if (!lastPt || step >= FREEHAND_SNAP_SIGNIFICANT_STEP) pptxFreehandSignificantAt = performance.now();
+      }
       drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
       const now = Date.now();
       if (currentPptxShareToken && pptxRealtimeBroadcastProgress && (now - lastBroadcastProgress >= 50 || pptxCurrentStroke.points.length % 5 === 0)) {
@@ -3246,6 +3393,7 @@ function setupPptxDrawing() {
   };
   const onEnd = (e) => {
     pptxEraserActive = false;
+    stopPptxSnapPoll();
     if (drawShape === "select") {
       e.preventDefault();
       if (selectDragging) {
@@ -3607,6 +3755,9 @@ function detectLoop() {
           shapeInProgress = null;
           activeCurrentStroke.points = [];
           activeCurrentStroke.color = drawColor;
+          resetSnapHoldState(gestureSnapHoldState);
+          gestureFreehandSignificantAt = 0;
+          gestureSnapHoldFrameAt = 0;
           smoothedCursor = null;
           smoothedPinch = null;
           smoothedErasePos = { x: twoFingerPos.x, y: twoFingerPos.y };
@@ -3668,17 +3819,29 @@ function detectLoop() {
             pinchReleaseFrames++;
             if (pinchReleaseFrames >= PINCH_RELEASE_FRAMES) {
               if (activeCurrentStroke.points.length > 1) {
-                const stroke = { points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth };
+                const stroke = {
+                  points: [...activeCurrentStroke.points],
+                  color: activeCurrentStroke.color || drawColor,
+                  lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth,
+                  opacity: activeCurrentStroke.opacity ?? strokeOpacity,
+                };
                 if (canvasFadeEnabled) {
                   stroke._ts = Date.now();
                   scheduleFadeTick();
                 }
                 activeStrokes.push(stroke);
                 if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
+                if (pptxMode && currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
+                if (!pdfMode && !pptxMode && currentCanvasShareToken && supabase) {
+                  savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
+                }
               }
               activeCurrentStroke.points = [];
               activeCurrentStroke.color = drawColor;
               activeCurrentStroke.lineWidth = drawLineWidth;
+              resetSnapHoldState(gestureSnapHoldState);
+              gestureFreehandSignificantAt = 0;
+              gestureSnapHoldFrameAt = 0;
               gestureState = "idle";
               pinchReleaseFrames = 0;
               smoothedCursor = null;
@@ -3693,6 +3856,9 @@ function detectLoop() {
           if (smoothedThumbIndexDist < pinchStart && framesSinceErase >= GESTURE_LOCK_FRAMES) {
             gestureState = "drawing";
             activeCurrentStroke.points = [];
+            resetSnapHoldState(gestureSnapHoldState);
+            gestureFreehandSignificantAt = performance.now();
+            gestureSnapHoldFrameAt = 0;
             isPinchActive = true;
           }
         }
@@ -3814,24 +3980,48 @@ function detectLoop() {
               else shapeInProgress.end = { x: px, y: py };
             }
           } else {
-            const pts = activeCurrentStroke.points;
-            const last = pts[pts.length - 1];
-            const dx = last ? drawCursorX - last.x : 0;
-            const dy = last ? smoothedCursor.y - last.y : 0;
-            const dist = Math.hypot(dx, dy);
             const cx = clamp01(drawCursorX), cy = clamp01(smoothedCursor.y);
-            if (!last || dist > MIN_STROKE_DIST) {
+            const lastG = activeCurrentStroke.points[activeCurrentStroke.points.length - 1];
+            const gStep = lastG ? Math.hypot(cx - lastG.x, cy - lastG.y) : 1;
+            if (!lastG || gStep >= MIN_STROKE_DIST) {
               activeCurrentStroke.points.push({ x: cx, y: cy });
-              activeCurrentStroke.color = activeCurrentStroke.color || drawColor;
-              activeCurrentStroke.lineWidth = activeCurrentStroke.lineWidth ?? drawLineWidth;
-              const now = Date.now();
-              if (pdfMode && currentPdfShareToken && pdfRealtimeBroadcastProgress && activeCurrentStroke.points.length >= 2 && (now - lastGestureBroadcastProgress >= 50 || activeCurrentStroke.points.length % 5 === 0)) {
-                lastGestureBroadcastProgress = now;
+              if (!lastG || gStep >= FREEHAND_SNAP_SIGNIFICANT_STEP) gestureFreehandSignificantAt = performance.now();
+            }
+            activeCurrentStroke.color = activeCurrentStroke.color || drawColor;
+            activeCurrentStroke.lineWidth = activeCurrentStroke.lineWidth ?? drawLineWidth;
+            const now = Date.now();
+            if (activeCurrentStroke.points.length >= 2 && (now - lastGestureBroadcastProgress >= 50 || activeCurrentStroke.points.length % 5 === 0)) {
+              lastGestureBroadcastProgress = now;
+              if (pdfMode && currentPdfShareToken && pdfRealtimeBroadcastProgress) {
                 pdfRealtimeBroadcastProgress(pdfPageNum, activeCurrentStroke);
-              }
-              if (!pdfMode && currentCanvasShareToken && canvasRealtimeBroadcastProgress && activeCurrentStroke.points.length >= 2 && (now - lastGestureBroadcastProgress >= 50 || activeCurrentStroke.points.length % 5 === 0)) {
-                lastGestureBroadcastProgress = now;
+              } else if (pptxMode && currentPptxShareToken && pptxRealtimeBroadcastProgress) {
+                pptxRealtimeBroadcastProgress(pptxPageNum, activeCurrentStroke);
+              } else if (!pdfMode && !pptxMode && currentCanvasShareToken && canvasRealtimeBroadcastProgress) {
                 canvasRealtimeBroadcastProgress(getCurrentCanvasPageNum(), activeCurrentStroke);
+              }
+            }
+            const pts = activeCurrentStroke.points;
+            const nowP = performance.now();
+            const dt = gestureSnapHoldFrameAt ? Math.min(100, Math.max(8, nowP - gestureSnapHoldFrameAt)) : SKETCH_SNAP_POLL_MS;
+            gestureSnapHoldFrameAt = nowP;
+            if (
+              tickSketchSnapHold(gestureSnapHoldState, { x: cx, y: cy }, gestureFreehandSignificantAt, pts.length, SKETCH_SNAP_MIN_POINTS, SKETCH_SNAP_HOLD_MS, dt)
+            ) {
+              const draft = { ...activeCurrentStroke, points: [...pts] };
+              if (tryCommitSketchedShapeFromHold(activeStrokes, activeShapes, draft)) {
+                resetSnapHoldState(gestureSnapHoldState);
+                gestureSnapHoldFrameAt = 0;
+                activeCurrentStroke.points = [];
+                activeCurrentStroke.color = drawColor;
+                if (pdfMode && pdfDoc) pushPdfHistory();
+                else if (pptxMode && pptxViewer) pushPptxHistory();
+                else pushCanvasHistory();
+                if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
+                if (pptxMode && currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
+                if (!pdfMode && !pptxMode && currentCanvasShareToken && supabase) {
+                  savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
+                }
+                activeRedraw();
               }
             }
           }
@@ -3884,15 +4074,27 @@ function detectLoop() {
           wasPinching = false;
           fingerLostFrames++;
           if (fingerLostFrames >= FINGER_LOST_THRESHOLD && activeCurrentStroke.points.length > 0) {
-            const stroke = { points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth };
+            const stroke = {
+              points: [...activeCurrentStroke.points],
+              color: activeCurrentStroke.color || drawColor,
+              lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth,
+              opacity: activeCurrentStroke.opacity ?? strokeOpacity,
+            };
             if (canvasFadeEnabled) {
               stroke._ts = Date.now();
               scheduleFadeTick();
             }
             activeStrokes.push(stroke);
             if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
+            if (pptxMode && currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
+            if (!pdfMode && !pptxMode && currentCanvasShareToken && supabase) {
+              savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
+            }
             activeCurrentStroke.points = [];
             activeCurrentStroke.color = drawColor;
+            resetSnapHoldState(gestureSnapHoldState);
+            gestureFreehandSignificantAt = 0;
+            gestureSnapHoldFrameAt = 0;
             smoothedCursor = null;
             smoothedPinch = null;
           }
@@ -3911,15 +4113,27 @@ function detectLoop() {
         pinchReleaseFrames = 0;
         fingerLostFrames++;
         if (fingerLostFrames >= FINGER_LOST_THRESHOLD && activeCurrentStroke.points.length > 0) {
-          const stroke = { points: [...activeCurrentStroke.points], color: activeCurrentStroke.color || drawColor, lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth };
+          const stroke = {
+            points: [...activeCurrentStroke.points],
+            color: activeCurrentStroke.color || drawColor,
+            lineWidth: activeCurrentStroke.lineWidth ?? drawLineWidth,
+            opacity: activeCurrentStroke.opacity ?? strokeOpacity,
+          };
           if (canvasFadeEnabled) {
             stroke._ts = Date.now();
             scheduleFadeTick();
           }
           activeStrokes.push(stroke);
           if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes);
+          if (pptxMode && currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
+          if (!pdfMode && !pptxMode && currentCanvasShareToken && supabase) {
+            savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
+          }
           activeCurrentStroke.points = [];
           activeCurrentStroke.color = drawColor;
+          resetSnapHoldState(gestureSnapHoldState);
+          gestureFreehandSignificantAt = 0;
+          gestureSnapHoldFrameAt = 0;
           smoothedCursor = null;
           smoothedPinch = null;
         }
@@ -4887,7 +5101,7 @@ drawBtn?.addEventListener("click", () => {
   drawBtn?.classList.toggle("active", drawMode);
   if (!drawMode) {
     if (pdfMode && pdfDoc && pdfCurrentStroke.points.length > 0) {
-      const stroke = { points: [...pdfCurrentStroke.points], color: pdfCurrentStroke.color || drawColor, lineWidth: pdfCurrentStroke.lineWidth ?? drawLineWidth, opacity: pdfCurrentStroke.opacity ?? 1 };
+      const stroke = { points: [...pdfCurrentStroke.points], color: pdfCurrentStroke.color || drawColor, lineWidth: pdfCurrentStroke.lineWidth ?? drawLineWidth, opacity: pdfCurrentStroke.opacity ?? strokeOpacity };
       if (canvasFadeEnabled) {
         stroke._ts = Date.now();
         scheduleFadeTick();
@@ -4898,18 +5112,25 @@ drawBtn?.addEventListener("click", () => {
       pdfCurrentStroke = { points: [], color: drawColor };
       drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
     } else if (pptxMode && pptxViewer && pptxCurrentStroke.points.length > 0) {
-      pptxStrokes.push({ points: [...pptxCurrentStroke.points], color: pptxCurrentStroke.color || drawColor, lineWidth: pptxCurrentStroke.lineWidth ?? drawLineWidth, opacity: pptxCurrentStroke.opacity ?? 1 });
+      const stroke = { points: [...pptxCurrentStroke.points], color: pptxCurrentStroke.color || drawColor, lineWidth: pptxCurrentStroke.lineWidth ?? drawLineWidth, opacity: pptxCurrentStroke.opacity ?? strokeOpacity };
+      if (canvasFadeEnabled) {
+        stroke._ts = Date.now();
+        scheduleFadeTick();
+      }
+      pptxStrokes.push(stroke);
       pushPptxHistory();
+      if (currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
       pptxCurrentStroke = { points: [], color: drawColor };
       drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
     } else if (currentStroke.points.length > 0) {
-      const stroke = { points: [...currentStroke.points], color: currentStroke.color || drawColor, lineWidth: currentStroke.lineWidth ?? drawLineWidth, opacity: currentStroke.opacity ?? 1 };
+      const stroke = { points: [...currentStroke.points], color: currentStroke.color || drawColor, lineWidth: currentStroke.lineWidth ?? drawLineWidth, opacity: currentStroke.opacity ?? strokeOpacity };
       if (canvasFadeEnabled) {
         stroke._ts = Date.now();
         scheduleFadeTick();
       }
       strokes.push(stroke);
       pushCanvasHistory();
+      if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
       currentStroke = { points: [], color: drawColor };
     }
   }
