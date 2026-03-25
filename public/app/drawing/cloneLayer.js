@@ -5,7 +5,10 @@ export function cloneStroke(stroke) {
 }
 
 export function cloneShape(shape) {
-  return shape ? { ...shape } : shape;
+  if (!shape) return shape;
+  const c = { ...shape };
+  if (c.type === "image") delete c._img;
+  return c;
 }
 
 export function clonePageLayer(strokesArr = [], shapesArr = []) {

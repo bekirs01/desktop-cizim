@@ -53,6 +53,9 @@ export function shapeNormBBox(sh) {
     const approxH = (sh.fontSize || 24) / 480;
     return { x0: sh.x, y0: sh.y - approxH, x1: sh.x + approxW, y1: sh.y + approxH * 0.35 };
   }
+  if (sh.type === "image" && sh.w != null && sh.h != null) {
+    return { x0: sh.x, y0: sh.y, x1: sh.x + sh.w, y1: sh.y + sh.h };
+  }
   return null;
 }
 
@@ -123,6 +126,9 @@ export function offsetShapeNorm(sh, dx, dy) {
     sh.x3 = clampNorm(sh.x3 + dx);
     sh.y3 = clampNorm(sh.y3 + dy);
   } else if (sh.type === "text") {
+    sh.x = clampNorm(sh.x + dx);
+    sh.y = clampNorm(sh.y + dy);
+  } else if (sh.type === "image") {
     sh.x = clampNorm(sh.x + dx);
     sh.y = clampNorm(sh.y + dy);
   }
@@ -222,6 +228,14 @@ export function scaleShapeNorm(sh, cx, cy, s) {
     sh.x = clampNorm(cx + (sh.x - cx) * s);
     sh.y = clampNorm(cy + (sh.y - cy) * s);
     sh.fontSize = Math.max(8, Math.min(220, (sh.fontSize || 24) * s));
+  } else if (sh.type === "image") {
+    const ccx = sh.x + sh.w / 2, ccy = sh.y + sh.h / 2;
+    const nccx = cx + (ccx - cx) * s;
+    const nccy = cy + (ccy - cy) * s;
+    sh.w = Math.max(0.02, sh.w * s);
+    sh.h = Math.max(0.02, sh.h * s);
+    sh.x = clampNorm(nccx - sh.w / 2);
+    sh.y = clampNorm(nccy - sh.h / 2);
   }
 }
 
@@ -250,4 +264,130 @@ export function screenRectFromNormMarquee(x0, y0, x1, y1, w, h, sx) {
     rw: Math.max(1, Math.abs(px1 - px0)),
     rh: Math.max(1, (yd1 - yd0) * h),
   };
+}
+
+const MIN_PLACED_IMG_NORM = 0.022;
+
+function finalizePlacedImageBox(sh, x0, y0, x1, y1) {
+  let xa = Math.min(x0, x1);
+  let xb = Math.max(x0, x1);
+  let ya = Math.min(y0, y1);
+  let yb = Math.max(y0, y1);
+  let bw = xb - xa;
+  let bh = yb - ya;
+  xa = Math.max(0, Math.min(1 - MIN_PLACED_IMG_NORM, xa));
+  ya = Math.max(0, Math.min(1 - MIN_PLACED_IMG_NORM, ya));
+  bw = Math.max(MIN_PLACED_IMG_NORM, Math.min(1 - xa, bw));
+  bh = Math.max(MIN_PLACED_IMG_NORM, Math.min(1 - ya, bh));
+  if (xa + bw > 1) xa = 1 - bw;
+  if (ya + bh > 1) ya = 1 - bh;
+  sh.x = xa;
+  sh.y = ya;
+  sh.w = bw;
+  sh.h = bh;
+}
+
+/** Одна выделенная вставка картинки (для ручек масштаба). */
+export function getSingleSelectedPlacedImage(sel, shapesArr) {
+  if (!sel?.shapeIdx || sel.shapeIdx.length !== 1) return null;
+  if (sel.strokeIdx?.length) return null;
+  const idx = sel.shapeIdx[0];
+  const sh = shapesArr[idx];
+  if (!sh || sh.type !== "image" || sh.w == null || sh.h == null) return null;
+  return { idx, sh };
+}
+
+export function hitTestPlacedImageResizeHandle(px, py, sh, radiusNorm = 0.032) {
+  const x0 = sh.x;
+  const y0 = sh.y;
+  const x1 = sh.x + sh.w;
+  const y1 = sh.y + sh.h;
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  const handles = [
+    ["nw", x0, y0],
+    ["n", cx, y0],
+    ["ne", x1, y0],
+    ["e", x1, cy],
+    ["se", x1, y1],
+    ["s", cx, y1],
+    ["sw", x0, y1],
+    ["w", x0, cy],
+  ];
+  let best = null;
+  let bestD = Infinity;
+  for (const [id, hx, hy] of handles) {
+    const d = Math.hypot(px - hx, py - hy);
+    if (d < radiusNorm && d < bestD) {
+      best = id;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+export function createPlacedImageResizeStart(sh, handle) {
+  return {
+    handle,
+    x0: sh.x,
+    y0: sh.y,
+    x1: sh.x + sh.w,
+    y1: sh.y + sh.h,
+    w0: sh.w,
+    h0: sh.h,
+    aspect: sh.w / Math.max(sh.h, 1e-9),
+  };
+}
+
+/** Мутация sh: углы — пропорционально, стороны — растяжение по одной оси. */
+export function applyPlacedImageResize(sh, start, px, py) {
+  const { handle, x0: sx0, y0: sy0, x1: sx1, y1: sy1, w0, h0, aspect } = start;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const minS = Math.max(MIN_PLACED_IMG_NORM / w0, MIN_PLACED_IMG_NORM / h0);
+  let x0 = sx0;
+  let y0 = sy0;
+  let x1 = sx1;
+  let y1 = sy1;
+  if (handle === "e") {
+    x1 = clamp(px, sx0 + MIN_PLACED_IMG_NORM, 1);
+  } else if (handle === "w") {
+    x0 = clamp(px, 0, sx1 - MIN_PLACED_IMG_NORM);
+  } else if (handle === "s") {
+    y1 = clamp(py, sy0 + MIN_PLACED_IMG_NORM, 1);
+  } else if (handle === "n") {
+    y0 = clamp(py, 0, sy1 - MIN_PLACED_IMG_NORM);
+  } else if (handle === "se") {
+    const s = Math.max((px - sx0) / w0, (py - sy0) / h0, minS);
+    const nw = w0 * s;
+    const nh = nw / aspect;
+    x0 = sx0;
+    y0 = sy0;
+    x1 = sx0 + nw;
+    y1 = sy0 + nh;
+  } else if (handle === "nw") {
+    const s = Math.max((sx1 - px) / w0, (sy1 - py) / h0, minS);
+    const nw = w0 * s;
+    const nh = nw / aspect;
+    x1 = sx1;
+    y1 = sy1;
+    x0 = sx1 - nw;
+    y0 = sy1 - nh;
+  } else if (handle === "ne") {
+    const s = Math.max((px - sx0) / w0, (sy1 - py) / h0, minS);
+    const nw = w0 * s;
+    const nh = nw / aspect;
+    x0 = sx0;
+    y1 = sy1;
+    x1 = sx0 + nw;
+    y0 = sy1 - nh;
+  } else if (handle === "sw") {
+    const s = Math.max((sx1 - px) / w0, (py - sy0) / h0, minS);
+    const nw = w0 * s;
+    const nh = nw / aspect;
+    x1 = sx1;
+    y0 = sy0;
+    x0 = sx1 - nw;
+    y1 = sy0 + nh;
+  }
+  finalizePlacedImageBox(sh, x0, y0, x1, y1);
 }

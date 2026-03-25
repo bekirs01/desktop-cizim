@@ -91,7 +91,14 @@ export async function savePageStrokes(shareToken, pageNum, strokes, shapes, fill
       color: s.color || "#00ff9f",
       lineWidth: s.lineWidth ?? 4,
     }));
-  const shapesJson = shapes && shapes.length > 0 ? shapes : [];
+  const shapesJson =
+    shapes && shapes.length > 0
+      ? shapes.map((s) => {
+          const o = { ...s };
+          if (o.type === "image") delete o._img;
+          return o;
+        })
+      : [];
   const fillShapesJson = fillShapes && fillShapes.length > 0
     ? fillShapes.map(serializeFillShape).filter(Boolean)
     : [];

@@ -674,6 +674,38 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   position: relative;
 }
 
+.toolbar-icon-btn .toolbar-svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.toolbar-icon-btn.active .toolbar-svg {
+  color: #fff;
+}
+
+.toolbar-btn-text .toolbar-text-t {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.35rem;
+  font-weight: 600;
+  line-height: 1;
+  color: inherit;
+}
+
+.toolbar-image-import-label {
+  margin: 0;
+  overflow: hidden;
+}
+.toolbar-image-import-label .toolbar-file-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+  font-size: 0;
+}
+
 .toolbar-icon-btn:hover {
   background: rgba(108, 92, 231, 0.12);
   color: var(--accent-light);
@@ -688,21 +720,6 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
 
 .toolbar-icon-btn.active:hover {
   background: var(--accent-dim);
-}
-
-.toolbar-icon-btn.color-preview {
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  border-radius: 50%;
-  width: 34px;
-  height: 34px;
-  margin: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  transition: all 0.25s;
-}
-
-.toolbar-icon-btn.color-preview:hover {
-  transform: scale(1.15);
-  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .toolbar-fade-toggle {

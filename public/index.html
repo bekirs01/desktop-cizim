@@ -82,17 +82,24 @@
               </label>
               <div class="toolbar-divider"></div>
               <div class="toolbar-pen-group">
-                <button id="penToolBtn" class="toolbar-icon-btn active" title="Инструменты рисования">&#x270F;&#xFE0F;</button>
-                <div class="toolbar-popover" id="penToolPopover">
-                  <button class="pen-tool-opt" data-tool="pen" title="Ручка">&#x270F;&#xFE0F;</button>
-                  <button class="pen-tool-opt" data-tool="marker" title="Маркер">&#x1F58D;</button>
-                  <button class="pen-tool-opt" data-tool="pencil" title="Карандаш">&#x270E;</button>
-                  <button class="pen-tool-opt" data-tool="brush" title="Кисть">&#x1F58C;</button>
-                </div>
+                <button type="button" id="penToolBtn" class="toolbar-icon-btn active" title="Карандаш и цвет" aria-label="Карандаш">
+                  <svg class="toolbar-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 19l7-7 3 3-7 7h-4v-3z"/>
+                    <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+                    <path d="M2 2l7.586 7.586"/>
+                    <path d="M11 13l2 2"/>
+                  </svg>
+                </button>
               </div>
-              <button id="fillToolBtn" class="toolbar-icon-btn" title="Заливка">&#x1FAA3;</button>
-              <button id="eraserToolBtn" class="toolbar-icon-btn toolbar-hide-when-gestures" title="Ластик"><svg class="icon-eraser" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 20H7L3 16c-1-1 0-2 1-3l9-9c1-1 2-1 3 0l5 5c1 1 1 2 0 3l-9 9c-1 1-2 2-3 1z"/></svg></button>
-              <button id="colorToolBtn" class="toolbar-icon-btn color-preview" style="background:#6c5ce7" title="Цвет"></button>
+              <button type="button" id="fillToolBtn" class="toolbar-icon-btn" title="Заливка" aria-label="Заливка">
+                <svg class="toolbar-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 13"/>
+                  <path d="m5 2 5 5"/>
+                  <path d="M3 21h18"/>
+                  <path d="m12.6 19.4 3.2-3.2"/>
+                </svg>
+              </button>
+              <button type="button" id="eraserToolBtn" class="toolbar-icon-btn toolbar-hide-when-gestures" title="Ластик" aria-label="Ластик"><svg class="toolbar-svg icon-eraser" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 20H7L3 16c-1-1 0-2 1-3l9-9c1-1 2-1 3 0l5 5c1 1 1 2 0 3l-9 9c-1 1-2 2-3 1z"/></svg></button>
               <div class="toolbar-pen-group">
                 <button type="button" id="thicknessToolBtn" class="toolbar-icon-btn thickness-tool-btn" title="Толщина линии" aria-label="Толщина"><span class="thickness-tool-dot" aria-hidden="true"></span></button>
                 <div class="toolbar-popover toolbar-popover-slider" id="thicknessPopover">
@@ -105,14 +112,38 @@
                   <label class="toolbar-slider-row"><span>Прозрачность</span><input type="range" id="toolbarOpacity" min="0.2" max="1" step="0.05" value="1"></label>
                 </div>
               </div>
-              <button id="textToolBtn" class="toolbar-icon-btn toolbar-hide-when-gestures" title="Текст">T</button>
-              <button id="figuresToolBtn" class="toolbar-icon-btn" title="Фигуры">&#x25A2;</button>
-              <button id="selectMoveBtn" class="toolbar-icon-btn" title="Выделить область и перенести">&#x2B1A;</button>
+              <button type="button" id="textToolBtn" class="toolbar-icon-btn toolbar-hide-when-gestures toolbar-btn-text" title="Текст" aria-label="Текст"><span class="toolbar-text-t" aria-hidden="true">T</span></button>
+              <button type="button" id="figuresToolBtn" class="toolbar-icon-btn" title="Фигуры" aria-label="Фигуры">
+                <svg class="toolbar-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="12" cy="12" r="4"/></svg>
+              </button>
+              <label id="imageImportBtn" class="toolbar-icon-btn toolbar-hide-when-gestures toolbar-image-import-label" title="Вставить изображение" aria-label="Изображение">
+                <input type="file" id="imageImportInput" class="toolbar-file-input" accept="image/*" tabindex="-1">
+                <svg class="toolbar-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="14" rx="2"/>
+                  <circle cx="8.5" cy="10" r="1.5" fill="currentColor" stroke="none"/>
+                  <path d="M20 14l-4.5-4.5-3.5 3.5-2.5-2.5L4 16"/>
+                </svg>
+              </label>
+              <button type="button" id="selectMoveBtn" class="toolbar-icon-btn" title="Выделить и перенести" aria-label="Выделение">
+                <svg class="toolbar-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
+                  <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+                  <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
+                  <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+                  <rect x="7.5" y="7.5" width="9" height="9" rx="1.5" stroke-dasharray="2.25 2.25"/>
+                </svg>
+              </button>
               <div class="toolbar-divider"></div>
-              <button id="undoBtn" class="toolbar-icon-btn" title="Отменить">&#x21B6;</button>
-              <button id="redoBtn" class="toolbar-icon-btn" title="Повторить">&#x21B7;</button>
+              <button type="button" id="undoBtn" class="toolbar-icon-btn" title="Отменить" aria-label="Отменить">
+                <svg class="toolbar-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+              </button>
+              <button type="button" id="redoBtn" class="toolbar-icon-btn" title="Повторить" aria-label="Повторить">
+                <svg class="toolbar-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+              </button>
               <div class="toolbar-divider"></div>
-              <button id="clearPageBtn" class="toolbar-icon-btn" title="Очистить страницу">&#x1F5D1;</button>
+              <button type="button" id="clearPageBtn" class="toolbar-icon-btn" title="Очистить страницу" aria-label="Очистить">
+                <svg class="toolbar-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+              </button>
               </div>
               </div>
             </div>
@@ -275,6 +306,6 @@
       </section>
     </main>
   </div>
-  <script type="module" src="script.js?v=12"></script>
+  <script type="module" src="script.js?v=13"></script>
 </body>
 </html>
