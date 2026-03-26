@@ -1,0 +1,208 @@
+import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/vision_bundle.mjs";
+import {
+  getThumbIndexDistance,
+  getPinchCursorPosition,
+  getPinchStartThreshold,
+  getPinchReleaseThreshold,
+} from "../gestures/handGeometry.js";
+import { HAND_MODEL, WASM } from "../config/mediapipeConstants.js";
+
+/** Как в script.js для свободного штриха жестом */
+const CURSOR_SMOOTH = 0.45;
+const GESTURE_LOCK_FRAMES = 6;
+const PINCH_RELEASE_FRAMES = 4;
+const DIST_SMOOTH_ALPHA = 0.6;
+let visionPromise = null;
+let handLandmarkerPromise = null;
+
+async function ensureGameHandLandmarker() {
+  if (!handLandmarkerPromise) {
+    handLandmarkerPromise = (async () => {
+      if (!visionPromise) visionPromise = FilesetResolver.forVisionTasks(WASM);
+      const vision = await visionPromise;
+      return HandLandmarker.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: HAND_MODEL },
+        runningMode: "VIDEO",
+        numHands: 2,
+        minHandDetectionConfidence: 0.2,
+        minHandPresenceConfidence: 0.2,
+        minTrackingConfidence: 0.2,
+      });
+    })().catch((err) => {
+      handLandmarkerPromise = null;
+      throw err;
+    });
+  }
+  return handLandmarkerPromise;
+}
+
+function pickHand(landmarks) {
+  if (!landmarks?.length) return null;
+  for (const lm of landmarks) {
+    if (getPinchCursorPosition(lm)) return lm;
+  }
+  return null;
+}
+
+/**
+ * @param {{
+ *   mirror?: boolean,
+ *   canStartPinchStroke?: () => boolean,
+ *   onPinchStrokeBegin: () => void,
+ *   onPinchStrokeSample: (nx: number, ny: number) => void,
+ *   onUp: () => void,
+ *   onCursor?: (visible: boolean, nx?: number, ny?: number) => void,
+ * }} hooks
+ */
+export async function mountGameGestures(hooks) {
+  /** Как script.js: координаты в норм. кадра без зеркала в штрихе; зеркало только если явно hooks.mirror === true */
+  const mirror = hooks.mirror === true;
+  const canStart = hooks.canStartPinchStroke ?? (() => true);
+
+  const video = document.createElement("video");
+  let stream = null;
+  let handLandmarker = null;
+  video.setAttribute("playsinline", "true");
+  video.setAttribute("webkit-playsinline", "true");
+  video.muted = true;
+  video.style.cssText = "position:fixed;left:-9999px;width:2px;height:2px;opacity:0;pointer-events:none";
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: "user",
+        width: { ideal: 1280, max: 1920 },
+        height: { ideal: 720, max: 1080 },
+      },
+      audio: false,
+    });
+    video.srcObject = stream;
+    document.body.appendChild(video);
+    await video.play();
+
+    let wait = 0;
+    while ((video.videoWidth === 0 || video.videoHeight === 0) && wait < 80) {
+      await new Promise((r) => setTimeout(r, 50));
+      wait++;
+    }
+    handLandmarker = await ensureGameHandLandmarker();
+  } catch (err) {
+    stream?.getTracks().forEach((tr) => tr.stop());
+    video.remove();
+    throw err;
+  }
+
+  let lastVideoTime = -1;
+  let gestureState = "idle";
+  let pinchReleaseFrames = 0;
+  let smoothedThumbIndexDist = 0.2;
+  let smoothedCursor = null;
+  const framesSinceErase = 999;
+  let raf = 0;
+  let stopped = false;
+
+  function clamp01(v) {
+    return Math.max(0, Math.min(1, v));
+  }
+
+  /** Как norm из cursorPos в script.js (свободный штрих): только getPinchCursorPosition + clamp, без преобразований кадра */
+  function normFromLandmark(lm) {
+    const raw = getPinchCursorPosition(lm);
+    if (!raw) return null;
+    const rx = clamp01(raw.x);
+    const ry = clamp01(raw.y);
+    const nx = clamp01(mirror ? 1 - rx : rx);
+    return { x: nx, y: ry };
+  }
+
+  function loop(t) {
+    if (stopped) return;
+    raf = requestAnimationFrame(loop);
+    if (video.readyState < 2) return;
+    if (t <= lastVideoTime) return;
+    lastVideoTime = t;
+
+    let res;
+    try {
+      res = handLandmarker.detectForVideo(video, t);
+    } catch (_) {
+      return;
+    }
+    const rawLm = pickHand(res?.landmarks);
+    if (!rawLm) {
+      smoothedCursor = null;
+      hooks.onCursor?.(false);
+      if (gestureState === "drawing") {
+        gestureState = "idle";
+        pinchReleaseFrames = 0;
+        hooks.onUp();
+      }
+      return;
+    }
+
+    const cursorPos = normFromLandmark(rawLm);
+    if (!cursorPos) {
+      smoothedCursor = null;
+      hooks.onCursor?.(false);
+      return;
+    }
+
+    if (!smoothedCursor) smoothedCursor = { ...cursorPos };
+    else {
+      smoothedCursor.x = smoothedCursor.x * (1 - CURSOR_SMOOTH) + cursorPos.x * CURSOR_SMOOTH;
+      smoothedCursor.y = smoothedCursor.y * (1 - CURSOR_SMOOTH) + cursorPos.y * CURSOR_SMOOTH;
+    }
+    hooks.onCursor?.(true, smoothedCursor.x, smoothedCursor.y);
+
+    const pinchStart = getPinchStartThreshold(rawLm);
+    const pinchRelease = getPinchReleaseThreshold(rawLm);
+    const rawDist = getThumbIndexDistance(rawLm);
+    if (gestureState === "idle" && rawDist < pinchStart) {
+      smoothedThumbIndexDist = rawDist;
+    } else {
+      smoothedThumbIndexDist =
+        smoothedThumbIndexDist * (1 - DIST_SMOOTH_ALPHA) + rawDist * DIST_SMOOTH_ALPHA;
+    }
+
+    let isPinchActive = false;
+    if (gestureState === "drawing") {
+      if (smoothedThumbIndexDist > pinchRelease) {
+        pinchReleaseFrames++;
+        if (pinchReleaseFrames >= PINCH_RELEASE_FRAMES) {
+          gestureState = "idle";
+          pinchReleaseFrames = 0;
+          smoothedCursor = null;
+          hooks.onUp();
+        }
+      } else {
+        pinchReleaseFrames = 0;
+        isPinchActive = true;
+      }
+    } else {
+      pinchReleaseFrames = 0;
+      if (smoothedThumbIndexDist < pinchStart && framesSinceErase >= GESTURE_LOCK_FRAMES && canStart()) {
+        gestureState = "drawing";
+        hooks.onPinchStrokeBegin();
+        isPinchActive = true;
+      }
+    }
+
+    if (gestureState === "drawing" && isPinchActive && framesSinceErase >= GESTURE_LOCK_FRAMES) {
+      hooks.onPinchStrokeSample(clamp01(smoothedCursor.x), clamp01(smoothedCursor.y));
+    }
+  }
+
+  raf = requestAnimationFrame(loop);
+
+  return () => {
+    stopped = true;
+    cancelAnimationFrame(raf);
+    hooks.onCursor?.(false);
+    stream.getTracks().forEach((tr) => tr.stop());
+    video.remove();
+    if (gestureState === "drawing") {
+      gestureState = "idle";
+      hooks.onUp();
+    }
+  };
+}

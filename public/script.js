@@ -213,6 +213,8 @@ let handLandmarker = null;
 let mediaPipeLoadPromise = null;
 let stream = null;
 let loopId = null;
+let cameraStartPromise = null;
+let cameraStartEpoch = 0;
 let lastVideoTime = -1;
 let frameCount = 0;
 let lastFpsTime = performance.now();
@@ -4421,111 +4423,155 @@ async function ensureMediaPipeModelsLoaded() {
   }
 }
 
-// ========== ЗАПУСК КАМЕРЫ ==========
-async function startCamera() {
-  try {
-    errorMessage.classList.remove("visible");
-    startBtn.disabled = true;
-    startBtn.textContent = "Запуск...";
-
-    if (window.location.protocol === "file:") {
-      throw new Error("FILE_PROTOCOL");
-    }
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error("Ваш браузер не поддерживает камеру. Используйте Chrome или Firefox.");
-    }
-
-    ensureMediaPipeModelsLoaded().catch(() => {});
-
-    stream = await navigator.mediaDevices.getUserMedia({
+async function openCameraStreamWithFallback() {
+  const tries = [
+    {
       video: {
         facingMode: "user",
         width: { ideal: VIDEO_WIDTH, max: 1920 },
         height: { ideal: VIDEO_HEIGHT, max: 1080 },
       },
       audio: false,
-    });
-
-    video.srcObject = stream;
-    video.muted = true;
-    video.setAttribute("playsinline", "true");
-    video.setAttribute("webkit-playsinline", "true");
-
+    },
+    {
+      video: {
+        facingMode: "user",
+      },
+      audio: false,
+    },
+    {
+      video: true,
+      audio: false,
+    },
+  ];
+  let lastErr = null;
+  for (const c of tries) {
     try {
-      await video.play();
-    } catch (playErr) {
-      throw new Error("Не удалось воспроизвести видео. Обновите страницу и попробуйте снова.");
+      return await navigator.mediaDevices.getUserMedia(c);
+    } catch (err) {
+      lastErr = err;
     }
-
-    // Ожидание размеров видео (макс 3 с)
-    let wait = 0;
-    while ((video.videoWidth === 0 || video.videoHeight === 0) && wait < 60) {
-      await new Promise((r) => setTimeout(r, 50));
-      wait++;
-    }
-
-    const vw = video.videoWidth || 640;
-    const vh = video.videoHeight || 480;
-    output.width = vw;
-    output.height = vh;
-    drawCanvas.width = vw;
-    drawCanvas.height = vh;
-
-    if (cameraWrapper) {
-      cameraWrapper.style.aspectRatio = `${vw} / ${vh}`;
-      cameraWrapper.dataset.cameraActive = "1";
-    }
-
-    cameraOverlay.classList.add("hidden");
-    stopBtn.disabled = false;
-    if (modeCameraBtn) modeCameraBtn.disabled = false;
-    setTimeout(() => scheduleDocRefitStable(), 150);
-    if (modeWhiteSheetBtn) modeWhiteSheetBtn.disabled = false;
-    if (drawBtn) drawBtn.disabled = false;
-    if (clearDrawBtn) clearDrawBtn.disabled = false;
-    objectsBtn.disabled = false;
-    addObjBtn.disabled = false;
-    removeObjBtn.disabled = false;
-    startBtn.textContent = "Запустить камеру";
-
-    lastVideoTime = -1;
-    if (gestureControlEnabled) {
-      drawMode = true;
-      drawBtn?.classList.add("active");
-    }
-    detectLoop();
-  } catch (err) {
-    console.error("Ошибка камеры:", err);
-    startBtn.textContent = "Запустить камеру";
-    startBtn.disabled = false;
-    let msg = "Нет доступа к камере. ";
-    if (err.message === "FILE_PROTOCOL") {
-      msg = "Открытие по file:// не работает. Запустите 'python3 -m http.server 8000' и откройте http://localhost:8000";
-    } else if (err.message?.includes("Ваш браузер")) {
-      msg = err.message;
-    } else {
-      const s = (err.message || "").toLowerCase();
-      if (err.name === "NotAllowedError" || s.includes("permission") || s.includes("denied")) {
-        msg = "Разрешение камеры отклонено. Нажмите на значок замка/камеры в адресной строке, выберите «Разрешить» и обновите страницу.";
-      } else if (err.name === "NotFoundError") {
-        msg = "Камера не найдена. Попробуйте другое устройство.";
-      } else if (err.name === "NotReadableError" || s.includes("not readable")) {
-        msg = "Камера может использоваться другим приложением. Закройте другие программы.";
-      } else if (s.includes("overconstrained") || s.includes("constraint")) {
-        msg = "Настройки камеры не поддерживаются. Попробуйте другой браузер.";
-      } else {
-        msg = "Ошибка: " + (err.message || err.name || "Неизвестная ошибка");
-      }
-    }
-    errorMessage.textContent = msg;
-    errorMessage.classList.add("visible");
-    cameraOverlay.classList.remove("hidden");
   }
+  throw lastErr || new Error("Не удалось открыть камеру");
+}
+
+// ========== ЗАПУСК КАМЕРЫ ==========
+async function startCamera() {
+  if (stream?.active && video?.srcObject) return;
+  if (cameraStartPromise) return cameraStartPromise;
+  const epoch = ++cameraStartEpoch;
+  cameraStartPromise = (async () => {
+    try {
+      errorMessage.classList.remove("visible");
+      startBtn.disabled = true;
+      startBtn.textContent = "Запуск...";
+
+      if (window.location.protocol === "file:") {
+        throw new Error("FILE_PROTOCOL");
+      }
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Ваш браузер не поддерживает камеру. Используйте Chrome или Firefox.");
+      }
+
+      ensureMediaPipeModelsLoaded().catch(() => {});
+
+      stream = await openCameraStreamWithFallback();
+      if (epoch !== cameraStartEpoch) {
+        stream.getTracks().forEach((t) => t.stop());
+        stream = null;
+        return;
+      }
+
+      video.srcObject = stream;
+      video.muted = true;
+      video.setAttribute("playsinline", "true");
+      video.setAttribute("webkit-playsinline", "true");
+
+      try {
+        await video.play();
+      } catch (playErr) {
+        throw new Error("Не удалось воспроизвести видео. Обновите страницу и попробуйте снова.");
+      }
+
+      // Ожидание размеров видео (макс 3 с)
+      let wait = 0;
+      while ((video.videoWidth === 0 || video.videoHeight === 0) && wait < 60) {
+        await new Promise((r) => setTimeout(r, 50));
+        wait++;
+      }
+
+      const vw = video.videoWidth || 640;
+      const vh = video.videoHeight || 480;
+      output.width = vw;
+      output.height = vh;
+      drawCanvas.width = vw;
+      drawCanvas.height = vh;
+
+      if (cameraWrapper) {
+        cameraWrapper.style.aspectRatio = `${vw} / ${vh}`;
+        cameraWrapper.dataset.cameraActive = "1";
+      }
+
+      cameraOverlay.classList.add("hidden");
+      stopBtn.disabled = false;
+      if (modeCameraBtn) modeCameraBtn.disabled = false;
+      setTimeout(() => scheduleDocRefitStable(), 150);
+      if (modeWhiteSheetBtn) modeWhiteSheetBtn.disabled = false;
+      if (drawBtn) drawBtn.disabled = false;
+      if (clearDrawBtn) clearDrawBtn.disabled = false;
+      objectsBtn.disabled = false;
+      addObjBtn.disabled = false;
+      removeObjBtn.disabled = false;
+      startBtn.textContent = "Запустить камеру";
+
+      lastVideoTime = -1;
+      if (gestureControlEnabled) {
+        drawMode = true;
+        drawBtn?.classList.add("active");
+      }
+      detectLoop();
+    } catch (err) {
+      console.error("Ошибка камеры:", err);
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+        stream = null;
+      }
+      video.srcObject = null;
+      startBtn.textContent = "Запустить камеру";
+      startBtn.disabled = false;
+      let msg = "Нет доступа к камере. ";
+      if (err.message === "FILE_PROTOCOL") {
+        msg = "Открытие по file:// не работает. Запустите 'python3 -m http.server 8000' и откройте http://localhost:8000";
+      } else if (err.message?.includes("Ваш браузер")) {
+        msg = err.message;
+      } else {
+        const s = (err.message || "").toLowerCase();
+        if (err.name === "NotAllowedError" || s.includes("permission") || s.includes("denied")) {
+          msg = "Разрешение камеры отклонено. Нажмите на значок замка/камеры в адресной строке, выберите «Разрешить» и обновите страницу.";
+        } else if (err.name === "NotFoundError") {
+          msg = "Камера не найдена. Попробуйте другое устройство.";
+        } else if (err.name === "NotReadableError" || s.includes("not readable")) {
+          msg = "Камера может использоваться другим приложением. Закройте другие программы.";
+        } else if (s.includes("overconstrained") || s.includes("constraint")) {
+          msg = "Настройки камеры не поддерживаются. Попробуйте другой браузер.";
+        } else {
+          msg = "Ошибка: " + (err.message || err.name || "Неизвестная ошибка");
+        }
+      }
+      errorMessage.textContent = msg;
+      errorMessage.classList.add("visible");
+      cameraOverlay.classList.remove("hidden");
+    } finally {
+      cameraStartPromise = null;
+    }
+  })();
+  return cameraStartPromise;
 }
 
 // ========== ОСТАНОВКА КАМЕРЫ ==========
 function stopCamera() {
+  cameraStartEpoch++;
   if (loopId) {
     cancelAnimationFrame(loopId);
     loopId = null;
@@ -5180,6 +5226,41 @@ redoBtn?.addEventListener("click", () => {
   else if (pptxMode && pptxViewer) redoPptx();
   else redoCanvas();
 });
+
+function isKeyboardUndoRedoTarget(el) {
+  if (!el || el === document.body) return false;
+  const tag = (el.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select") return true;
+  if (el.isContentEditable) return true;
+  const textInput = document.getElementById("textInputOverlay");
+  if (textInput && (el === textInput || textInput.contains(el))) return true;
+  return false;
+}
+
+document.addEventListener(
+  "keydown",
+  (e) => {
+    if (sharedDocReadOnly) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (!mod || e.altKey) return;
+    if (isKeyboardUndoRedoTarget(e.target)) return;
+    const code = e.code || "";
+    const undoCombo = code === "KeyZ" && !e.shiftKey;
+    const redoCombo = (code === "KeyZ" && e.shiftKey) || (code === "KeyY" && !e.shiftKey);
+    if (!undoCombo && !redoCombo) return;
+    e.preventDefault();
+    if (redoCombo) {
+      if (pdfMode && pdfDoc) redoPdf();
+      else if (pptxMode && pptxViewer) redoPptx();
+      else redoCanvas();
+    } else {
+      if (pdfMode && pdfDoc) undoPdf();
+      else if (pptxMode && pptxViewer) undoPptx();
+      else undoCanvas();
+    }
+  },
+  true
+);
 
 document.querySelectorAll(".color-preset").forEach((btn) => {
   btn.addEventListener("click", () => {

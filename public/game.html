@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DrawFlow | Режим игры</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script type="module">
+    import { supabase } from './supabase-config.js';
+    if (supabase) {
+      const hash = window.location.hash.substring(1);
+      const hp = new URLSearchParams(hash);
+      const accessToken = hp.get('access_token');
+      const refreshToken = hp.get('refresh_token');
+      if (accessToken) {
+        await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken || '' });
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --g-bg: #08080c;
+      --g-surface: rgba(20, 20, 28, 0.85);
+      --g-border: rgba(255, 255, 255, 0.1);
+      --g-text: #e8e8f0;
+      --g-dim: #8a8aa0;
+      --g-accent: #6c5ce7;
+      --g-font: 'Inter', system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: var(--g-font);
+      background: linear-gradient(165deg, #06060a 0%, #12101c 50%, #0a0812 100%);
+      color: var(--g-text);
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+    }
+    .game-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--g-border);
+      background: rgba(0,0,0,0.25);
+      flex-shrink: 0;
+    }
+    .game-header h1 {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+    .game-header a {
+      color: var(--g-accent);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .game-header a:hover { text-decoration: underline; }
+    .game-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      width: 100%;
+      max-width: none;
+      margin: 0;
+      padding: 0.65rem 0.75rem 1rem;
+    }
+    .game-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.65rem;
+      flex-shrink: 0;
+    }
+    .game-toolbar label {
+      font-size: 0.85rem;
+      color: var(--g-dim);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .game-toolbar select {
+      padding: 0.45rem 0.65rem;
+      border-radius: 10px;
+      border: 1px solid var(--g-border);
+      background: var(--g-surface);
+      color: var(--g-text);
+      font-family: inherit;
+      font-size: 0.85rem;
+    }
+    .game-btn {
+      padding: 0.5rem 1rem;
+      border-radius: 10px;
+      border: none;
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .game-btn:active { transform: scale(0.98); }
+    .game-btn--primary {
+      background: linear-gradient(135deg, var(--g-accent), #a29bfe);
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(108, 92, 231, 0.35);
+    }
+    .game-btn--ghost {
+      background: var(--g-surface);
+      color: var(--g-text);
+      border: 1px solid var(--g-border);
+    }
+    .game-canvas-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      width: 100%;
+      margin: 0;
+      position: relative;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--g-border);
+      background: #f6f7fb;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+    }
+    #gameCanvas {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+      cursor: crosshair;
+    }
+    .game-gesture-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--g-dim);
+      flex-shrink: 0;
+    }
+    .game-gesture-row input { accent-color: var(--g-accent); }
+    .game-gesture-status { font-size: 0.8rem; color: var(--g-accent); }
+    .game-hint {
+      margin-top: 0.5rem;
+      font-size: 0.78rem;
+      color: var(--g-dim);
+      line-height: 1.45;
+      flex-shrink: 0;
+    }
+    .game-result {
+      margin-top: 0.65rem;
+      flex-shrink: 0;
+      min-height: 4.9rem;
+      padding: 1rem 1.1rem;
+      border-radius: 12px;
+      background: var(--g-surface);
+      border: 1px solid var(--g-border);
+      font-size: 0.95rem;
+      line-height: 1.5;
+      visibility: hidden;
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 0.16s ease, transform 0.16s ease;
+    }
+    .game-result.game-result--visible {
+      visibility: visible;
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .game-result strong { font-size: 1.35rem; color: #a29bfe; }
+    .game-result-detail { font-size: 0.8rem; color: var(--g-dim); }
+  </style>
+</head>
+<body>
+  <header class="game-header">
+    <h1>Повтори фигуру</h1>
+    <div>
+      <a href="help.html">Справка</a>
+      &nbsp;·&nbsp;
+      <a href="dashboard.html">← Документы</a>
+    </div>
+  </header>
+  <main class="game-main">
+    <div class="game-toolbar">
+      <label>Фигура <select id="gameShapeSelect" aria-label="Выбор фигуры"></select></label>
+      <button type="button" class="game-btn game-btn--primary" id="gameCheckBtn">Проверить</button>
+      <button type="button" class="game-btn game-btn--ghost" id="gameClearBtn">Очистить рисунок</button>
+      <button type="button" class="game-btn game-btn--ghost" id="gameRandomBtn">Случайная фигура</button>
+    </div>
+    <div class="game-gesture-row">
+      <label><input type="checkbox" id="gameGestureToggle" /> Рисование жестами (камера)</label>
+      <span class="game-gesture-status" id="gameGestureStatus" aria-live="polite"></span>
+    </div>
+    <div class="game-canvas-wrap">
+      <canvas id="gameCanvas" width="480" height="480" aria-label="Холст: нарисуйте фигуру по образцу"></canvas>
+    </div>
+    <p class="game-hint" id="gameHint"></p>
+    <div class="game-result" id="gameResult" role="status"></div>
+  </main>
+  <script type="module" src="game.js?v=19"></script>
+</body>
+</html>

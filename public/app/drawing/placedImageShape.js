@@ -27,9 +27,11 @@ export function drawPlacedImageShape(ctx, sh, w, h, sx) {
     return;
   }
   if (!sh._img.complete || sh._img.naturalWidth === 0) return;
-  const dx = sx(sh.x);
+  const x0 = sh.x;
+  const x1 = sh.x + sh.w;
+  const dx = Math.min(sx(x0), sx(x1));
   const dy = sh.y * h;
-  const dw = Math.max(1, sh.w * w);
+  const dw = Math.max(1, Math.abs(sx(x1) - sx(x0)));
   const dh = Math.max(1, sh.h * h);
   ctx.save();
   ctx.globalAlpha = sh.opacity ?? 1;

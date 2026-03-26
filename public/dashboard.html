@@ -250,6 +250,7 @@
       grid-template-columns: 1fr 1fr;
       gap: 1rem;
       margin-bottom: 2.5rem;
+      align-items: stretch;
     }
 
     @media (max-width: 600px) {
@@ -270,7 +271,11 @@
       overflow: hidden;
       text-decoration: none;
       color: inherit;
-      display: block;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+      box-sizing: border-box;
     }
 
     .dash-hero-card::before {
@@ -303,13 +308,13 @@
       box-shadow: 0 8px 40px var(--dash-accent-glow);
     }
 
-    .dash-hero-card--pdf::before {
-      background: linear-gradient(90deg, var(--dash-green), #55efc4);
+    .dash-hero-card--game::before {
+      background: linear-gradient(90deg, #fd79a8, #e17055);
     }
 
-    .dash-hero-card--pdf:hover {
-      border-color: rgba(0, 206, 201, 0.3);
-      box-shadow: 0 8px 40px var(--dash-green-glow);
+    .dash-hero-card--game:hover {
+      border-color: rgba(253, 121, 168, 0.35);
+      box-shadow: 0 8px 40px rgba(253, 121, 168, 0.22);
     }
 
     .dash-hero-icon {
@@ -327,8 +332,8 @@
       background: rgba(108, 92, 231, 0.12);
     }
 
-    .dash-hero-card--pdf .dash-hero-icon {
-      background: rgba(0, 206, 201, 0.12);
+    .dash-hero-card--game .dash-hero-icon {
+      background: rgba(253, 121, 168, 0.14);
     }
 
     .dash-hero-title {
@@ -362,9 +367,13 @@
 
     .dash-hero-card-wrap {
       position: relative;
+      display: flex;
+      flex-direction: column;
+      min-height: 100%;
     }
 
     .dash-hero-card-wrap .dash-hero-card {
+      flex: 1;
       width: 100%;
       text-align: left;
     }
@@ -774,11 +783,12 @@
         </button>
         <button type="button" class="dash-hero-add-btn" id="newCanvasBtn" title="Создать новый документ для рисования">+</button>
       </div>
-      <div class="dash-hero-card dash-hero-card--pdf" style="cursor:default;">
-        <div class="dash-hero-icon">&#x1F4C4;</div>
-        <div class="dash-hero-title">Документы PDF</div>
-        <div class="dash-hero-desc">Загружайте PDF и рисуйте поверх страниц</div>
-      </div>
+      <a href="game.html" class="dash-hero-card dash-hero-card--game">
+        <div class="dash-hero-icon">&#x1F3AE;</div>
+        <div class="dash-hero-title">Режим игры</div>
+        <div class="dash-hero-desc">Повторяйте фигуру на холсте — получите оценку в процентах</div>
+        <div class="dash-hero-arrow">&rarr;</div>
+      </a>
     </div>
 
     <div class="dash-link-section">

@@ -28,6 +28,8 @@ const ROUTES = {
   "/login": "/login.html",
   "/help": "/help.html",
   "/view": "/view.html",
+  "/game": "/game.html",
+  "/game.html": "/game.html",
 };
 
 const server = http.createServer((req, res) => {
@@ -35,8 +37,11 @@ const server = http.createServer((req, res) => {
   let filePath = ROUTES[urlPath] || ROUTES[urlPath.replace(/\/$/, "")] || urlPath;
   if (filePath === "/") filePath = "/index.html";
 
-  const fullPath = path.join(ROOT, path.normalize(filePath).replace(/^(\.\.(\/|\\|$))+/, ""));
-  if (!fullPath.startsWith(ROOT)) {
+  const rel = String(filePath).replace(/^\/+/, "").replace(/\\/g, "/").replace(/^(\.\.\/)+/, "");
+  const fullPath = path.resolve(ROOT, rel);
+  const rootResolved = path.resolve(ROOT);
+  const relCheck = path.relative(rootResolved, fullPath);
+  if (relCheck.startsWith("..") || path.isAbsolute(relCheck)) {
     res.writeHead(403);
     res.end("Forbidden");
     return;
