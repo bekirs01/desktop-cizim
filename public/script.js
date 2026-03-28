@@ -330,6 +330,11 @@ let pdfRealtimeUnsubscribe = null;
 let pdfRealtimeBroadcast = null;
 let pdfRealtimeBroadcastProgress = null;
 let pdfRemoteCurrentStroke = null;
+/** Защита от гонок realtime: частичный broadcast (только strokes) не затирает shapes/fills; gen отсекает устаревший decode. */
+let pdfRemoteApplyGen = {};
+let pdfLastRemoteUpdatedAt = {};
+let pptxRemoteApplyGen = {};
+let pptxLastRemoteUpdatedAt = {};
 let canvasRealtimeBroadcastProgress = null;
 let canvasRemoteCurrentStroke = null;
 let lastCanvasBroadcastProgress = 0;
@@ -431,8 +436,11 @@ async function savePdfStrokesAndBroadcast(pageNum, strokes, skipBroadcast = fals
   if (!currentPdfShareToken || sharedDocReadOnly) return;
   const sh = pdfStrokesByPage[pdfPageNum]?.shapes ?? pdfShapes;
   const fsh = pdfStrokesByPage[pdfPageNum]?.fillShapes ?? pdfFillShapes;
-  const ok = await savePageStrokes(currentPdfShareToken, pageNum, strokes, sh, fsh);
-  if (ok && pdfRealtimeBroadcast && !skipBroadcast) pdfRealtimeBroadcast(pageNum, strokes);
+  const res = await savePageStrokes(currentPdfShareToken, pageNum, strokes, sh, fsh);
+  if (res && pdfRealtimeBroadcast && !skipBroadcast) {
+    const ts = typeof res === "object" && res.updated_at ? res.updated_at : undefined;
+    pdfRealtimeBroadcast(pageNum, strokes, ts);
+  }
 }
 
 function loadPdfPageState() {
@@ -1982,6 +1990,8 @@ async function loadPdfFromShareToken(shareToken, password = null) {
     pdfRealtimeUnsubscribe?.();
     pdfRealtimeBroadcast = null;
     pdfRealtimeBroadcastProgress = null;
+    pdfRemoteApplyGen = {};
+    pdfLastRemoteUpdatedAt = {};
     const sub = subscribeStrokes(shareToken, (payload) => {
       if (payload?.event === "pointer_position") {
         const { x, y } = payload.payload || {};
@@ -2014,23 +2024,54 @@ async function loadPdfFromShareToken(shareToken, password = null) {
       }));
       const recentlySaved = lastLocalSaveTime > 0 && Date.now() - lastLocalSaveTime < 2000;
       if (p === pdfPageNum && recentlySaved) return;
+      const u = row.updated_at;
+      if (typeof u === "string") {
+        const prev = pdfLastRemoteUpdatedAt[p];
+        if (typeof prev === "string" && u < prev) return;
+        pdfLastRemoteUpdatedAt[p] = u;
+      }
       pdfRemoteCurrentStroke = null;
       if (!pdfStrokesByPage[p]) pdfStrokesByPage[p] = { strokes: [], shapes: [], fillShapes: [] };
       pdfStrokesByPage[p].strokes = incomingStrokes;
-      pdfStrokesByPage[p].shapes = (row.shapes || []).map(cloneShape);
-      deserializeFillShapes(row.fill_shapes || []).then((fs) => {
-        pdfStrokesByPage[p].fillShapes = fs;
-        if (p === pdfPageNum) {
-          const oldPdfStrokes = pdfStrokes;
-          pdfStrokes = pdfStrokesByPage[p].strokes || [];
-          for (let i = 0; i < Math.min(pdfStrokes.length, oldPdfStrokes.length); i++) {
-            if (oldPdfStrokes[i]._ts) pdfStrokes[i]._ts = oldPdfStrokes[i]._ts;
-          }
-          pdfShapes = pdfStrokesByPage[p].shapes || [];
-          pdfFillShapes = pdfStrokesByPage[p].fillShapes || [];
-          drawStrokesToPdfCanvas(pdfDrawCanvas?.width || 1, pdfDrawCanvas?.height || 1);
+      if (row.shapes !== undefined) {
+        pdfStrokesByPage[p].shapes = (row.shapes || []).map(cloneShape);
+      }
+      const gen = (pdfRemoteApplyGen[p] = (pdfRemoteApplyGen[p] || 0) + 1);
+      const flushPdfLiveFromStore = () => {
+        if (p !== pdfPageNum || !pdfDrawCanvas) return;
+        const layer = pdfStrokesByPage[p];
+        const oldPdfStrokes = pdfStrokes;
+        pdfStrokes = (layer.strokes || []).map(cloneStroke);
+        for (let i = 0; i < Math.min(pdfStrokes.length, oldPdfStrokes.length); i++) {
+          if (oldPdfStrokes[i]._ts) pdfStrokes[i]._ts = oldPdfStrokes[i]._ts;
         }
-      });
+        pdfShapes = (layer.shapes || []).map(cloneShape);
+        pdfFillShapes = (layer.fillShapes || []).map((f) => ({
+          data: new ImageData(new Uint8ClampedArray(f.data.data), f.w, f.h),
+          w: f.w,
+          h: f.h,
+        }));
+        drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+      };
+      if (row.fill_shapes !== undefined) {
+        deserializeFillShapes(row.fill_shapes || []).then((fs) => {
+          if (pdfRemoteApplyGen[p] !== gen) return;
+          pdfStrokesByPage[p].fillShapes = fs;
+          if (p === pdfPageNum) {
+            const oldPdfStrokes = pdfStrokes;
+            pdfStrokes = (pdfStrokesByPage[p].strokes || []).map(cloneStroke);
+            for (let i = 0; i < Math.min(pdfStrokes.length, oldPdfStrokes.length); i++) {
+              if (oldPdfStrokes[i]._ts) pdfStrokes[i]._ts = oldPdfStrokes[i]._ts;
+            }
+            pdfShapes = (pdfStrokesByPage[p].shapes || []).map(cloneShape);
+            pdfFillShapes = pdfStrokesByPage[p].fillShapes || [];
+            drawStrokesToPdfCanvas(pdfDrawCanvas?.width || 1, pdfDrawCanvas?.height || 1);
+          }
+        });
+        flushPdfLiveFromStore();
+      } else {
+        flushPdfLiveFromStore();
+      }
     });
     pdfRealtimeUnsubscribe = sub?.unsubscribe || sub;
     pdfRealtimeBroadcast = sub?.broadcast;
@@ -2122,6 +2163,8 @@ async function loadPptxFromShareToken(shareToken, password = null) {
     await renderPptxSlide();
     updateDocumentOverlays();
     updateHeaderTitle();
+    pptxRemoteApplyGen = {};
+    pptxLastRemoteUpdatedAt = {};
     const sub = subscribeStrokes(shareToken, (payload) => {
       if (payload?.type === "progress" && payload.pageNum === pptxPageNum) {
         pptxRemoteCurrentStroke = payload.stroke;
@@ -2131,25 +2174,52 @@ async function loadPptxFromShareToken(shareToken, password = null) {
       const r = payload?.new || payload?.newRecord || payload?.record;
       if (!r || r.share_token !== shareToken) return;
       const p = r.page_num;
-      const recentlySaved = lastLocalSaveTime > 0 && Date.now() - lastLocalSaveTime < 2000;
-      if (p === pptxPageNum && recentlySaved) return;
       const incomingStrokes = (r.strokes || []).map((s) => ({
         points: s.points || [],
         color: s.color || drawColor,
         lineWidth: s.lineWidth ?? drawLineWidth,
       }));
+      const recentlySaved = lastLocalSaveTime > 0 && Date.now() - lastLocalSaveTime < 2000;
+      if (p === pptxPageNum && recentlySaved) return;
+      const u = r.updated_at;
+      if (typeof u === "string") {
+        const prev = pptxLastRemoteUpdatedAt[p];
+        if (typeof prev === "string" && u < prev) return;
+        pptxLastRemoteUpdatedAt[p] = u;
+      }
       if (!pptxStrokesByPage[p]) pptxStrokesByPage[p] = { strokes: [], shapes: [], fillShapes: [] };
       pptxStrokesByPage[p].strokes = incomingStrokes;
-      pptxStrokesByPage[p].shapes = (r.shapes || []).map(cloneShape);
-      deserializeFillShapes(r.fill_shapes || []).then((fs) => {
-        pptxStrokesByPage[p].fillShapes = fs;
-        if (p === pptxPageNum) {
-          pptxStrokes = pptxStrokesByPage[p].strokes || [];
-          pptxShapes = pptxStrokesByPage[p].shapes || [];
-          pptxFillShapes = pptxStrokesByPage[p].fillShapes || [];
-          drawStrokesToPptxCanvas(pptxDrawCanvas?.width || 1, pptxDrawCanvas?.height || 1);
-        }
-      });
+      if (r.shapes !== undefined) {
+        pptxStrokesByPage[p].shapes = (r.shapes || []).map(cloneShape);
+      }
+      const gen = (pptxRemoteApplyGen[p] = (pptxRemoteApplyGen[p] || 0) + 1);
+      const flushPptxLiveFromStore = () => {
+        if (p !== pptxPageNum || !pptxDrawCanvas) return;
+        const layer = pptxStrokesByPage[p];
+        pptxStrokes = (layer.strokes || []).map(cloneStroke);
+        pptxShapes = (layer.shapes || []).map(cloneShape);
+        pptxFillShapes = (layer.fillShapes || []).map((f) => ({
+          data: new ImageData(new Uint8ClampedArray(f.data.data), f.w, f.h),
+          w: f.w,
+          h: f.h,
+        }));
+        drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+      };
+      if (r.fill_shapes !== undefined) {
+        deserializeFillShapes(r.fill_shapes || []).then((fs) => {
+          if (pptxRemoteApplyGen[p] !== gen) return;
+          pptxStrokesByPage[p].fillShapes = fs;
+          if (p === pptxPageNum) {
+            pptxStrokes = (pptxStrokesByPage[p].strokes || []).map(cloneStroke);
+            pptxShapes = (pptxStrokesByPage[p].shapes || []).map(cloneShape);
+            pptxFillShapes = pptxStrokesByPage[p].fillShapes || [];
+            drawStrokesToPptxCanvas(pptxDrawCanvas?.width || 1, pptxDrawCanvas?.height || 1);
+          }
+        });
+        flushPptxLiveFromStore();
+      } else {
+        flushPptxLiveFromStore();
+      }
     });
     pptxRealtimeUnsubscribe = sub?.unsubscribe || sub;
     pptxRealtimeBroadcast = sub?.broadcast;
@@ -2175,8 +2245,11 @@ async function savePptxStrokesAndBroadcast(pageNum, strokes, skipBroadcast = fal
   if (!currentPptxShareToken || sharedDocReadOnly) return;
   const sh = pptxShapes;
   const fsh = pptxFillShapes;
-  const ok = await savePageStrokes(currentPptxShareToken, pageNum, strokes, sh, fsh);
-  if (ok && pptxRealtimeBroadcast && !skipBroadcast) pptxRealtimeBroadcast(pageNum, strokes);
+  const res = await savePageStrokes(currentPptxShareToken, pageNum, strokes, sh, fsh);
+  if (res && pptxRealtimeBroadcast && !skipBroadcast) {
+    const ts = typeof res === "object" && res.updated_at ? res.updated_at : undefined;
+    pptxRealtimeBroadcast(pageNum, strokes, ts);
+  }
 }
 
 async function loadPdfFromFile(file) {
@@ -3051,8 +3124,8 @@ async function createSharedCanvas() {
   }));
   localHistoryIndex = historyIndex;
   const token = crypto.randomUUID().replace(/-/g, "");
-  const ok = await savePageStrokes(token, CANVAS_PAGE, [], [], []);
-  if (!ok) { alert("Не удалось создать сессию"); return; }
+  const saveRes = await savePageStrokes(token, CANVAS_PAGE, [], [], []);
+  if (!saveRes) { alert("Не удалось создать сессию"); return; }
   currentCanvasShareToken = token;
   strokes = [];
   shapes = [];

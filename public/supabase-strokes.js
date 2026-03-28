@@ -117,7 +117,7 @@ export async function savePageStrokes(shareToken, pageNum, strokes, shapes, fill
     console.warn("Sayfa kaydetme hatası:", error);
     return false;
   }
-  return true;
+  return { updated_at: payload.updated_at };
 }
 
 /** Tek sayfanın stroke'larını getirir */
@@ -175,8 +175,11 @@ export function subscribeStrokes(shareToken, onUpdate) {
       (payload) => { if (payload) onUpdate?.(payload); }
     )
     .on("broadcast", { event: "stroke" }, (msg) => {
-      const { pageNum, strokes } = msg?.payload || msg || {};
-      if (pageNum != null && strokes) onUpdate?.({ new: { page_num: pageNum, share_token: shareToken, strokes } });
+      const { pageNum, strokes, updated_at } = msg?.payload || msg || {};
+      if (pageNum == null || !strokes) return;
+      const row = { page_num: pageNum, share_token: shareToken, strokes };
+      if (typeof updated_at === "string") row.updated_at = updated_at;
+      onUpdate?.({ new: row });
     })
     .on("broadcast", { event: "stroke_progress" }, (msg) => {
       const { pageNum, stroke } = msg?.payload || msg || {};
@@ -200,8 +203,10 @@ export function subscribeStrokes(shareToken, onUpdate) {
     });
   return {
     unsubscribe: () => supabase.removeChannel(channel),
-    broadcast: (pageNum, strokes) => {
-      channel.send({ type: "broadcast", event: "stroke", payload: { pageNum, strokes } });
+    broadcast: (pageNum, strokes, updated_at) => {
+      const payload = { pageNum, strokes };
+      if (typeof updated_at === "string") payload.updated_at = updated_at;
+      channel.send({ type: "broadcast", event: "stroke", payload });
     },
     broadcastProgress: (pageNum, stroke) => {
       if (stroke?.points?.length >= 2) channel.send({ type: "broadcast", event: "stroke_progress", payload: { pageNum, stroke } });

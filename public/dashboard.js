@@ -6,7 +6,7 @@ import { uploadPdfToSupabase, deletePdfFromSupabase, setPdfSharePasswords } from
 import { createCanvas, deleteCanvas, listCanvases, setCanvasSharePassword } from "./supabase-canvas.js";
 
 if (!supabase) {
-  document.body.innerHTML = '<div class="dash-app"><p style="color:var(--dash-red);padding:3rem;text-align:center;">Supabase is not configured.</p></div>';
+  document.body.innerHTML = '<div class="dash-app"><p style="color:var(--dash-red);padding:3rem;text-align:center;">Supabase не настроен.</p></div>';
 } else {
   const hash = window.location.hash.substring(1);
   const params = new URLSearchParams(hash);
@@ -32,7 +32,7 @@ if (!supabase) {
     (typeof user.user_metadata?.full_name === "string" && user.user_metadata.full_name.trim()) ||
     (user.email || "").split("@")[0] ||
     "";
-  if (sub) sub.textContent = name ? `Welcome back, ${name}` : "";
+  if (sub) sub.textContent = name ? `С возвращением, ${name}` : "";
   if (av) {
     const local = (user.email || "u").split("@")[0].replace(/[^a-zA-Z0-9]/g, "") || "u";
     av.textContent = local.slice(0, 2).toUpperCase();
@@ -90,10 +90,10 @@ saveShareUrlBtn?.addEventListener("click", () => {
   const url = shareBaseUrlInput?.value?.trim() || "";
   if (url) {
     localStorage.setItem("shareBaseUrl", url.replace(/\/$/, ""));
-    alert("Saved. Shared links will use this base URL.");
+    alert("Сохранено. Общие ссылки будут использовать этот базовый URL.");
   } else {
     localStorage.removeItem("shareBaseUrl");
-    alert("Cleared. Links will use the current origin.");
+    alert("Сброшено. Ссылки будут использовать текущий origin.");
   }
 });
 
@@ -111,7 +111,7 @@ function extractShareIdFromLink(str) {
 function openPdfLink() {
   const parsed = extractShareIdFromLink(pdfLinkInput?.value || "");
   if (!parsed) {
-    alert("Paste a PDF or shared canvas link (e.g. …index.html?id=… or …index.html?canvas=…)");
+    alert("Вставьте ссылку на общий PDF или холст (например …index.html?id=… или …index.html?canvas=…)");
     return;
   }
   const param = parsed.type === "canvas" ? "canvas" : "id";
@@ -151,7 +151,7 @@ document.getElementById("newCanvasCreateBtn")?.addEventListener("click", async (
   if (result) {
     window.location.href = `/index.html?canvas=${result.shareToken}`;
   } else {
-    alert("Could not create document");
+    alert("Не удалось создать документ");
   }
 });
 
@@ -174,7 +174,7 @@ async function loadDocuments() {
   const pdfError = pdfRes.error;
   const pdfData = pdfRes.data || [];
   if (pdfError) {
-    showUploadError("Could not load documents: " + (pdfError.message || "error"));
+    showUploadError("Не удалось загрузить документы: " + (pdfError.message || "ошибка"));
     return;
   }
   showUploadError("");
@@ -182,9 +182,9 @@ async function loadDocuments() {
     ...pdfData.map((r) => {
       const fn = r.file_name || r.storage_path || "";
       const isPptx = fn.toLowerCase().endsWith(".pptx");
-      return { ...r, type: isPptx ? "pptx" : "pdf", name: r.file_name || (isPptx ? "Presentation" : "PDF"), date: r.created_at };
+      return { ...r, type: isPptx ? "pptx" : "pdf", name: r.file_name || (isPptx ? "Презентация" : "PDF"), date: r.created_at };
     }),
-    ...canvases.map((r) => ({ ...r, type: "canvas", name: r.name || "Canvas", date: r.created_at, share_password_hash: r.share_password_hash })),
+    ...canvases.map((r) => ({ ...r, type: "canvas", name: r.name || "Холст", date: r.created_at, share_password_hash: r.share_password_hash })),
   ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
   pdfList.innerHTML = "";
@@ -203,16 +203,16 @@ async function loadDocuments() {
     const div = document.createElement("div");
     div.className = "dash-pdf-item";
     div.style.animationDelay = `${0.05 * i}s`;
-    const date = row.date ? new Date(row.date).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "";
+    const date = row.date ? new Date(row.date).toLocaleDateString("ru-RU", { year: "numeric", month: "short", day: "numeric" }) : "";
     const hasPwd = !!(row.share_password_hash || row.share_viewer_password_hash);
     const iconWrap = row.type === "pdf"
       ? `<div class="dash-pdf-icon dash-pdf-icon--pdf" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></div>`
       : row.type === "pptx"
-        ? `<div class="dash-pdf-icon dash-pdf-icon--pptx" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h20"/><path d="M10 8v8"/><path d="M14 8v8"/><path d="M4 8h16"/><path d="M12 21l2-2h-4Z"/></svg></div>`
+        ? `<div class="dash-pdf-icon dash-pdf-icon--pptx" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="12" rx="1.5"/><line x1="3" y1="7.5" x2="21" y2="7.5"/><line x1="7" y1="11" x2="17" y2="11"/><line x1="7" y1="13.5" x2="13" y2="13.5"/><line x1="12" y1="15" x2="12" y2="17"/><line x1="9" y1="17" x2="15" y2="17"/></svg></div>`
         : `<div class="dash-pdf-icon dash-pdf-icon--canvas" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></div>`;
     const lockSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
     const lockBadge = hasPwd
-      ? `<span class="dash-lock-badge" title="Password protected">${lockSvg}</span>`
+      ? `<span class="dash-lock-badge" title="Защищено паролем">${lockSvg}</span>`
       : "";
     const openHref = (row.type === "pdf" || row.type === "pptx") ? `/index.html?id=${row.share_token}` : `/index.html?canvas=${row.share_token}`;
     const deleteData = (row.type === "pdf" || row.type === "pptx")
@@ -225,9 +225,9 @@ async function loadDocuments() {
         <div class="dash-pdf-meta">${escapeHtml(date)}${lockBadge}</div>
       </div>
       <div class="dash-pdf-actions">
-        <a href="${openHref}" class="dash-btn dash-btn-primary" style="font-size:0.8rem;padding:0.5rem 1rem;">Open</a>
-        <button type="button" class="dash-btn dash-btn-ghost doc-password-btn" style="font-size:0.8rem;padding:0.45rem 0.65rem;" data-share="${row.share_token}" data-doc-id="${row.type === "canvas" ? "" : (row.id || "")}" data-type="${row.type}" title="${hasPwd ? "Change password" : "Add password"}" aria-label="${hasPwd ? "Change password" : "Add password"}">${lockSvg}</button>
-        <button type="button" class="dash-btn dash-btn-danger-ghost doc-delete-btn" style="font-size:0.8rem;padding:0.45rem 0.75rem;" ${deleteData} title="Delete"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg><span class="doc-btn-text">Delete</span></button>
+        <a href="${openHref}" class="dash-btn dash-btn-primary" style="font-size:0.8rem;padding:0.5rem 1rem;">Открыть</a>
+        <button type="button" class="dash-btn dash-btn-ghost doc-password-btn" style="font-size:0.8rem;padding:0.45rem 0.65rem;" data-share="${row.share_token}" data-doc-id="${row.type === "canvas" ? "" : (row.id || "")}" data-type="${row.type}" title="${hasPwd ? "Изменить пароль" : "Добавить пароль"}" aria-label="${hasPwd ? "Изменить пароль" : "Добавить пароль"}">${lockSvg}</button>
+        <button type="button" class="dash-btn dash-btn-danger-ghost doc-delete-btn" style="font-size:0.8rem;padding:0.45rem 0.75rem;" ${deleteData} title="Удалить"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg><span class="doc-btn-text">Удалить</span></button>
       </div>
     `;
     pdfList.appendChild(div);
@@ -253,7 +253,7 @@ fileInput.addEventListener("change", async (e) => {
   if (!file) return;
   const ext = (file.name || "").split(".").pop()?.toLowerCase();
   if (ext !== "pdf" && ext !== "pptx") {
-    showUploadError("Only PDF and PPTX files are supported");
+    showUploadError("Поддерживаются только файлы PDF и PPTX");
     e.target.value = "";
     return;
   }
@@ -262,23 +262,23 @@ fileInput.addEventListener("change", async (e) => {
   const viewerPassword = document.getElementById("uploadViewerPasswordInput")?.value?.trim() || null;
   const btnText = uploadZone?.querySelector("button");
   if (btnText) btnText.style.opacity = "0.6";
-  if (uploadBtnLabel) uploadBtnLabel.textContent = "Uploading…";
+  if (uploadBtnLabel) uploadBtnLabel.textContent = "Загрузка…";
   let err = null;
   try {
     const result = await uploadPdfToSupabase(file, null, (e) => { err = e; }, sharePassword, viewerPassword);
     if (btnText) btnText.style.opacity = "1";
-    if (uploadBtnLabel) uploadBtnLabel.textContent = "Upload document";
+    if (uploadBtnLabel) uploadBtnLabel.textContent = "Загрузить документ";
     e.target.value = "";
     if (err) {
-      showUploadError("Upload failed: " + err);
+      showUploadError("Ошибка загрузки: " + err);
       return;
     }
     if (result) await loadDocuments();
   } catch (ex) {
     if (btnText) btnText.style.opacity = "1";
-    if (uploadBtnLabel) uploadBtnLabel.textContent = "Upload document";
+    if (uploadBtnLabel) uploadBtnLabel.textContent = "Загрузить документ";
     e.target.value = "";
-    showUploadError("Error: " + (ex?.message || ex));
+    showUploadError("Ошибка: " + (ex?.message || ex));
   }
 });
 
@@ -296,7 +296,7 @@ pdfList.addEventListener("click", async (e) => {
     const share_token = delBtn.dataset.share;
     const type = delBtn.dataset.type || "pdf";
     if (!id || !share_token) return;
-    if (!confirm("Delete this document and all drawings permanently?")) return;
+    if (!confirm("Удалить этот документ и все рисунки безвозвратно?")) return;
     delBtn.disabled = true;
     const delLabel = delBtn.querySelector(".doc-btn-text");
     if (delLabel) delLabel.textContent = "…";
@@ -310,7 +310,7 @@ pdfList.addEventListener("click", async (e) => {
     else {
       delBtn.disabled = false;
       const lbl = delBtn.querySelector(".doc-btn-text");
-      if (lbl) lbl.textContent = "Delete";
+      if (lbl) lbl.textContent = "Удалить";
     }
     return;
   }
@@ -339,12 +339,12 @@ function openPasswordModal(shareToken, pdfRowId) {
     input.value = "";
     if (vIn) vIn.value = "";
     if (viewerWrap) viewerWrap.style.display = passwordModalType === "canvas" ? "none" : "block";
-    if (label) label.textContent = passwordModalType === "canvas" ? "Password" : "Presenter password (full access)";
+    if (label) label.textContent = passwordModalType === "canvas" ? "Пароль" : "Пароль ведущего (полный доступ)";
     if (desc) {
       desc.style.display = "block";
       desc.textContent = passwordModalType === "canvas"
-        ? "Only you and people with the password can open this canvas."
-        : "Presenter: draw and control. Viewer: fullscreen view only, no drawing.";
+        ? "Только вы и те, у кого есть пароль, смогут открыть этот холст."
+        : "Ведущий: рисование и управление. Зритель: только полноэкранный просмотр, без рисования.";
     }
     modal.style.display = "flex";
     input.focus();
@@ -365,13 +365,13 @@ document.getElementById("modalPasswordSave")?.addEventListener("click", async ()
   if (passwordModalType === "canvas") {
     const pwd = document.getElementById("modalPasswordInput")?.value?.trim();
     if (!pwd) {
-      alert("Enter a password");
+      alert("Введите пароль");
       return;
     }
     const ok = await setCanvasSharePassword(passwordModalShareToken, pwd);
     closePasswordModal();
     if (ok) await loadDocuments();
-    else alert("Could not save password");
+    else alert("Не удалось сохранить пароль");
     return;
   }
   const ed = document.getElementById("modalPasswordInput")?.value?.trim() || null;
@@ -379,7 +379,7 @@ document.getElementById("modalPasswordSave")?.addEventListener("click", async ()
   const res = await setPdfSharePasswords(passwordModalShareToken, ed, vw, passwordModalPdfId);
   closePasswordModal();
   if (res.ok) await loadDocuments();
-  else alert(res.error || "Could not save passwords");
+  else alert(res.error || "Не удалось сохранить пароли");
 });
 
 document.getElementById("modalPasswordRemove")?.addEventListener("click", async () => {
@@ -389,7 +389,7 @@ document.getElementById("modalPasswordRemove")?.addEventListener("click", async 
     : await setPdfSharePasswords(passwordModalShareToken, "", "", passwordModalPdfId);
   closePasswordModal();
   if (res.ok) await loadDocuments();
-  else alert(res.error || "Could not remove passwords");
+  else alert(res.error || "Не удалось убрать пароли");
 });
 
 document.getElementById("modalPasswordCancel")?.addEventListener("click", closePasswordModal);
