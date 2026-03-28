@@ -1,36 +1,41 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DrawFlow | Мои документы</title>
+  <title>DrawFlow | Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css?v=10">
   <style>
+    /* Tokens aligned with 2025 SaaS dark UI: zinc neutrals, soft glass, muted accents (not pure black) */
     :root {
-      --dash-bg: #050508;
-      --dash-bg-end: #0f0a1a;
-      --dash-glass: rgba(255, 255, 255, 0.04);
-      --dash-glass-border: rgba(255, 255, 255, 0.08);
-      --dash-glass-hover: rgba(255, 255, 255, 0.07);
-      --dash-surface: rgba(17, 17, 24, 0.6);
-      --dash-surface-hover: rgba(24, 24, 34, 0.7);
+      --dash-bg: #0a0a0b;
+      --dash-bg-end: #12121a;
+      --dash-glass: rgba(255, 255, 255, 0.055);
+      --dash-glass-border: rgba(255, 255, 255, 0.09);
+      --dash-glass-hover: rgba(255, 255, 255, 0.09);
+      --dash-surface: rgba(24, 24, 27, 0.72);
+      --dash-surface-hover: rgba(39, 39, 42, 0.78);
       --dash-border: rgba(255, 255, 255, 0.08);
-      --dash-border-hover: rgba(255, 255, 255, 0.15);
-      --dash-accent: #6c5ce7;
-      --dash-accent-light: #a29bfe;
-      --dash-accent-glow: rgba(108, 92, 231, 0.3);
-      --dash-green: #00cec9;
-      --dash-green-glow: rgba(0, 206, 201, 0.25);
-      --dash-red: #ff6b6b;
-      --dash-text: #e8e8f0;
-      --dash-text-dim: #8a8aa0;
-      --dash-text-mid: #a0a0b8;
-      --dash-radius: 16px;
+      --dash-border-hover: rgba(255, 255, 255, 0.14);
+      --dash-accent: #7c7fd9;
+      --dash-accent-deep: #5b5fc7;
+      --dash-accent-light: #9d9fef;
+      --dash-accent-glow: rgba(91, 95, 199, 0.28);
+      --dash-cyan: #5ac8d4;
+      --dash-cyan-glow: rgba(90, 200, 212, 0.16);
+      --dash-green: #5eead4;
+      --dash-green-glow: rgba(94, 234, 212, 0.15);
+      --dash-red: #f87171;
+      --dash-text: #fafafa;
+      --dash-text-dim: #a1a1aa;
+      --dash-text-mid: #d4d4d8;
+      --dash-radius: 20px;
       --dash-radius-sm: 12px;
-      --dash-font: 'Inter', -apple-system, system-ui, sans-serif;
+      --dash-font: 'Plus Jakarta Sans', -apple-system, system-ui, sans-serif;
+      --dash-space-section: 2rem;
     }
 
     html {
@@ -40,13 +45,16 @@
 
     body {
       font-family: var(--dash-font);
-      background: linear-gradient(160deg, var(--dash-bg) 0%, var(--dash-bg-end) 50%, #0a0512 100%);
+      background: linear-gradient(168deg, #0c0c0e 0%, #0f0f12 42%, #0a0a0d 100%);
       color: var(--dash-text);
       min-height: 100vh;
       min-height: 100dvh;
       margin: 0;
       overflow-x: hidden;
       overscroll-behavior: none;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
     }
 
     .liquid-glass {
@@ -60,7 +68,7 @@
     .liquid-glass .blob {
       position: absolute;
       border-radius: 50%;
-      opacity: 0.85;
+      opacity: 0.55;
     }
 
     .liquid-glass .blob-1 {
@@ -68,9 +76,9 @@
       right: -10%;
       width: 55%;
       height: 65%;
-      background: radial-gradient(ellipse 80% 70% at 30% 40%, rgba(191,36,255,0.4) 0%, rgba(255,36,224,0.2) 35%, transparent 65%);
-      filter: blur(70px);
-      animation: blobFloat1 22s ease-in-out infinite;
+      background: radial-gradient(ellipse 80% 70% at 30% 40%, rgba(91, 95, 199, 0.22) 0%, rgba(90, 200, 212, 0.07) 45%, transparent 68%);
+      filter: blur(72px);
+      animation: blobFloat1 26s ease-in-out infinite;
     }
 
     .liquid-glass .blob-2 {
@@ -78,9 +86,25 @@
       left: -15%;
       width: 50%;
       height: 60%;
-      background: radial-gradient(ellipse 75% 65% at 60% 50%, rgba(36,142,255,0.35) 0%, rgba(108,92,231,0.15) 40%, transparent 65%);
-      filter: blur(65px);
-      animation: blobFloat2 28s ease-in-out infinite;
+      background: radial-gradient(ellipse 75% 65% at 60% 50%, rgba(90, 200, 212, 0.12) 0%, rgba(91, 95, 199, 0.08) 48%, transparent 68%);
+      filter: blur(68px);
+      animation: blobFloat2 32s ease-in-out infinite;
+    }
+
+    .liquid-glass .blob-3 {
+      top: 35%;
+      left: 20%;
+      width: 35%;
+      height: 40%;
+      background: radial-gradient(ellipse at center, rgba(157, 159, 239, 0.09) 0%, transparent 72%);
+      filter: blur(52px);
+      animation: blobFloat3 22s ease-in-out infinite;
+      opacity: 0.65;
+    }
+
+    @keyframes blobFloat3 {
+      0%, 100% { transform: translate(0, 0); }
+      50% { transform: translate(8%, -6%); }
     }
 
     @keyframes blobFloat1 {
@@ -101,11 +125,11 @@
       width: 200%;
       height: 200%;
       background:
-        radial-gradient(ellipse at 25% 25%, rgba(108, 92, 231, 0.06) 0%, transparent 50%),
-        radial-gradient(ellipse at 75% 75%, rgba(0, 206, 201, 0.04) 0%, transparent 50%);
+        radial-gradient(ellipse at 22% 18%, rgba(91, 95, 199, 0.06) 0%, transparent 46%),
+        radial-gradient(ellipse at 78% 82%, rgba(90, 200, 212, 0.035) 0%, transparent 50%);
       pointer-events: none;
       z-index: 0;
-      animation: bgDrift 20s ease-in-out infinite alternate;
+      animation: bgDrift 32s ease-in-out infinite alternate;
     }
 
     @keyframes bgDrift {
@@ -116,9 +140,18 @@
     .dash-app {
       position: relative;
       z-index: 1;
-      max-width: 1000px;
+      max-width: 1040px;
       margin: 0 auto;
-      padding: 2rem 1.5rem 4rem;
+      padding: 2rem clamp(1rem, 4vw, 1.75rem) 4rem;
+    }
+
+    .dash-eyebrow {
+      font-size: 0.625rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--dash-text-dim);
+      margin: 0 0 0.45rem;
     }
 
     /* ===== NAV ===== */
@@ -126,12 +159,13 @@
       position: sticky;
       top: 0;
       z-index: 50;
-      margin: -2rem -1.5rem 2rem;
-      padding: 1rem 1.5rem;
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      background: rgba(255, 255, 255, 0.05);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      margin: -2rem calc(-1 * clamp(1rem, 4vw, 1.75rem)) 2rem;
+      padding: 1rem clamp(1rem, 4vw, 1.75rem);
+      backdrop-filter: blur(28px) saturate(1.15);
+      -webkit-backdrop-filter: blur(28px) saturate(1.15);
+      background: linear-gradient(180deg, rgba(10, 10, 11, 0.78) 0%, rgba(10, 10, 11, 0.52) 100%);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 40px rgba(0, 0, 0, 0.35);
     }
 
     .dash-nav {
@@ -154,7 +188,8 @@
     .dash-nav-subtitle {
       margin: 0;
       padding-left: 0.15rem;
-      font-size: 0.7rem;
+      font-size: 0.72rem;
+      font-weight: 500;
       color: var(--dash-text-dim);
       max-width: 100%;
       overflow: hidden;
@@ -191,24 +226,77 @@
       width: 40px;
       height: 40px;
       border-radius: 12px;
-      background: linear-gradient(135deg, rgba(108, 92, 231, 0.9), rgba(0, 206, 201, 0.8));
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      backdrop-filter: blur(8px);
+      background: linear-gradient(145deg, rgba(99, 102, 241, 0.95) 0%, rgba(34, 211, 238, 0.55) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.12);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.2rem;
-      box-shadow: 0 4px 20px var(--dash-accent-glow), inset 0 1px 0 rgba(255,255,255,0.2);
+      box-shadow: 0 4px 24px var(--dash-accent-glow), inset 0 1px 0 rgba(255,255,255,0.15);
+    }
+
+    .dash-brand-icon svg {
+      width: 22px;
+      height: 22px;
+      color: #fff;
     }
 
     .dash-brand-text {
-      font-size: 1.25rem;
+      font-size: 1.2rem;
       font-weight: 700;
-      letter-spacing: -0.02em;
-      background: linear-gradient(135deg, var(--dash-accent-light), var(--dash-green));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      letter-spacing: -0.03em;
+      color: var(--dash-text);
+    }
+
+    .dash-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(145deg, rgba(51, 65, 85, 0.9), rgba(30, 41, 59, 0.95));
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--dash-text-mid);
+      flex-shrink: 0;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .dash-nav-tools {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-shrink: 0;
+    }
+
+    .dash-icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.5rem;
+      height: 2.5rem;
+      min-width: 2.5rem;
+      padding: 0;
+      border-radius: var(--dash-radius-sm);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      color: var(--dash-text-mid);
+      text-decoration: none;
+      transition: all 0.22s ease;
+    }
+
+    .dash-icon-btn:hover {
+      color: var(--dash-text);
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(129, 140, 248, 0.35);
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.15);
+    }
+
+    .dash-icon-btn svg {
+      width: 18px;
+      height: 18px;
     }
 
     .dash-nav-actions {
@@ -265,17 +353,27 @@
     }
 
     .dash-btn-primary {
-      background: linear-gradient(135deg, rgba(108, 92, 231, 0.9) 0%, rgba(108, 92, 231, 0.7) 100%);
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.95) 0%, rgba(79, 70, 229, 0.88) 100%);
       color: #fff;
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.12);
       backdrop-filter: blur(10px);
-      box-shadow: 0 4px 20px var(--dash-accent-glow), inset 0 1px 0 rgba(255,255,255,0.15);
+      box-shadow: 0 4px 24px var(--dash-accent-glow), inset 0 1px 0 rgba(255,255,255,0.12);
     }
 
     .dash-btn-primary:hover {
-      background: linear-gradient(135deg, rgba(124, 109, 240, 0.95) 0%, rgba(108, 92, 231, 0.8) 100%);
-      box-shadow: 0 6px 28px var(--dash-accent-glow), inset 0 1px 0 rgba(255,255,255,0.2);
+      background: linear-gradient(135deg, rgba(129, 140, 248, 0.98) 0%, rgba(99, 102, 241, 0.92) 100%);
+      box-shadow: 0 8px 32px var(--dash-accent-glow), 0 0 40px rgba(99, 102, 241, 0.12), inset 0 1px 0 rgba(255,255,255,0.18);
       transform: translateY(-1px);
+    }
+
+    .dash-btn-upload-icon {
+      display: inline-flex;
+      opacity: 0.95;
+    }
+
+    .dash-btn-upload-icon svg {
+      width: 17px;
+      height: 17px;
     }
 
     .dash-btn-ghost {
@@ -302,12 +400,12 @@
       border-color: rgba(255, 107, 107, 0.4);
     }
 
-    /* ===== HERO CARDS ===== */
+    /* ===== HERO CARDS (bento-style, calm — no idle motion) ===== */
     .dash-hero {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 1rem;
-      margin-bottom: 2.5rem;
+      gap: 1.25rem;
+      margin-bottom: var(--dash-space-section);
       align-items: stretch;
     }
 
@@ -317,15 +415,17 @@
 
     .dash-hero-card {
       position: relative;
-      padding: 2rem;
+      padding: 1.75rem 1.85rem;
       border-radius: var(--dash-radius);
-      border: 1px solid var(--dash-glass-border);
-      background: var(--dash-surface);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      box-shadow: 0 4px 24px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: linear-gradient(168deg, rgba(30, 30, 33, 0.85) 0%, rgba(24, 24, 27, 0.72) 100%);
+      backdrop-filter: blur(28px) saturate(1.12);
+      -webkit-backdrop-filter: blur(28px) saturate(1.12);
+      box-shadow:
+        0 4px 28px rgba(0,0,0,0.32),
+        inset 0 1px 0 rgba(255,255,255,0.05);
       cursor: pointer;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: border-color 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
       overflow: hidden;
       text-decoration: none;
       color: inherit;
@@ -353,82 +453,96 @@
     }
 
     .dash-hero-card:hover {
-      border-color: var(--dash-border-hover);
-      background: var(--dash-surface-hover);
-      transform: translateY(-2px);
-      box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.08);
+      border-color: rgba(255, 255, 255, 0.12);
+      background: linear-gradient(168deg, rgba(39, 39, 42, 0.88) 0%, rgba(30, 30, 33, 0.8) 100%);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255,255,255,0.07);
     }
 
     .dash-hero-card--draw::before {
-      background: linear-gradient(90deg, var(--dash-accent), var(--dash-accent-light));
+      background: linear-gradient(90deg, var(--dash-accent-deep), var(--dash-cyan));
     }
 
     .dash-hero-card--draw:hover {
-      border-color: rgba(108, 92, 231, 0.3);
+      border-color: rgba(157, 159, 239, 0.35);
       box-shadow:
-        0 12px 48px rgba(0, 0, 0, 0.22),
-        0 8px 32px rgba(108, 92, 231, 0.2),
-        inset 0 1px 0 rgba(255,255,255,0.08);
+        0 14px 48px rgba(0, 0, 0, 0.34),
+        0 0 48px rgba(91, 95, 199, 0.12),
+        inset 0 1px 0 rgba(255,255,255,0.07);
     }
 
     .dash-hero-card--game::before {
-      background: linear-gradient(90deg, #fd79a8, #e17055);
+      background: linear-gradient(90deg, var(--dash-cyan), var(--dash-accent-deep));
     }
 
     .dash-hero-card--game:hover {
-      border-color: rgba(253, 121, 168, 0.35);
+      border-color: rgba(90, 200, 212, 0.3);
       box-shadow:
-        0 12px 48px rgba(0, 0, 0, 0.22),
-        0 8px 32px rgba(253, 121, 168, 0.16),
-        inset 0 1px 0 rgba(255,255,255,0.08);
+        0 14px 48px rgba(0, 0, 0, 0.34),
+        0 0 40px rgba(90, 200, 212, 0.08),
+        inset 0 1px 0 rgba(255,255,255,0.07);
     }
 
     .dash-hero-icon {
-      width: 48px;
-      height: 48px;
+      width: 52px;
+      height: 52px;
       border-radius: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.4rem;
-      margin-bottom: 1rem;
+      margin-bottom: 1.1rem;
+    }
+
+    .dash-hero-icon svg {
+      width: 26px;
+      height: 26px;
     }
 
     .dash-hero-card--draw .dash-hero-icon {
-      background: rgba(108, 92, 231, 0.12);
+      background: rgba(99, 102, 241, 0.15);
+      color: var(--dash-accent-light);
+      border: 1px solid rgba(129, 140, 248, 0.2);
     }
 
     .dash-hero-card--game .dash-hero-icon {
-      background: rgba(253, 121, 168, 0.14);
+      background: rgba(34, 211, 238, 0.1);
+      color: var(--dash-cyan);
+      border: 1px solid rgba(34, 211, 238, 0.18);
     }
 
     .dash-hero-title {
-      font-size: 1.1rem;
+      font-size: 1.05rem;
       font-weight: 700;
-      margin-bottom: 0.35rem;
-      letter-spacing: -0.01em;
+      margin-bottom: 0.4rem;
+      letter-spacing: -0.02em;
     }
 
     .dash-hero-desc {
-      font-size: 0.85rem;
+      font-size: 0.875rem;
+      font-weight: 500;
       color: var(--dash-text-dim);
-      line-height: 1.5;
+      line-height: 1.55;
+      max-width: 32ch;
     }
 
     .dash-hero-arrow {
       position: absolute;
       top: 1.5rem;
       right: 1.5rem;
-      font-size: 1.2rem;
       color: var(--dash-text-dim);
       transition: all 0.3s;
       opacity: 0;
       transform: translateX(-4px);
     }
 
+    .dash-hero-arrow svg {
+      width: 20px;
+      height: 20px;
+    }
+
     .dash-hero-card:hover .dash-hero-arrow {
       opacity: 1;
       transform: translateX(0);
+      color: var(--dash-text-mid);
     }
 
     .dash-hero-card-wrap {
@@ -448,62 +562,41 @@
       position: absolute;
       top: 1rem;
       right: 1rem;
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      background: linear-gradient(135deg, rgba(108, 92, 231, 0.95), rgba(108, 92, 231, 0.8));
-      backdrop-filter: blur(8px);
+      width: 38px;
+      height: 38px;
+      border-radius: 11px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: linear-gradient(145deg, rgba(99, 102, 241, 0.95), rgba(79, 70, 229, 0.85));
       color: #fff;
-      font-size: 1.4rem;
-      font-weight: 700;
-      line-height: 1;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.25s;
+      transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
       z-index: 2;
-      box-shadow: 0 4px 16px var(--dash-accent-glow), inset 0 1px 0 rgba(255,255,255,0.2);
+      box-shadow: 0 4px 20px var(--dash-accent-glow), inset 0 1px 0 rgba(255,255,255,0.15);
+    }
+
+    .dash-hero-add-btn svg {
+      width: 18px;
+      height: 18px;
     }
 
     .dash-hero-add-btn:hover {
-      transform: scale(1.1);
-      box-shadow: 0 6px 24px var(--dash-accent-glow), inset 0 1px 0 rgba(255,255,255,0.25);
-    }
-
-    /* Кнопка «?» в шапке — ровное центрирование символа */
-    .dash-btn-help {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 2.5rem;
-      height: 2.5rem;
-      min-width: 2.5rem;
-      padding: 0;
-      line-height: 1;
-      font-weight: 700;
-      font-size: 1.0625rem;
-      border-radius: var(--dash-radius-sm);
-      box-sizing: border-box;
-    }
-
-    .dash-help-q-char {
-      display: block;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      transform: translate(-0.07em, -0.06em);
+      transform: scale(1.06) translateY(-1px);
+      box-shadow: 0 8px 28px var(--dash-accent-glow), 0 0 24px rgba(99, 102, 241, 0.2), inset 0 1px 0 rgba(255,255,255,0.2);
     }
 
     /* ===== LINK SECTION ===== */
     .dash-link-section {
-      background: var(--dash-surface);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid var(--dash-glass-border);
+      background: linear-gradient(168deg, rgba(30, 30, 33, 0.82) 0%, rgba(24, 24, 27, 0.7) 100%);
+      backdrop-filter: blur(28px) saturate(1.1);
+      -webkit-backdrop-filter: blur(28px) saturate(1.1);
+      border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: var(--dash-radius);
-      box-shadow: 0 4px 24px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.04);
-      padding: 1.5rem;
-      margin-bottom: 2rem;
+      box-shadow: 0 4px 28px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.05);
+      padding: 1.5rem 1.65rem;
+      margin-bottom: var(--dash-space-section);
     }
 
     .dash-link-header {
@@ -514,14 +607,20 @@
     }
 
     .dash-link-icon {
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      background: rgba(0, 206, 201, 0.1);
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: rgba(34, 211, 238, 0.08);
+      border: 1px solid rgba(34, 211, 238, 0.15);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 0.9rem;
+      color: var(--dash-cyan);
+    }
+
+    .dash-link-icon svg {
+      width: 18px;
+      height: 18px;
     }
 
     .dash-link-title {
@@ -530,11 +629,12 @@
     }
 
     .dash-link-desc {
-      font-size: 0.82rem;
+      font-size: 0.84rem;
+      font-weight: 500;
       color: var(--dash-text-dim);
-      margin-bottom: 1rem;
-      line-height: 1.5;
-      padding-left: 2.5rem;
+      margin: 0 0 1rem;
+      line-height: 1.55;
+      max-width: 56ch;
     }
 
     .dash-link-row {
@@ -570,18 +670,28 @@
     /* ===== PDF LIST ===== */
     .dash-section-title {
       display: flex;
-      align-items: center;
+      align-items: flex-end;
       justify-content: space-between;
       margin-bottom: 1rem;
+      gap: 1rem;
     }
 
     .dash-section-title h2 {
-      font-size: 1rem;
+      font-size: 1.05rem;
       font-weight: 700;
-      letter-spacing: -0.01em;
+      letter-spacing: -0.02em;
       display: flex;
       align-items: center;
       gap: 0.5rem;
+      margin: 0;
+      line-height: 1.2;
+    }
+
+    .dash-section-title-start {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+      min-width: 0;
     }
 
     .dash-section-title .dash-count {
@@ -605,32 +715,51 @@
       display: flex;
       align-items: center;
       gap: 1rem;
-      padding: 1rem 1.25rem;
-      background: var(--dash-surface);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid var(--dash-glass-border);
-      border-radius: var(--dash-radius);
-      box-shadow: 0 2px 12px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.03);
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      padding: 1.05rem 1.3rem;
+      background: linear-gradient(168deg, rgba(30, 30, 33, 0.75) 0%, rgba(24, 24, 27, 0.65) 100%);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: var(--dash-radius-sm);
+      box-shadow: 0 2px 16px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.04);
+      transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
     }
 
     .dash-pdf-item:hover {
-      border-color: var(--dash-border-hover);
-      background: var(--dash-surface-hover);
-      box-shadow: 0 4px 20px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.05);
+      border-color: rgba(255, 255, 255, 0.11);
+      background: linear-gradient(168deg, rgba(39, 39, 42, 0.82) 0%, rgba(30, 30, 33, 0.72) 100%);
+      box-shadow: 0 6px 24px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.06);
     }
 
     .dash-pdf-icon {
-      width: 44px;
-      height: 44px;
+      width: 46px;
+      height: 46px;
       border-radius: 12px;
-      background: rgba(0, 206, 201, 0.08);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.2rem;
       flex-shrink: 0;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+    }
+
+    .dash-pdf-icon svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .dash-pdf-icon--pdf {
+      background: rgba(99, 102, 241, 0.1);
+      color: var(--dash-accent-light);
+    }
+
+    .dash-pdf-icon--pptx {
+      background: rgba(34, 211, 238, 0.08);
+      color: var(--dash-cyan);
+    }
+
+    .dash-pdf-icon--canvas {
+      background: rgba(148, 163, 184, 0.08);
+      color: var(--dash-text-mid);
     }
 
     .dash-pdf-info {
@@ -650,6 +779,23 @@
     .dash-pdf-meta {
       font-size: 0.8rem;
       color: var(--dash-text-dim);
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+
+    .dash-lock-badge {
+      display: inline-flex;
+      align-items: center;
+      color: var(--dash-cyan);
+      opacity: 0.85;
+    }
+
+    .dash-lock-badge svg {
+      display: block;
+      width: 14px;
+      height: 14px;
     }
 
     .dash-pdf-actions {
@@ -666,9 +812,22 @@
     }
 
     .dash-pdf-empty-icon {
-      font-size: 2.5rem;
-      margin-bottom: 1rem;
-      opacity: 0.4;
+      margin: 0 auto 1.25rem;
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      background: rgba(99, 102, 241, 0.08);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--dash-text-dim);
+    }
+
+    .dash-pdf-empty-icon svg {
+      width: 30px;
+      height: 30px;
+      opacity: 0.85;
     }
 
     .dash-pdf-empty-text {
@@ -745,21 +904,86 @@
 
     .dash-modal-content {
       position: relative;
-      background: var(--dash-surface);
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      border: 1px solid var(--dash-glass-border);
+      background: linear-gradient(165deg, rgba(15, 23, 42, 0.92) 0%, rgba(15, 23, 42, 0.78) 100%);
+      backdrop-filter: blur(28px) saturate(1.2);
+      -webkit-backdrop-filter: blur(28px) saturate(1.2);
+      border: 1px solid rgba(148, 163, 184, 0.14);
       border-radius: var(--dash-radius);
       padding: 1.5rem;
-      max-width: 380px;
+      max-width: 400px;
       width: 100%;
-      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+      box-shadow:
+        0 24px 64px rgba(0, 0, 0, 0.45),
+        0 0 0 1px rgba(99, 102, 241, 0.08),
+        inset 0 1px 0 rgba(255,255,255,0.06);
       animation: fadeIn 0.2s ease;
     }
 
-    .dash-modal-title {
-      font-size: 1.1rem;
+    .dash-modal-content::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 1.25rem;
+      right: 1.25rem;
+      height: 2px;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--dash-accent-deep), var(--dash-cyan));
+      opacity: 0.85;
+    }
+
+    .dash-modal-title-row {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
       margin-bottom: 0.5rem;
+    }
+
+    .dash-modal-title-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid rgba(129, 140, 248, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--dash-accent-light);
+      flex-shrink: 0;
+    }
+
+    .dash-modal-title-icon svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .dash-modal-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: -0.02em;
+    }
+
+    .doc-password-btn {
+      min-width: 2.5rem;
+      padding-left: 0.55rem !important;
+      padding-right: 0.55rem !important;
+    }
+
+    .doc-password-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .doc-delete-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .doc-delete-btn svg {
+      width: 15px;
+      height: 15px;
+      flex-shrink: 0;
     }
 
     .dash-modal-desc {
@@ -834,19 +1058,45 @@
         min-width: 0;
       }
     }
+
+    @media (prefers-reduced-motion: reduce) {
+      .liquid-glass .blob,
+      .liquid-glass .blob-1,
+      .liquid-glass .blob-2,
+      .liquid-glass .blob-3 {
+        animation: none;
+      }
+      body::before {
+        animation: none;
+      }
+      .dash-hero,
+      .dash-link-section,
+      .dash-section-title,
+      .dash-pdf-list,
+      .dash-pdf-empty,
+      .dash-pdf-item {
+        animation: none;
+      }
+      .dash-btn-primary:hover {
+        transform: none;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="liquid-glass" aria-hidden="true">
     <div class="blob blob-1"></div>
     <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
   </div>
   <div class="dash-app">
     <header class="dash-topbar">
     <nav class="dash-nav">
       <div class="dash-nav-start">
         <div class="dash-brand">
-          <div class="dash-brand-icon">&#x270D;</div>
+          <div class="dash-brand-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+          </div>
           <span class="dash-brand-text">DrawFlow</span>
         </div>
         <p class="dash-nav-subtitle" id="dashUserSubtitle"></p>
@@ -856,17 +1106,23 @@
           <label class="dash-upload-zone" id="uploadZone">
             <input type="file" id="fileInput" accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation">
             <button type="button" class="dash-btn dash-btn-primary" onclick="this.parentElement.querySelector('input').click()">
-              <span>+</span> Загрузить документ
+              <span class="dash-btn-upload-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></span>
+              <span id="uploadBtnLabel">Upload document</span>
             </button>
           </label>
-          <input type="password" id="uploadPasswordInput" class="dash-upload-password" placeholder="Ведущий (опц.)" title="Полный доступ: рисование и управление. Пусто — без пароля ведущего." autocomplete="new-password">
-          <input type="password" id="uploadViewerPasswordInput" class="dash-upload-password" placeholder="Зритель (опц.)" title="Только просмотр полноэкранного слайда, без рисования. Пусто — не задан." autocomplete="new-password">
+          <input type="password" id="uploadPasswordInput" class="dash-upload-password" placeholder="Presenter (opt.)" title="Full access: draw and control. Leave empty for no presenter password." autocomplete="new-password">
+          <input type="password" id="uploadViewerPasswordInput" class="dash-upload-password" placeholder="Viewer (opt.)" title="View-only fullscreen slide mode, no drawing. Optional." autocomplete="new-password">
         </div>
-        <a href="/help.html" class="dash-btn dash-btn-ghost dash-btn-help" title="Справка: горячие клавиши и демонстрация жестов" aria-label="Справка"><span class="dash-help-q-char">?</span></a>
-        <button type="button" id="logoutBtn" class="dash-btn dash-btn-ghost dash-btn-logout" title="Выйти из аккаунта">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          Выйти
-        </button>
+        <div class="dash-nav-tools">
+          <div class="dash-avatar" id="dashUserAvatar" title="Account"></div>
+          <a href="/help.html" class="dash-icon-btn" title="Help — shortcuts &amp; gestures" aria-label="Help">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+          </a>
+          <button type="button" id="logoutBtn" class="dash-btn dash-btn-ghost dash-btn-logout" title="Sign out">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Logout
+          </button>
+        </div>
       </div>
     </nav>
     </header>
@@ -874,30 +1130,39 @@
     <div class="dash-hero">
       <div class="dash-hero-card-wrap">
         <button type="button" class="dash-hero-card dash-hero-card--draw" id="goCameraBtn">
-          <div class="dash-hero-icon">&#x270F;&#xFE0F;</div>
-          <div class="dash-hero-title">Режим рисования</div>
-          <div class="dash-hero-desc">Рисуйте жестами поверх камеры в реальном времени</div>
-          <div class="dash-hero-arrow">&rarr;</div>
+          <div class="dash-hero-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+          </div>
+          <div class="dash-hero-title">Drawing mode</div>
+          <div class="dash-hero-desc">Draw with gestures over the camera on the canvas in real time</div>
+          <div class="dash-hero-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></div>
         </button>
-        <button type="button" class="dash-hero-add-btn" id="newCanvasBtn" title="Создать новый документ для рисования">+</button>
+        <button type="button" class="dash-hero-add-btn" id="newCanvasBtn" title="New drawing document" aria-label="New canvas">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+        </button>
       </div>
       <a href="game.html" class="dash-hero-card dash-hero-card--game">
-        <div class="dash-hero-icon">&#x1F3AE;</div>
-        <div class="dash-hero-title">Режим игры</div>
-        <div class="dash-hero-desc">Повторяйте фигуру на холсте — получите оценку в процентах</div>
-        <div class="dash-hero-arrow">&rarr;</div>
+        <div class="dash-hero-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="10" y1="12" y2="12"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="15" x2="15.01" y1="13" y2="13"/><line x1="18" x2="18.01" y1="11" y2="11"/><rect width="20" height="12" x="2" y="6" rx="2"/></svg>
+        </div>
+        <div class="dash-hero-title">Game mode</div>
+        <div class="dash-hero-desc">Trace the shape on the canvas and get a score as a percentage</div>
+        <div class="dash-hero-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></div>
       </a>
     </div>
 
     <div class="dash-link-section">
+      <p class="dash-eyebrow">Quick open</p>
       <div class="dash-link-header">
-        <div class="dash-link-icon">&#x1F517;</div>
-        <span class="dash-link-title">Открыть по ссылке</span>
+        <div class="dash-link-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" x2="16" y1="12" y2="12"/></svg>
+        </div>
+        <span class="dash-link-title">Open by link</span>
       </div>
-      <p class="dash-link-desc">Вставьте ссылку на PDF или общий холст. Рисуйте вместе с друзьями в реальном времени.</p>
+      <p class="dash-link-desc">Paste a link to a shared PDF or canvas. Collaborate in real time.</p>
       <div class="dash-link-row">
-        <input type="text" id="pdfLinkInput" class="dash-link-input" placeholder="...index.html?id=xxx или ...index.html?canvas=xxx">
-        <button type="button" id="openLinkBtn" class="dash-btn dash-btn-primary">Открыть</button>
+        <input type="text" id="pdfLinkInput" class="dash-link-input" placeholder="…index.html?id=… or …index.html?canvas=…">
+        <button type="button" id="openLinkBtn" class="dash-btn dash-btn-primary">Open</button>
       </div>
     </div>
 
@@ -906,18 +1171,23 @@
     <div id="passwordModal" class="dash-modal" style="display:none">
       <div class="dash-modal-backdrop"></div>
       <div class="dash-modal-content">
-        <h3 class="dash-modal-title">&#x1F512; Пароли ссылки</h3>
-        <p class="dash-modal-desc" id="passwordModalDesc">Для PDF/PPTX: два разных пароля — ведущий (рисует) и зритель (только смотрит). Для холста — один пароль.</p>
-        <label class="dash-modal-field-label" for="modalPasswordInput" id="modalPasswordLabel">Пароль</label>
-        <input type="password" id="modalPasswordInput" class="dash-modal-input" placeholder="Введите пароль" autocomplete="new-password">
+        <div class="dash-modal-title-row">
+          <div class="dash-modal-title-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <h3 class="dash-modal-title" id="passwordModalHeading">Link passwords</h3>
+        </div>
+        <p class="dash-modal-desc" id="passwordModalDesc">For PDF/PPTX: separate presenter and viewer passwords. For canvas: one password.</p>
+        <label class="dash-modal-field-label" for="modalPasswordInput" id="modalPasswordLabel">Password</label>
+        <input type="password" id="modalPasswordInput" class="dash-modal-input" placeholder="Enter password" autocomplete="new-password">
         <div id="modalViewerPasswordWrap" style="display:none">
-          <label class="dash-modal-field-label" for="modalViewerPasswordInput">Пароль зрителя (только просмотр)</label>
-          <input type="password" id="modalViewerPasswordInput" class="dash-modal-input" placeholder="Опционально" autocomplete="new-password">
+          <label class="dash-modal-field-label" for="modalViewerPasswordInput">Viewer password (view only)</label>
+          <input type="password" id="modalViewerPasswordInput" class="dash-modal-input" placeholder="Optional" autocomplete="new-password">
         </div>
         <div class="dash-modal-actions">
-          <button type="button" id="modalPasswordSave" class="dash-btn dash-btn-primary">Сохранить</button>
-          <button type="button" id="modalPasswordRemove" class="dash-btn dash-btn-ghost">Убрать пароли</button>
-          <button type="button" id="modalPasswordCancel" class="dash-btn dash-btn-ghost">Отмена</button>
+          <button type="button" id="modalPasswordSave" class="dash-btn dash-btn-primary">Save</button>
+          <button type="button" id="modalPasswordRemove" class="dash-btn dash-btn-ghost">Remove passwords</button>
+          <button type="button" id="modalPasswordCancel" class="dash-btn dash-btn-ghost">Cancel</button>
         </div>
       </div>
     </div>
@@ -925,25 +1195,35 @@
     <div id="newCanvasModal" class="dash-modal" style="display:none">
       <div class="dash-modal-backdrop"></div>
       <div class="dash-modal-content">
-        <h3 class="dash-modal-title">&#x270F; Новый документ для рисования</h3>
-        <p class="dash-modal-desc">Создайте многостраничный документ. Имя и пароль — по желанию.</p>
-        <input type="text" id="newCanvasNameInput" class="dash-modal-input" placeholder="Название (например: Заметки)" maxlength="80">
-        <input type="password" id="newCanvasPasswordInput" class="dash-modal-input" placeholder="Пароль (опц.)" autocomplete="new-password">
+        <div class="dash-modal-title-row">
+          <div class="dash-modal-title-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+          </div>
+          <h3 class="dash-modal-title">New drawing document</h3>
+        </div>
+        <p class="dash-modal-desc">Create a multi-page canvas. Name and password are optional.</p>
+        <input type="text" id="newCanvasNameInput" class="dash-modal-input" placeholder="Name (e.g. Notes)" maxlength="80">
+        <input type="password" id="newCanvasPasswordInput" class="dash-modal-input" placeholder="Password (optional)" autocomplete="new-password">
         <div class="dash-modal-actions">
-          <button type="button" id="newCanvasCreateBtn" class="dash-btn dash-btn-primary">Создать</button>
-          <button type="button" id="newCanvasCancelBtn" class="dash-btn dash-btn-ghost">Отмена</button>
+          <button type="button" id="newCanvasCreateBtn" class="dash-btn dash-btn-primary">Create</button>
+          <button type="button" id="newCanvasCancelBtn" class="dash-btn dash-btn-ghost">Cancel</button>
         </div>
       </div>
     </div>
 
     <div class="dash-section-title">
-      <h2>Мои документы <span id="pdfCount" class="dash-count" style="display:none">0</span></h2>
+      <div class="dash-section-title-start">
+        <p class="dash-eyebrow">Library</p>
+        <h2>My documents <span id="pdfCount" class="dash-count" style="display:none">0</span></h2>
+      </div>
     </div>
     <div id="pdfList" class="dash-pdf-list"></div>
     <div id="pdfEmpty" class="dash-pdf-empty" style="display:none">
-      <div class="dash-pdf-empty-icon">&#x1F4C2;</div>
-      <div class="dash-pdf-empty-text">Документов пока нет</div>
-      <div class="dash-pdf-empty-hint">Загрузите PDF, чтобы начать рисовать поверх документа</div>
+      <div class="dash-pdf-empty-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>
+      </div>
+      <div class="dash-pdf-empty-text">No documents yet</div>
+      <div class="dash-pdf-empty-hint">Upload a PDF or PPTX to start drawing on top of it</div>
     </div>
   </div>
   <script type="module" src="dashboard.js"></script>
