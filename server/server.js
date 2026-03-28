@@ -9,9 +9,18 @@ const path = require("path");
 const PORT = process.env.PORT || 3000;
 const ROOT = path.join(__dirname, "..", "public");
 
+/** Чтобы после деплоя на Railway сразу подтягивались новые script.js / style.css, а не кэш браузера/CDN. */
+function cacheControlForExt(ext) {
+  if (ext === ".html" || ext === ".js" || ext === ".mjs" || ext === ".css" || ext === ".json") {
+    return "no-cache, no-store, must-revalidate, max-age=0";
+  }
+  return "public, max-age=3600";
+}
+
 const MIME = {
   ".html": "text/html",
   ".js": "application/javascript",
+  ".mjs": "application/javascript",
   ".css": "text/css",
   ".json": "application/json",
   ".ico": "image/x-icon",
@@ -55,7 +64,10 @@ const server = http.createServer((req, res) => {
           res.writeHead(404, { "Content-Type": "text/plain" });
           res.end("Not found");
         } else {
-          res.writeHead(200, { "Content-Type": "text/html" });
+          res.writeHead(200, {
+            "Content-Type": "text/html",
+            "Cache-Control": cacheControlForExt(".html"),
+          });
           res.end(d2);
         }
       });
@@ -69,7 +81,10 @@ const server = http.createServer((req, res) => {
       }
       const ext = path.extname(fullPath);
       const contentType = MIME[ext] || "application/octet-stream";
-      res.writeHead(200, { "Content-Type": contentType });
+      res.writeHead(200, {
+        "Content-Type": contentType,
+        "Cache-Control": cacheControlForExt(ext),
+      });
       res.end(data);
     });
   });
