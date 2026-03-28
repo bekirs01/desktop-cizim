@@ -28,6 +28,12 @@
       --dash-font: 'Inter', -apple-system, system-ui, sans-serif;
     }
 
+    html {
+      background-color: var(--dash-bg);
+      overscroll-behavior: none;
+      min-height: 100%;
+    }
+
     body {
       font-family: var(--dash-font);
       background: linear-gradient(160deg, var(--dash-bg) 0%, var(--dash-bg-end) 50%, #0a0512 100%);
@@ -35,6 +41,7 @@
       min-height: 100vh;
       min-height: 100dvh;
       margin: 0;
+      overscroll-behavior: none;
     }
 
     .liquid-glass {

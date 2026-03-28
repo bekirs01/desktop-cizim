@@ -34,6 +34,11 @@
   box-sizing: border-box;
 }
 
+html {
+  background-color: var(--bg-primary);
+  overscroll-behavior: none;
+}
+
 body {
   font-family: var(--font);
   background: var(--bg-primary);
@@ -42,6 +47,7 @@ body {
   min-height: 100dvh;
   line-height: 1.5;
   overflow-x: hidden;
+  overscroll-behavior: none;
   padding-left: env(safe-area-inset-left, 0);
   padding-right: env(safe-area-inset-right, 0);
 }
@@ -169,6 +175,14 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   align-items: center;
   justify-content: center;
   transition: all var(--transition);
+  text-decoration: none;
+}
+
+a.btn-icon:hover,
+a.btn-icon:focus,
+a.btn-icon:visited,
+a.btn-icon:active {
+  text-decoration: none;
 }
 
 .btn-icon:hover {
@@ -1154,6 +1168,14 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
   cursor: pointer;
   transition: all var(--transition);
   white-space: nowrap;
+  text-decoration: none;
+}
+
+a.btn:hover,
+a.btn:focus,
+a.btn:visited,
+a.btn:active {
+  text-decoration: none;
 }
 
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }

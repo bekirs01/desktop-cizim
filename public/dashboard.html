@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=8">
+  <link rel="stylesheet" href="style.css?v=10">
   <style>
     :root {
       --dash-bg: #050508;
@@ -33,6 +33,11 @@
       --dash-font: 'Inter', -apple-system, system-ui, sans-serif;
     }
 
+    html {
+      background-color: var(--dash-bg);
+      overscroll-behavior: none;
+    }
+
     body {
       font-family: var(--dash-font);
       background: linear-gradient(160deg, var(--dash-bg) 0%, var(--dash-bg-end) 50%, #0a0512 100%);
@@ -41,6 +46,7 @@
       min-height: 100dvh;
       margin: 0;
       overflow-x: hidden;
+      overscroll-behavior: none;
     }
 
     .liquid-glass {
@@ -287,11 +293,13 @@
       right: 0;
       height: 3px;
       border-radius: var(--dash-radius) var(--dash-radius) 0 0;
-      opacity: 0;
+      opacity: 0.55;
       transition: opacity 0.3s;
     }
 
-    .dash-hero-card:hover::before { opacity: 1; }
+    .dash-hero-card:hover::before {
+      opacity: 1;
+    }
 
     .dash-hero-card:hover {
       border-color: var(--dash-border-hover);
@@ -306,7 +314,10 @@
 
     .dash-hero-card--draw:hover {
       border-color: rgba(108, 92, 231, 0.3);
-      box-shadow: 0 8px 40px var(--dash-accent-glow);
+      box-shadow:
+        0 12px 48px rgba(0, 0, 0, 0.22),
+        0 8px 32px rgba(108, 92, 231, 0.2),
+        inset 0 1px 0 rgba(255,255,255,0.08);
     }
 
     .dash-hero-card--game::before {
@@ -315,7 +326,10 @@
 
     .dash-hero-card--game:hover {
       border-color: rgba(253, 121, 168, 0.35);
-      box-shadow: 0 8px 40px rgba(253, 121, 168, 0.22);
+      box-shadow:
+        0 12px 48px rgba(0, 0, 0, 0.22),
+        0 8px 32px rgba(253, 121, 168, 0.16),
+        inset 0 1px 0 rgba(255,255,255,0.08);
     }
 
     .dash-hero-icon {
@@ -795,8 +809,8 @@
     </nav>
 
     <div class="dash-hero">
-      <div class="dash-hero-card-wrap dash-hero-card--draw">
-        <button type="button" class="dash-hero-card" id="goCameraBtn">
+      <div class="dash-hero-card-wrap">
+        <button type="button" class="dash-hero-card dash-hero-card--draw" id="goCameraBtn">
           <div class="dash-hero-icon">&#x270F;&#xFE0F;</div>
           <div class="dash-hero-title">Режим рисования</div>
           <div class="dash-hero-desc">Рисуйте жестами поверх камеры в реальном времени</div>
