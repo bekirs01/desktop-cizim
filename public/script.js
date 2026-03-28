@@ -5016,6 +5016,76 @@ function setActiveToolOnly(tool) {
   else if (tool === "select") selectMoveBtn?.classList.add("active");
 }
 
+function applyRemoteMobileUi(p) {
+  if (!p) return;
+  if (typeof sharedDocReadOnly !== "undefined" && sharedDocReadOnly) return;
+
+  const t = p.tool;
+  const c = p.color;
+
+  if (c && typeof c === "string") {
+    drawColor = c;
+    if (typeof hexToHsv === "function") {
+      const hv = hexToHsv(c);
+      colorWheelHue = hv.h;
+      colorWheelSat = hv.s;
+      colorWheelVal = hv.v;
+    }
+    document.querySelectorAll(".color-preset").forEach((b) => {
+      const bc = (b.dataset.color || "").toLowerCase();
+      b.classList.toggle("active", bc === c.toLowerCase());
+    });
+    if (typeof toolbarColor !== "undefined" && toolbarColor) toolbarColor.value = c;
+    if (typeof colorWheelPreview !== "undefined" && colorWheelPreview)
+      colorWheelPreview.style.background = c;
+    if (pdfMode && pdfDoc) pdfCurrentStroke.color = c;
+    else if (pptxMode && pptxViewer) pptxCurrentStroke.color = c;
+    else currentStroke.color = c;
+    if (typeof updateThicknessOpacityPreviews === "function") updateThicknessOpacityPreviews();
+  }
+
+  if (t === "pen") {
+    colorPopover?.classList.remove("visible");
+    figuresPopover?.classList.remove("visible");
+    thicknessPopover?.classList.remove("visible");
+    opacityPopover?.classList.remove("visible");
+    drawShape = "free";
+    eraserMode = false;
+    clearSelectionToolState();
+    setActiveToolOnly("pen");
+  } else if (t === "eraser") {
+    if (!eraserMode) {
+      eraserMode = true;
+      clearSelectionToolState();
+      setActiveToolOnly("eraser");
+    }
+    thicknessPopover?.classList.remove("visible");
+    opacityPopover?.classList.remove("visible");
+    colorPopover?.classList.remove("visible");
+  } else if (t === "select") {
+    drawShape = "select";
+    eraserMode = false;
+    clearSelectionToolState();
+    setActiveToolOnly("select");
+    figuresPopover?.classList.remove("visible");
+    colorPopover?.classList.remove("visible");
+    thicknessPopover?.classList.remove("visible");
+    opacityPopover?.classList.remove("visible");
+  } else if (t === "undo") {
+    if (pdfMode && pdfDoc) undoPdf();
+    else if (pptxMode && pptxViewer) undoPptx();
+    else undoCanvas();
+  }
+
+  if (pdfMode && pdfDoc && pdfDrawCanvas?.width)
+    drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+  else if (pptxMode && pptxViewer && pptxDrawCanvas?.width)
+    drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+  else if (drawCanvas?.width) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+}
+
+window.addEventListener("drawflow-remote-ui", (ev) => applyRemoteMobileUi(ev.detail));
+
 penToolBtn?.addEventListener("click", (e) => {
   e.stopPropagation();
   colorPopover?.classList.toggle("visible");

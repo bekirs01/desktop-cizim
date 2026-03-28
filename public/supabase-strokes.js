@@ -190,6 +190,11 @@ export function subscribeStrokes(shareToken, onUpdate) {
     .on("broadcast", { event: "pointer_hidden" }, () => {
       onUpdate?.({ event: "pointer_hidden" });
     })
+    .on("broadcast", { event: "remote_ui" }, (msg) => {
+      window.dispatchEvent(
+        new CustomEvent("drawflow-remote-ui", { detail: msg?.payload || msg || {} })
+      );
+    })
     .subscribe((status) => {
       if (status === "CHANNEL_ERROR") console.warn("[Realtime] Bağlantı hatası - SUPABASE_REALTIME_ENABLE.sql çalıştırdın mı?");
     });
