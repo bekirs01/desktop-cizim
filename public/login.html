@@ -10,255 +10,370 @@
   <link rel="stylesheet" href="style.css?v=10">
   <style>
     :root {
-      --login-accent: #6c5ce7;
-      --login-accent-light: #a29bfe;
-      --login-accent-glow: rgba(108, 92, 231, 0.25);
-      --login-teal: #00cec9;
-      --login-bg: #07070a;
-      --login-surface: #111118;
-      --login-border: #1f1f2e;
-      --login-text: #e8e8f0;
-      --login-text-dim: #6c6c88;
-      --login-font: 'Inter', -apple-system, system-ui, sans-serif;
+      --auth-cyan: #06b6d4;
+      --auth-blue: #3b82f6;
+      --auth-font: 'Inter', -apple-system, system-ui, sans-serif;
     }
 
     html {
-      background-color: var(--login-bg);
+      background: #030712;
       overscroll-behavior: none;
     }
 
     body {
-      font-family: var(--login-font);
-      background: var(--login-bg);
-      color: var(--login-text);
+      font-family: var(--auth-font);
       margin: 0;
+      min-height: 100vh;
+      min-height: 100dvh;
+      color: #e5e7eb;
       overscroll-behavior: none;
     }
 
-    body::before {
-      content: '';
-      position: fixed;
-      top: -50%; left: -50%;
-      width: 200%; height: 200%;
-      background:
-        radial-gradient(ellipse at 30% 30%, rgba(108, 92, 231, 0.08) 0%, transparent 50%),
-        radial-gradient(ellipse at 70% 70%, rgba(0, 206, 201, 0.05) 0%, transparent 50%);
-      pointer-events: none;
-      z-index: 0;
-      animation: bgFloat 15s ease-in-out infinite alternate;
-    }
-
-    @keyframes bgFloat {
-      0% { transform: translate(0, 0) rotate(0deg); }
-      100% { transform: translate(-2%, -2%) rotate(1deg); }
-    }
-
-    .auth-page {
+    .auth-shell {
       min-height: 100vh;
       min-height: 100dvh;
       display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 1.5rem;
-      position: relative;
-      z-index: 1;
-    }
-
-    .auth-card {
-      background: var(--login-surface);
-      border: 1px solid var(--login-border);
-      border-radius: 20px;
-      padding: 2.5rem;
-      max-width: 420px;
       width: 100%;
-      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4);
-      animation: cardIn 0.5s ease;
+      background: linear-gradient(to bottom right, #030712, #111827 45%, #000);
     }
 
-    @keyframes cardIn {
-      from { opacity: 0; transform: translateY(20px) scale(0.98); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
+    .auth-visual {
+      display: none;
+      position: relative;
+      width: 50%;
+      overflow: hidden;
     }
 
-    .auth-brand {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin-bottom: 0.5rem;
+    @media (min-width: 1024px) {
+      .auth-visual {
+        display: flex;
+        flex-direction: column;
+      }
     }
 
-    .auth-brand-icon {
-      width: 44px;
-      height: 44px;
-      border-radius: 14px;
-      background: linear-gradient(135deg, var(--login-accent), var(--login-teal));
+    .auth-visual::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom right, rgba(6, 182, 212, 0.1), transparent 50%, rgba(59, 130, 246, 0.1));
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .auth-visual::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .auth-visual img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scale(1.02);
+    }
+
+    .auth-visual-caption {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 3rem;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    .auth-visual-caption h2 {
+      margin: 0 0 0.75rem;
+      font-size: 1.75rem;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.95);
+    }
+
+    .auth-visual-caption p {
+      margin: 0;
+      font-size: 1rem;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.7);
+      max-width: 28rem;
+    }
+
+    .auth-main {
+      flex: 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.3rem;
-      box-shadow: 0 4px 20px var(--login-accent-glow);
+      padding: 2rem 1.5rem;
     }
 
-    .auth-brand-text {
-      font-size: 1.4rem;
-      font-weight: 800;
-      letter-spacing: -0.03em;
-      background: linear-gradient(135deg, var(--login-accent-light), var(--login-teal));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+    .auth-main-inner {
+      width: 100%;
+      max-width: 28rem;
     }
 
-    .auth-card > p {
-      color: var(--login-text-dim);
-      margin-bottom: 1.75rem;
-      font-size: 0.9rem;
+    .auth-glass {
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 1rem;
+      padding: 2rem;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+
+    .auth-head h1 {
+      margin: 0 0 0.5rem;
+      font-size: 1.875rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .auth-head p {
+      margin: 0 0 1.75rem;
+      font-size: 0.875rem;
+      color: #9ca3af;
     }
 
     .auth-tabs {
       display: flex;
       gap: 0.5rem;
-      margin-bottom: 1.75rem;
-      background: var(--login-bg);
-      border-radius: 12px;
+      margin-bottom: 1.5rem;
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 0.75rem;
       padding: 4px;
     }
 
     .auth-tab {
       flex: 1;
-      padding: 0.6rem 1rem;
-      border-radius: 10px;
+      padding: 0.55rem 1rem;
+      border-radius: 0.5rem;
       cursor: pointer;
       background: transparent;
       border: none;
-      color: var(--login-text-dim);
-      font-family: var(--login-font);
-      font-size: 0.9rem;
+      color: #9ca3af;
+      font-family: var(--auth-font);
+      font-size: 0.875rem;
       font-weight: 600;
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-      text-align: center;
+      transition: color 0.2s, background 0.2s;
     }
 
     .auth-tab.active {
-      background: var(--login-accent);
+      background: rgba(6, 182, 212, 0.25);
       color: #fff;
-      box-shadow: 0 2px 12px var(--login-accent-glow);
+      box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.35);
     }
 
     .auth-tab:not(.active):hover {
-      color: var(--login-text);
-      background: rgba(255, 255, 255, 0.04);
+      color: #e5e7eb;
     }
 
-    .auth-form { display: flex; flex-direction: column; gap: 1rem; }
+    .auth-field {
+      margin-bottom: 1.25rem;
+    }
 
-    .auth-form input {
+    .auth-field label {
+      display: block;
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #d1d5db;
+      margin-bottom: 0.5rem;
+    }
+
+    .auth-field input {
       width: 100%;
-      padding: 0.8rem 1rem;
-      border-radius: 12px;
-      border: 1px solid var(--login-border);
-      background: var(--login-bg);
-      color: var(--login-text);
-      font-size: 0.95rem;
-      font-family: var(--login-font);
       box-sizing: border-box;
-      transition: all 0.2s;
-    }
-
-    .auth-form input:focus {
-      outline: none;
-      border-color: var(--login-accent);
-      box-shadow: 0 0 0 3px var(--login-accent-glow);
-    }
-
-    .auth-form input::placeholder { color: var(--login-text-dim); }
-
-    .auth-btn {
-      padding: 0.8rem 1.5rem;
-      border-radius: 12px;
-      font-size: 0.95rem;
-      cursor: pointer;
-      font-weight: 700;
-      font-family: var(--login-font);
-      border: none;
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .auth-btn-primary {
-      background: var(--login-accent);
+      height: 2.75rem;
+      padding: 0 0.875rem;
+      border-radius: 0.5rem;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.05);
       color: #fff;
-      box-shadow: 0 2px 12px var(--login-accent-glow);
+      font-size: 0.9375rem;
+      font-family: var(--auth-font);
+      transition: border-color 0.2s, background 0.2s;
     }
 
-    .auth-btn-primary:hover {
-      background: #7c6df0;
-      box-shadow: 0 4px 24px var(--login-accent-glow);
-      transform: translateY(-1px);
+    .auth-field input::placeholder {
+      color: #6b7280;
     }
 
-    .auth-btn-primary:disabled { opacity: 0.5; transform: none; }
+    .auth-field input:focus {
+      outline: none;
+      border-color: rgba(6, 182, 212, 0.5);
+      background: rgba(255, 255, 255, 0.08);
+    }
 
-    .auth-error { color: #ff6b6b; font-size: 0.85rem; margin-top: -0.25rem; }
-    .auth-success { color: var(--login-teal); font-size: 0.85rem; margin-top: -0.25rem; }
+    .auth-field input:disabled {
+      opacity: 0.6;
+    }
+
+    #signupNameWrap {
+      display: none;
+    }
+
+    #signupNameWrap.visible {
+      display: block;
+    }
+
+    #authMessage {
+      font-size: 0.8125rem;
+      margin-bottom: 0.75rem;
+      min-height: 1.25em;
+    }
+
+    .auth-error { color: #f87171; }
+    .auth-success { color: #22d3ee; }
+
+    .auth-submit {
+      width: 100%;
+      height: 2.75rem;
+      margin-top: 0.5rem;
+      border: none;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      font-family: var(--auth-font);
+      cursor: pointer;
+      color: #fff;
+      background: linear-gradient(to right, var(--auth-cyan), var(--auth-blue));
+      box-shadow: 0 10px 25px -5px rgba(6, 182, 212, 0.25);
+      transition: filter 0.2s, box-shadow 0.2s, opacity 0.2s;
+    }
+
+    .auth-submit:hover:not(:disabled) {
+      filter: brightness(1.08);
+      box-shadow: 0 12px 28px -5px rgba(6, 182, 212, 0.35);
+    }
+
+    .auth-submit:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+
+    .auth-submit .spin {
+      display: inline-block;
+      width: 1rem;
+      height: 1rem;
+      margin-right: 0.5rem;
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: authSpin 0.7s linear infinite;
+      vertical-align: -2px;
+    }
+
+    @keyframes authSpin {
+      to { transform: rotate(360deg); }
+    }
 
     .auth-footer {
-      margin-top: 2rem;
+      margin-top: 1.25rem;
       text-align: center;
     }
 
     .auth-footer a {
-      color: var(--login-text-dim);
+      color: #6b7280;
       text-decoration: none;
-      font-size: 0.85rem;
+      font-size: 0.8125rem;
       transition: color 0.2s;
     }
 
-    .auth-footer a:hover { color: var(--login-accent-light); }
-    @media (max-width: 640px) {
-      .auth-page {
-        padding: 0.8rem;
-      }
-      .auth-card {
-        padding: 1.15rem;
-        border-radius: 14px;
-      }
-      .auth-tab {
-        min-height: 42px;
-      }
-      .auth-btn {
-        min-height: 44px;
-      }
+    .auth-footer a:hover {
+      color: #22d3ee;
     }
   </style>
 </head>
 <body>
-  <div class="auth-page">
-    <div class="auth-card">
-      <div class="auth-brand">
-        <div class="auth-brand-icon">&#x270D;</div>
-        <span class="auth-brand-text">DrawFlow</span>
+  <div class="auth-shell">
+    <div class="auth-visual" aria-hidden="true">
+      <img
+        src="https://images.unsplash.com/photo-1683225831293-6d289c20e963?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxoYW5kJTIwZ2VzdHVyZSUyMHRvdWNobGVzcyUyMHRlY2hub2xvZ3l8ZW58MXx8fHwxNzc0Njk4MDUyfDA&amp;ixlib=rb-4.1.0&amp;q=80&amp;w=1080&amp;utm_source=figma&amp;utm_medium=referral"
+        alt=""
+        width="1080"
+        height="1350"
+        decoding="async"
+      >
+      <div class="auth-visual-caption">
+        <h2>Touch-Free Control</h2>
+        <p>Experience the future of interaction with gesture-based technology</p>
       </div>
-      <p>Войдите или создайте аккаунт</p>
-      <div class="auth-tabs">
-        <button class="auth-tab active" id="tabLogin">Вход</button>
-        <button class="auth-tab" id="tabSignup">Регистрация</button>
-      </div>
-      <form class="auth-form" id="authForm">
-        <input type="email" id="email" placeholder="Email" required autocomplete="email">
-        <input type="password" id="password" placeholder="Пароль" required autocomplete="current-password">
-        <div id="authMessage"></div>
-        <button type="submit" class="auth-btn auth-btn-primary" id="submitBtn">Войти</button>
-      </form>
-      <div class="auth-footer">
-        <a href="/dashboard.html">&larr; Вернуться на главную</a>
+    </div>
+    <div class="auth-main">
+      <div class="auth-main-inner">
+        <div class="auth-glass">
+          <div class="auth-head">
+            <h1 id="authTitle">Вход</h1>
+            <p id="authSubtitle">Платформа рисования жестами DrawFlow</p>
+          </div>
+          <div class="auth-tabs" role="tablist">
+            <button type="button" class="auth-tab active" id="tabLogin" role="tab" aria-selected="true">Вход</button>
+            <button type="button" class="auth-tab" id="tabSignup" role="tab" aria-selected="false">Регистрация</button>
+          </div>
+          <form class="auth-form" id="authForm">
+            <div class="auth-field" id="signupNameWrap">
+              <label for="signupName">Имя (необязательно)</label>
+              <input type="text" id="signupName" placeholder="Ваше имя" autocomplete="name">
+            </div>
+            <div class="auth-field">
+              <label for="email">Email</label>
+              <input type="email" id="email" placeholder="your@email.com" required autocomplete="email">
+            </div>
+            <div class="auth-field">
+              <label for="password">Пароль</label>
+              <input type="password" id="password" placeholder="Минимум 6 символов" required autocomplete="current-password">
+            </div>
+            <div id="authMessage"></div>
+            <button type="submit" class="auth-submit" id="submitBtn">Войти</button>
+          </form>
+          <div class="auth-footer">
+            <a href="/dashboard.html">&larr; На главную (документы)</a>
+          </div>
+        </div>
       </div>
     </div>
   </div>
   <script type="module">
     import { supabase } from './supabase-config.js';
 
+    const authTitle = document.getElementById('authTitle');
+    const authSubtitle = document.getElementById('authSubtitle');
+    const tabLogin = document.getElementById('tabLogin');
+    const tabSignup = document.getElementById('tabSignup');
+    const form = document.getElementById('authForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const msgEl = document.getElementById('authMessage');
+    const signupNameWrap = document.getElementById('signupNameWrap');
+    const signupName = document.getElementById('signupName');
+    const passwordInput = document.getElementById('password');
+    let isSignup = false;
+
+    function setMode(signup) {
+      isSignup = signup;
+      tabLogin.classList.toggle('active', !signup);
+      tabSignup.classList.toggle('active', signup);
+      tabLogin.setAttribute('aria-selected', (!signup).toString());
+      tabSignup.setAttribute('aria-selected', signup.toString());
+      signupNameWrap.classList.toggle('visible', signup);
+      authTitle.textContent = signup ? 'Регистрация' : 'Вход';
+      authSubtitle.textContent = signup
+        ? 'Создайте аккаунт для сохранения документов'
+        : 'Войдите в платформу рисования жестами';
+      submitBtn.textContent = signup ? 'Зарегистрироваться' : 'Войти';
+      passwordInput.autocomplete = signup ? 'new-password' : 'current-password';
+      msgEl.textContent = '';
+      msgEl.className = '';
+    }
+
+    tabLogin.addEventListener('click', () => setMode(false));
+    tabSignup.addEventListener('click', () => setMode(true));
+
     if (!supabase) {
-      document.getElementById('authMessage').innerHTML = '<span class="auth-error">Supabase не настроен.</span>';
+      msgEl.innerHTML = '<span class="auth-error">Supabase не настроен.</span>';
     } else {
       const hash = window.location.hash.substring(1);
       const params = new URLSearchParams(hash);
@@ -266,21 +381,20 @@
       const refreshToken = params.get('refresh_token');
       if (accessToken) {
         await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken || '' });
-        const params = new URLSearchParams(window.location.search);
-        const redirect = params.get('redirect');
+        const q = new URLSearchParams(window.location.search);
+        const redirect = q.get('redirect');
         window.location.replace(redirect || '/dashboard.html');
       }
     }
 
-    const tabLogin = document.getElementById('tabLogin');
-    const tabSignup = document.getElementById('tabSignup');
-    const form = document.getElementById('authForm');
-    const submitBtn = document.getElementById('submitBtn');
-    const msgEl = document.getElementById('authMessage');
-    let isSignup = false;
-
-    tabLogin.addEventListener('click', () => { isSignup = false; tabLogin.classList.add('active'); tabSignup.classList.remove('active'); submitBtn.textContent = 'Войти'; msgEl.textContent = ''; });
-    tabSignup.addEventListener('click', () => { isSignup = true; tabSignup.classList.add('active'); tabLogin.classList.remove('active'); submitBtn.textContent = 'Регистрация'; msgEl.textContent = ''; });
+    function setLoading(loading) {
+      submitBtn.disabled = loading;
+      if (loading) {
+        submitBtn.innerHTML = '<span class="spin" aria-hidden="true"></span>' + (isSignup ? 'Регистрация…' : 'Вход…');
+      } else {
+        submitBtn.textContent = isSignup ? 'Зарегистрироваться' : 'Войти';
+      }
+    }
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -289,31 +403,40 @@
       const password = document.getElementById('password').value;
       msgEl.textContent = '';
       msgEl.className = '';
-      submitBtn.disabled = true;
+
+      if (password.length < 6) {
+        msgEl.textContent = 'Пароль не короче 6 символов';
+        msgEl.className = 'auth-error';
+        return;
+      }
+
+      setLoading(true);
       try {
         if (isSignup) {
-          const { data, error } = await supabase.auth.signUp({ email, password });
+          const name = (signupName?.value || '').trim();
+          const options = name ? { data: { full_name: name } } : {};
+          const { data, error } = await supabase.auth.signUp({ email, password, options });
           if (error) throw error;
           if (data?.session) {
-            const params = new URLSearchParams(window.location.search);
-            const redirect = params.get('redirect');
+            const q = new URLSearchParams(window.location.search);
+            const redirect = q.get('redirect');
             window.location.href = redirect || '/dashboard.html';
           } else {
-            msgEl.textContent = 'Регистрация успешна! Можете войти.';
+            msgEl.textContent = 'Регистрация успешна! Проверьте почту или войдите.';
             msgEl.className = 'auth-success';
           }
         } else {
           const { error } = await supabase.auth.signInWithPassword({ email, password });
           if (error) throw error;
-          const params = new URLSearchParams(window.location.search);
-          const redirect = params.get('redirect');
+          const q = new URLSearchParams(window.location.search);
+          const redirect = q.get('redirect');
           window.location.href = redirect || '/dashboard.html';
         }
       } catch (err) {
         msgEl.textContent = err.message || 'Произошла ошибка';
         msgEl.className = 'auth-error';
       }
-      submitBtn.disabled = false;
+      setLoading(false);
     });
   </script>
 </body>

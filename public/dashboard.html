@@ -122,12 +122,63 @@
     }
 
     /* ===== NAV ===== */
+    .dash-topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      margin: -2rem -1.5rem 2rem;
+      padding: 1rem 1.5rem;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      background: rgba(255, 255, 255, 0.05);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
     .dash-nav {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 1rem 0;
-      margin-bottom: 2.5rem;
+      gap: 1rem;
+      padding: 0;
+      margin-bottom: 0;
+    }
+
+    .dash-nav-start {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.2rem;
+      min-width: 0;
+    }
+
+    .dash-nav-subtitle {
+      margin: 0;
+      padding-left: 0.15rem;
+      font-size: 0.7rem;
+      color: var(--dash-text-dim);
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .dash-btn-logout {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.05) !important;
+      border: 1px solid rgba(255, 255, 255, 0.1) !important;
+      color: var(--dash-text) !important;
+    }
+
+    .dash-btn-logout:hover {
+      background: rgba(255, 255, 255, 0.1) !important;
+    }
+
+    .dash-btn-logout svg {
+      flex-shrink: 0;
+      opacity: 0.9;
     }
 
     .dash-brand {
@@ -761,6 +812,10 @@
     }
     @media (max-width: 760px) {
       .dash-app { padding-bottom: max(3rem, env(safe-area-inset-bottom, 0px)); }
+      .dash-topbar {
+        margin: -2rem -1.5rem 1.5rem;
+        padding: 0.85rem 1rem;
+      }
       .dash-nav {
         gap: 0.7rem;
         flex-wrap: wrap;
@@ -787,10 +842,14 @@
     <div class="blob blob-2"></div>
   </div>
   <div class="dash-app">
+    <header class="dash-topbar">
     <nav class="dash-nav">
-      <div class="dash-brand">
-        <div class="dash-brand-icon">&#x270D;</div>
-        <span class="dash-brand-text">DrawFlow</span>
+      <div class="dash-nav-start">
+        <div class="dash-brand">
+          <div class="dash-brand-icon">&#x270D;</div>
+          <span class="dash-brand-text">DrawFlow</span>
+        </div>
+        <p class="dash-nav-subtitle" id="dashUserSubtitle"></p>
       </div>
       <div class="dash-nav-actions">
         <div class="dash-upload-group">
@@ -804,9 +863,13 @@
           <input type="password" id="uploadViewerPasswordInput" class="dash-upload-password" placeholder="Зритель (опц.)" title="Только просмотр полноэкранного слайда, без рисования. Пусто — не задан." autocomplete="new-password">
         </div>
         <a href="/help.html" class="dash-btn dash-btn-ghost dash-btn-help" title="Справка: горячие клавиши и демонстрация жестов" aria-label="Справка"><span class="dash-help-q-char">?</span></a>
-        <button id="logoutBtn" class="dash-btn dash-btn-ghost">Выйти</button>
+        <button type="button" id="logoutBtn" class="dash-btn dash-btn-ghost dash-btn-logout" title="Выйти из аккаунта">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Выйти
+        </button>
       </div>
     </nav>
+    </header>
 
     <div class="dash-hero">
       <div class="dash-hero-card-wrap">

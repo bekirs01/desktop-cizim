@@ -22,6 +22,19 @@ if (!supabase) {
   }
 }
 
+(async () => {
+  if (!supabase) return;
+  const sub = document.getElementById("dashUserSubtitle");
+  if (!sub) return;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  const name =
+    (typeof user.user_metadata?.full_name === "string" && user.user_metadata.full_name.trim()) ||
+    (user.email || "").split("@")[0] ||
+    "";
+  sub.textContent = name ? `С возвращением, ${name}` : "";
+})();
+
 const pdfList = document.getElementById("pdfList");
 const pdfEmpty = document.getElementById("pdfEmpty");
 const pdfCount = document.getElementById("pdfCount");
@@ -256,7 +269,8 @@ fileInput.addEventListener("change", async (e) => {
   }
 });
 
-logoutBtn.addEventListener("click", async () => {
+logoutBtn?.addEventListener("click", async () => {
+  if (!supabase) return;
   await supabase.auth.signOut();
   window.location.replace("/login.html");
 });
