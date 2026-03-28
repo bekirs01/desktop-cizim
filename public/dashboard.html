@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=8">
   <style>
     :root {
       --dash-bg: #050508;
@@ -38,6 +38,7 @@
       background: linear-gradient(160deg, var(--dash-bg) 0%, var(--dash-bg-end) 50%, #0a0512 100%);
       color: var(--dash-text);
       min-height: 100vh;
+      min-height: 100dvh;
       margin: 0;
       overflow-x: hidden;
     }
@@ -743,6 +744,26 @@
       .dash-hero-card { padding: 1.5rem; }
       .dash-pdf-item { flex-wrap: wrap; }
       .dash-pdf-actions { width: 100%; justify-content: flex-end; }
+    }
+    @media (max-width: 760px) {
+      .dash-app { padding-bottom: max(3rem, env(safe-area-inset-bottom, 0px)); }
+      .dash-nav {
+        gap: 0.7rem;
+        flex-wrap: wrap;
+      }
+      .dash-nav-actions {
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+      }
+      .dash-upload-group {
+        width: 100%;
+        flex-wrap: wrap;
+      }
+      .dash-upload-password {
+        flex: 1 1 140px;
+        min-width: 0;
+      }
     }
   </style>
 </head>

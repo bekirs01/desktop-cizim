@@ -45,9 +45,28 @@ function pickHand(landmarks) {
 }
 
 /**
+ * Видеокадр (nx,ny ∈ [0,1]) → нормализованные координаты буфера холста без анизотропии:
+ * круг в плоскости изображения камеры остаётся кругом в пикселях холста (как object-fit: contain).
+ */
+function mapVideoNormToCanvasBufferNorm(nx, ny, vw, vh, cw, ch) {
+  if (vw <= 0 || vh <= 0 || cw <= 0 || ch <= 0) return { x: nx, y: ny };
+  const scale = Math.min(cw / vw, ch / vh);
+  const ox = (cw - vw * scale) * 0.5;
+  const oy = (ch - vh * scale) * 0.5;
+  const cx = nx * vw * scale + ox;
+  const cy = ny * vh * scale + oy;
+  return {
+    x: Math.max(0, Math.min(1, cx / cw)),
+    y: Math.max(0, Math.min(1, cy / ch)),
+  };
+}
+
+/**
  * @param {{
  *   mirror?: boolean,
  *   canStartPinchStroke?: () => boolean,
+ *   getCanvasBufferSize?: () => { w: number, h: number },
+ *   onVideoReady?: (videoWidth: number, videoHeight: number) => void,
  *   onPinchStrokeBegin: () => void,
  *   onPinchStrokeSample: (nx: number, ny: number) => void,
  *   onUp: () => void,
@@ -84,6 +103,9 @@ export async function mountGameGestures(hooks) {
     while ((video.videoWidth === 0 || video.videoHeight === 0) && wait < 80) {
       await new Promise((r) => setTimeout(r, 50));
       wait++;
+    }
+    if (video.videoWidth > 0 && video.videoHeight > 0) {
+      hooks.onVideoReady?.(video.videoWidth, video.videoHeight);
     }
     handLandmarker = await ensureGameHandLandmarker();
   } catch (err) {
@@ -152,7 +174,19 @@ export async function mountGameGestures(hooks) {
       smoothedCursor.x = smoothedCursor.x * (1 - CURSOR_SMOOTH) + cursorPos.x * CURSOR_SMOOTH;
       smoothedCursor.y = smoothedCursor.y * (1 - CURSOR_SMOOTH) + cursorPos.y * CURSOR_SMOOTH;
     }
-    hooks.onCursor?.(true, smoothedCursor.x, smoothedCursor.y);
+
+    const buf = hooks.getCanvasBufferSize?.();
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    let drawX = smoothedCursor.x;
+    let drawY = smoothedCursor.y;
+    if (buf && vw > 0 && vh > 0) {
+      const m = mapVideoNormToCanvasBufferNorm(drawX, drawY, vw, vh, buf.w, buf.h);
+      drawX = m.x;
+      drawY = m.y;
+    }
+
+    hooks.onCursor?.(true, drawX, drawY);
 
     const pinchStart = getPinchStartThreshold(rawLm);
     const pinchRelease = getPinchReleaseThreshold(rawLm);
@@ -188,7 +222,7 @@ export async function mountGameGestures(hooks) {
     }
 
     if (gestureState === "drawing" && isPinchActive && framesSinceErase >= GESTURE_LOCK_FRAMES) {
-      hooks.onPinchStrokeSample(clamp01(smoothedCursor.x), clamp01(smoothedCursor.y));
+      hooks.onPinchStrokeSample(clamp01(drawX), clamp01(drawY));
     }
   }
 

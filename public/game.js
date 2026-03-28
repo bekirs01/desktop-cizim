@@ -13,6 +13,34 @@ const resultEl = document.getElementById("gameResult");
 const hintEl = document.getElementById("gameHint");
 const gestureToggle = document.getElementById("gameGestureToggle");
 const gestureStatusEl = document.getElementById("gameGestureStatus");
+const gameCanvasOuter = document.getElementById("gameCanvasOuter");
+
+/** Размер кадра камеры (после включения жестов); 0 — до включения, берём запасной 16:9. */
+let cameraVideoW = 0;
+let cameraVideoH = 0;
+
+function getCameraAspectRatio() {
+  if (cameraVideoW > 0 && cameraVideoH > 0) return cameraVideoW / cameraVideoH;
+  return 16 / 9;
+}
+
+/** На всю ширину контейнера; высота из пропорций камеры. Скролл только у страницы, не у блока холста. */
+function layoutGameCanvas() {
+  const outer = gameCanvasOuter;
+  const wrap = canvas?.parentElement;
+  if (!outer || !wrap) return;
+  const aw = outer.getBoundingClientRect().width;
+  const ar = getCameraAspectRatio();
+  if (aw < 8) return;
+  const hBox = Math.max(8, Math.floor(aw / ar));
+  wrap.style.boxSizing = "border-box";
+  wrap.style.width = "100%";
+  wrap.style.height = `${hBox}px`;
+}
+
+function syncGestureToggleAria() {
+  gestureToggle?.setAttribute("aria-checked", gestureToggle.checked ? "true" : "false");
+}
 
 /** Как drawCursorDot в script.js: точка на холсте, не отдельный HTML-круг */
 let gameDrawCursorNorm = null;
@@ -69,6 +97,7 @@ function clientToNorm(clientX, clientY) {
 }
 
 function resizeCanvas() {
+  layoutGameCanvas();
   const wrap = canvas.parentElement;
   if (!wrap) return;
   const rect = wrap.getBoundingClientRect();
@@ -236,6 +265,12 @@ async function setGesturesEnabled(on) {
     try {
       const unmount = await mountGameGestures({
         mirror: true,
+        getCanvasBufferSize: () => ({ w, h }),
+        onVideoReady: (vw, vh) => {
+          cameraVideoW = vw;
+          cameraVideoH = vh;
+          resizeCanvas();
+        },
         canStartPinchStroke: () => !drawing,
         onPinchStrokeBegin: gesturePinchBegin,
         onPinchStrokeSample: gesturePinchSample,
@@ -251,6 +286,7 @@ async function setGesturesEnabled(on) {
     } catch (err) {
       console.error(err);
       if (gestureToggle) gestureToggle.checked = false;
+      syncGestureToggleAria();
       if (gestureStatusEl) gestureStatusEl.textContent = "";
       alert("Не удалось включить камеру для жестов.");
     }
@@ -259,8 +295,10 @@ async function setGesturesEnabled(on) {
       gestureUnmount();
       gestureUnmount = null;
     }
+    cameraVideoW = 0;
+    cameraVideoH = 0;
     gameDrawCursorNorm = null;
-    redraw();
+    resizeCanvas();
     if (gestureStatusEl) gestureStatusEl.textContent = "";
   }
 }
@@ -283,7 +321,10 @@ clearBtn?.addEventListener("click", () => {
 });
 randomBtn?.addEventListener("click", pickRandomShape);
 
-gestureToggle?.addEventListener("change", () => setGesturesEnabled(!!gestureToggle.checked));
+gestureToggle?.addEventListener("change", () => {
+  syncGestureToggleAria();
+  void setGesturesEnabled(!!gestureToggle.checked);
+});
 
 const gameCanvasWrap = canvas?.parentElement;
 gameCanvasWrap?.addEventListener("mousedown", onDown);
@@ -298,8 +339,8 @@ window.addEventListener("resize", () => {
   resizeCanvas();
 });
 
-if (typeof ResizeObserver !== "undefined" && canvas?.parentElement) {
-  new ResizeObserver(() => resizeCanvas()).observe(canvas.parentElement);
+if (typeof ResizeObserver !== "undefined" && gameCanvasOuter) {
+  new ResizeObserver(() => resizeCanvas()).observe(gameCanvasOuter);
 }
 
 if (SHAPE_IDS.length && shapeSelect) {
@@ -321,6 +362,7 @@ if (SHAPE_IDS.length && shapeSelect) {
 
 resizeCanvas();
 requestAnimationFrame(() => resizeCanvas());
+syncGestureToggleAria();
 loadShape(shapeSelect?.value || "circle");
 
 if (hintEl) {

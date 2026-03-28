@@ -33,6 +33,7 @@
       background: linear-gradient(160deg, var(--dash-bg) 0%, var(--dash-bg-end) 50%, #0a0512 100%);
       color: var(--dash-text);
       min-height: 100vh;
+      min-height: 100dvh;
       margin: 0;
     }
 
@@ -226,6 +227,12 @@
     }
 
     @media (max-width: 640px) {
+      .dash-app { padding: 1rem 1rem max(1.6rem, env(safe-area-inset-bottom, 0px)); }
+      .dash-nav {
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        margin-bottom: 1.2rem;
+      }
       .help-main { padding: 1.25rem 1.25rem 1.5rem; }
       .help-camera-wrap { height: clamp(260px, 48vh, 420px); }
     }
