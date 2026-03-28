@@ -115,6 +115,56 @@ function stdev(arr) {
   return Math.sqrt(mean(arr.map((x) => (x - m) ** 2)));
 }
 
+/** Угол поворота между векторами (v1→v2), знак сохраняется. */
+function signedTurn(v1x, v1y, v2x, v2y) {
+  const cross = v1x * v2y - v1y * v2x;
+  const dot = v1x * v2x + v1y * v2y;
+  return Math.atan2(cross, dot);
+}
+
+/**
+ * Замкнутый контур: сумма |Δθ| у простой гладкой фигуры ≈ 2π.
+ * «Зубчатая» линия по кругу/ребру даёт сильно больше — штрафуем.
+ */
+function smoothnessClosedScore01(pts) {
+  const n = pts.length;
+  if (n < 4) return 1;
+  let sumAbs = 0;
+  for (let i = 0; i < n; i++) {
+    const i0 = (i - 1 + n) % n;
+    const i1 = i;
+    const i2 = (i + 1) % n;
+    const v1x = pts[i1].x - pts[i0].x;
+    const v1y = pts[i1].y - pts[i0].y;
+    const v2x = pts[i2].x - pts[i1].x;
+    const v2y = pts[i2].y - pts[i1].y;
+    sumAbs += Math.abs(signedTurn(v1x, v1y, v2x, v2y));
+  }
+  const TAU = 2 * Math.PI;
+  const slack = 1.11;
+  const excess = Math.max(0, sumAbs - TAU * slack) / TAU;
+  return Math.max(0, 1 - Math.min(1, excess / 0.72));
+}
+
+/** Открытая линия: средний |поворот| на точке — прямая ≈ 0. */
+function smoothnessOpenScore01(pts) {
+  const n = pts.length;
+  if (n < 3) return 1;
+  let sumAbs = 0;
+  let c = 0;
+  for (let i = 1; i < n - 1; i++) {
+    const v1x = pts[i].x - pts[i - 1].x;
+    const v1y = pts[i].y - pts[i - 1].y;
+    const v2x = pts[i + 1].x - pts[i].x;
+    const v2y = pts[i + 1].y - pts[i].y;
+    sumAbs += Math.abs(signedTurn(v1x, v1y, v2x, v2y));
+    c++;
+  }
+  const meanAbs = sumAbs / (c || 1);
+  const deg = (meanAbs * 180) / Math.PI;
+  return Math.max(0, 1 - Math.min(1, deg / 11));
+}
+
 function rotate(p, ang) {
   const c = Math.cos(ang);
   const s = Math.sin(ang);
@@ -182,10 +232,12 @@ function scoreSquareForm(pts) {
       best = Math.min(best, meanDistToSegments(r, SQUARE_SEGS));
     }
   }
-  const raw = 100 * (1 - Math.min(1, best / 0.14));
+  const sGeom = 100 * (1 - Math.min(1, best / 0.14));
+  const sSmooth = 100 * smoothnessClosedScore01(sample);
+  const raw = 0.58 * sGeom + 0.42 * sSmooth;
   return finalize(
     raw,
-    "Квадрат: отклонение от сторон после выравнивания и масштаба (поворот и зеркало учитываются)."
+    "Квадрат: близость к сторонам после выравнивания и ровность контура (без лишних изломов на рёбрах)."
   );
 }
 
@@ -202,10 +254,12 @@ function scoreTriangleForm(pts) {
     const u1 = userNorm.map((p) => rotate({ x: p.x, y: -p.y }, ang));
     best = Math.min(best, meanDistToSegments(u1, TRI_SEGS));
   }
-  const raw = 100 * (1 - Math.min(1, best / 0.13));
+  const sGeom = 100 * (1 - Math.min(1, best / 0.13));
+  const sSmooth = 100 * smoothnessClosedScore01(sample);
+  const raw = 0.58 * sGeom + 0.42 * sSmooth;
   return finalize(
     raw,
-    "Треугольник: отклонение от сторон после выравнивания (поворот и отражение учитываются)."
+    "Треугольник: близость к сторонам после выравнивания и ровность контура (меньше «дребезга» на линиях)."
   );
 }
 
@@ -266,7 +320,10 @@ function scoreLineFamily(pts, expectedAngle) {
   const wig = rmsPerp / extent;
   const sStraight = 100 * (1 - Math.min(1, wig / 0.075));
   const sElong = 100 * Math.min(1, (elong - 2) / 14);
-  const percent = 0.35 * sAng + 0.4 * sStraight + 0.25 * Math.max(0, Math.min(100, sElong));
+  const sample = resampleArcLength(pts, Math.min(140, Math.max(48, pts.length * 2)));
+  const sOpen = 100 * smoothnessOpenScore01(sample);
+  const percent =
+    0.32 * sAng + 0.36 * sStraight + 0.22 * Math.max(0, Math.min(100, sElong)) + 0.1 * sOpen;
   return Math.max(0, Math.min(100, percent));
 }
 
@@ -379,7 +436,10 @@ function scoreCircleForm(pts) {
   const residuals = sample.map((p) => Math.abs(Math.hypot(p.x - cx, p.y - cy) - R));
   const mad = mean(residuals);
   const relMad = mad / (R + 1e-6);
-  const sFit = 100 * (1 - Math.min(1, relMad / 0.14));
+  const sFit = 100 * (1 - Math.min(1, relMad / 0.12));
+  const relStd = stdev(residuals) / (R + 1e-6);
+  const sOsc = 100 * (1 - Math.min(1, relStd / 0.085));
+  const sSmooth = 100 * smoothnessClosedScore01(sample);
 
   let arcLen = 0;
   for (let i = 1; i < sample.length; i++) arcLen += dist(sample[i - 1], sample[i]);
@@ -398,10 +458,16 @@ function scoreCircleForm(pts) {
   const iso = (4 * Math.PI * A) / (perim * perim + 1e-9);
   const sIso = 100 * Math.min(1, iso);
 
-  const raw = 0.48 * sFit + 0.18 * sArc + 0.18 * sClose + 0.16 * sIso;
+  const raw =
+    0.26 * sFit +
+    0.22 * sOsc +
+    0.22 * sSmooth +
+    0.12 * sArc +
+    0.09 * sClose +
+    0.09 * sIso;
   return finalize(
     raw,
-    "Круг: отклонение точек от подогнанной окружности (Pratt), длина контура, замыкание и компактность (4πA/P²). Положение не важно."
+    "Круг: радиус (Pratt), ровность контура (лишние изломы), «волна» вокруг окружности, длина, замыкание, 4πA/P². Положение не важно."
   );
 }
 
