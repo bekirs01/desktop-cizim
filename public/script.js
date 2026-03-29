@@ -2143,6 +2143,7 @@ async function loadPptxFromShareToken(shareToken, password = null) {
         drawStrokesToPptxCanvas(pptxDrawCanvas?.width || 1, pptxDrawCanvas?.height || 1);
         return;
       }
+      if (gestureState === "erasing") return;
       const r = payload?.new || payload?.newRecord || payload?.record;
       if (!r || r.share_token !== shareToken) return;
       const p = r.page_num;
@@ -2917,6 +2918,7 @@ async function loadCanvasFromShareToken(shareToken) {
         if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
         return;
       }
+      if (gestureState === "erasing") return;
       const row = payload?.new || payload?.newRecord || payload?.record;
       if (!row || row.share_token !== shareToken || row.page_num !== CANVAS_PAGE) return;
       canvasRemoteCurrentStroke = null;
@@ -3039,6 +3041,7 @@ async function loadCanvasDocumentWithPages(shareToken) {
         if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
         return;
       }
+      if (gestureState === "erasing") return;
       const row = payload?.new || payload?.newRecord || payload?.record;
       if (!row || row.share_token !== shareToken || row.page_num < 1) return;
       canvasRemoteCurrentStroke = null;
@@ -3137,6 +3140,7 @@ async function createSharedCanvas() {
       if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
       return;
     }
+    if (gestureState === "erasing") return;
     const row = payload?.new || payload?.newRecord || payload?.record;
     if (!row || row.share_token !== token || row.page_num !== CANVAS_PAGE) return;
     canvasRemoteCurrentStroke = null;
@@ -4014,7 +4018,10 @@ function detectLoop() {
       } else if (cursorPos) {
         if (gestureState === "erasing") {
           if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes, true);
-          if (pptxMode && currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, activeStrokes, true);
+          if (pptxMode && currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes, true);
+          if (!pdfMode && !pptxMode && currentCanvasShareToken && supabase) {
+            savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
+          }
           gestureState = "idle";
           smoothedErasePos = null;
           lastEraseEndTime = Date.now();
@@ -4321,8 +4328,14 @@ function detectLoop() {
           }
         }
       } else {
-        if (gestureState === "erasing" && pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes, true);
-        if (gestureState === "erasing") lastEraseEndTime = Date.now();
+        if (gestureState === "erasing") {
+          if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes, true);
+          if (pptxMode && currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes, true);
+          if (!pdfMode && !pptxMode && currentCanvasShareToken && supabase) {
+            savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
+          }
+          lastEraseEndTime = Date.now();
+        }
         window.drawCursor = null;
         if (drawMode && handLandmarker && drawShape === "select" && (selectMarqueeNorm || selectDragging || selectImageResizing)) {
           finalizeSelectGestureEnd();

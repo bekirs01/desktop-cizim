@@ -45,22 +45,18 @@
     }
 
     .auth-visual {
-      display: block;
+      display: none;
       position: relative;
-      width: 100%;
-      flex: 0 0 auto;
-      min-height: clamp(11rem, 34vh, 17rem);
-      max-height: 40vh;
+      width: 50%;
+      min-height: 100vh;
+      min-height: 100dvh;
       overflow: hidden;
+      align-self: stretch;
     }
 
     @media (min-width: 1024px) {
       .auth-visual {
-        width: 50%;
-        min-height: 100vh;
-        min-height: 100dvh;
-        max-height: none;
-        align-self: stretch;
+        display: block;
       }
     }
 
@@ -97,44 +93,24 @@
       bottom: 0;
       left: 0;
       right: 0;
-      padding: 1.25rem 1.25rem 1.5rem;
+      padding: 3rem;
       z-index: 20;
       pointer-events: none;
     }
 
-    @media (min-width: 1024px) {
-      .auth-visual-caption {
-        padding: 3rem;
-      }
-    }
-
     .auth-visual-caption h2 {
-      margin: 0 0 0.35rem;
-      font-size: 1.25rem;
+      margin: 0 0 0.75rem;
+      font-size: 1.75rem;
       font-weight: 600;
       color: rgba(255, 255, 255, 0.95);
     }
 
-    @media (min-width: 1024px) {
-      .auth-visual-caption h2 {
-        margin: 0 0 0.75rem;
-        font-size: 1.75rem;
-      }
-    }
-
     .auth-visual-caption p {
       margin: 0;
-      font-size: 0.8125rem;
-      line-height: 1.5;
-      color: rgba(255, 255, 255, 0.72);
+      font-size: 1rem;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.7);
       max-width: 28rem;
-    }
-
-    @media (min-width: 1024px) {
-      .auth-visual-caption p {
-        font-size: 1rem;
-        line-height: 1.6;
-      }
     }
 
     .auth-main {
@@ -142,14 +118,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 1.25rem 1.25rem 1.75rem;
+      padding: 2rem 1.5rem;
       min-height: 0;
-    }
-
-    @media (min-width: 1024px) {
-      .auth-main {
-        padding: 2rem 1.5rem;
-      }
     }
 
     .auth-main-inner {
@@ -314,21 +284,6 @@
       to { transform: rotate(360deg); }
     }
 
-    .auth-footer {
-      margin-top: 1.25rem;
-      text-align: center;
-    }
-
-    .auth-footer a {
-      color: #6b7280;
-      text-decoration: none;
-      font-size: 0.8125rem;
-      transition: color 0.2s;
-    }
-
-    .auth-footer a:hover {
-      color: #22d3ee;
-    }
   </style>
 </head>
 <body>
@@ -374,9 +329,6 @@
             <div id="authMessage"></div>
             <button type="submit" class="auth-submit" id="submitBtn">Войти</button>
           </form>
-          <div class="auth-footer">
-            <a href="/dashboard.html">&larr; На главную (документы)</a>
-          </div>
         </div>
       </div>
     </div>
