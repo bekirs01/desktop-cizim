@@ -4,6 +4,7 @@ import {
   getPinchCursorPosition,
   getPinchStartThreshold,
   getPinchReleaseThreshold,
+  isIndexThumbPinch,
 } from "../gestures/handGeometry.js";
 import { HAND_MODEL, WASM } from "../config/mediapipeConstants.js";
 
@@ -59,6 +60,21 @@ function mapVideoNormToCanvasBufferNorm(nx, ny, vw, vh, cw, ch) {
     x: Math.max(0, Math.min(1, cx / cw)),
     y: Math.max(0, Math.min(1, cy / ch)),
   };
+}
+
+function simulateUiPointerMove(clientX, clientY) {
+  const el = document.elementFromPoint(clientX, clientY);
+  if (el) {
+    el.dispatchEvent(
+      new MouseEvent("mousemove", {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX,
+        clientY,
+      })
+    );
+  }
 }
 
 function simulateUiClick(clientX, clientY) {
@@ -152,6 +168,7 @@ export async function mountGameGestures(hooks) {
   const framesSinceErase = 999;
   let raf = 0;
   let stopped = false;
+  let wasToolbarPinch = false;
 
   function clamp01(v) {
     return Math.max(0, Math.min(1, v));
@@ -184,14 +201,11 @@ export async function mountGameGestures(hooks) {
     if (!rawLm) {
       smoothedCursor = null;
       hooks.onCursor?.(false);
+      wasToolbarPinch = false;
       if (gestureState === "drawing") {
         gestureState = "idle";
         pinchReleaseFrames = 0;
         hooks.onUp();
-      }
-      if (gestureState === "ui_pinch") {
-        gestureState = "idle";
-        pinchReleaseFrames = 0;
       }
       return;
     }
@@ -232,6 +246,28 @@ export async function mountGameGestures(hooks) {
         smoothedThumbIndexDist * (1 - DIST_SMOOTH_ALPHA) + rawDist * DIST_SMOOTH_ALPHA;
     }
 
+    const pt = hooks.canvasNormToClient?.(clamp01(drawX), clamp01(drawY));
+    const overUi = pt && hooks.isOverUiOverlay?.(pt.clientX, pt.clientY);
+
+    if (overUi) {
+      if (gestureState === "drawing") {
+        gestureState = "idle";
+        pinchReleaseFrames = 0;
+        hooks.onUp();
+      }
+      simulateUiPointerMove(pt.clientX, pt.clientY);
+      if (isIndexThumbPinch(rawLm)) {
+        if (!wasToolbarPinch) {
+          wasToolbarPinch = true;
+          simulateUiClick(pt.clientX, pt.clientY);
+        }
+      } else {
+        wasToolbarPinch = false;
+      }
+      return;
+    }
+    wasToolbarPinch = false;
+
     let isPinchActive = false;
     if (gestureState === "drawing") {
       if (smoothedThumbIndexDist > pinchRelease) {
@@ -246,34 +282,12 @@ export async function mountGameGestures(hooks) {
         pinchReleaseFrames = 0;
         isPinchActive = true;
       }
-    } else if (gestureState === "ui_pinch") {
-      if (smoothedThumbIndexDist > pinchRelease) {
-        pinchReleaseFrames++;
-        if (pinchReleaseFrames >= PINCH_RELEASE_FRAMES) {
-          const pt = hooks.canvasNormToClient?.(clamp01(drawX), clamp01(drawY));
-          if (pt && hooks.isOverUiOverlay?.(pt.clientX, pt.clientY)) {
-            simulateUiClick(pt.clientX, pt.clientY);
-          }
-          gestureState = "idle";
-          pinchReleaseFrames = 0;
-          smoothedCursor = null;
-          hooks.onCursor?.(false);
-        }
-      } else {
-        pinchReleaseFrames = 0;
-      }
     } else {
       pinchReleaseFrames = 0;
       if (smoothedThumbIndexDist < pinchStart && framesSinceErase >= GESTURE_LOCK_FRAMES && canStart()) {
-        const pt = hooks.canvasNormToClient?.(clamp01(drawX), clamp01(drawY));
-        const overUi = pt && hooks.isOverUiOverlay?.(pt.clientX, pt.clientY);
-        if (overUi) {
-          gestureState = "ui_pinch";
-        } else {
-          gestureState = "drawing";
-          hooks.onPinchStrokeBegin();
-          isPinchActive = true;
-        }
+        gestureState = "drawing";
+        hooks.onPinchStrokeBegin();
+        isPinchActive = true;
       }
     }
 
@@ -290,11 +304,10 @@ export async function mountGameGestures(hooks) {
     hooks.onCursor?.(false);
     stream.getTracks().forEach((tr) => tr.stop());
     video.remove();
+    wasToolbarPinch = false;
     if (gestureState === "drawing") {
       gestureState = "idle";
       hooks.onUp();
-    } else if (gestureState === "ui_pinch") {
-      gestureState = "idle";
     }
   };
 }

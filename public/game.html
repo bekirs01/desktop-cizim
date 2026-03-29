@@ -253,11 +253,11 @@
 
     .game-sidebar-overlay {
       position: absolute;
-      left: 0.2rem;
-      top: 0.25rem;
+      left: 0.35rem;
+      top: 0.35rem;
       z-index: 30;
-      width: min(292px, calc(100vw - 1.5rem));
-      max-height: min(88dvh, calc(100% - 0.6rem));
+      width: min(292px, calc(100% - 0.85rem));
+      max-height: calc(100% - 0.75rem);
       overflow-y: auto;
       overflow-x: hidden;
       -webkit-overflow-scrolling: touch;
@@ -266,9 +266,7 @@
 
     @media (min-width: 780px) {
       .game-sidebar-overlay {
-        left: 0.35rem;
-        top: 0.35rem;
-        width: min(300px, 40vw);
+        width: min(300px, calc(100% - 1rem));
       }
     }
 
@@ -565,6 +563,7 @@
     }
 
     .game-canvas-outer {
+      position: relative;
       width: 100%;
       display: flex;
       flex-direction: column;
@@ -704,6 +703,36 @@
       <div class="game-workspace">
         <section class="game-panel game-stage" aria-label="Холст">
           <div class="game-canvas-outer" id="gameCanvasOuter">
+            <aside id="gameSidebarOverlay" class="game-sidebar-overlay" aria-label="Панель режима игры">
+              <section class="game-panel game-sidebar" aria-label="Фигура, жесты и проверка">
+                <div class="game-controls-inner">
+                  <div class="game-row-top">
+                    <div class="game-field game-field--shape">
+                      <label for="gameShapeSelect">Фигура</label>
+                      <div id="gameShapePicker" class="game-shape-picker" role="group" aria-label="Выбор фигуры"></div>
+                      <select id="gameShapeSelect" class="game-shape-select-vh" aria-label="Выбор фигуры"></select>
+                    </div>
+                  </div>
+                  <div class="game-gesture-bar">
+                    <span class="game-gesture-label">Жесты (камера)</span>
+                    <label class="game-switch" title="Щепотка указательного и большого пальца" aria-label="Включить рисование жестами">
+                      <input type="checkbox" id="gameGestureToggle" />
+                      <span class="game-switch-slider" aria-hidden="true"></span>
+                    </label>
+                    <span class="game-gesture-hint">Как в режиме рисования: наведение указателем, щипок — нажатие по кнопке.</span>
+                    <span class="game-gesture-status" id="gameGestureStatus" aria-live="polite"></span>
+                  </div>
+                  <div class="game-actions-row" aria-label="Действия">
+                    <div class="game-btns game-btns--actions">
+                      <button type="button" class="game-btn game-btn--primary" id="gameCheckBtn">Проверить</button>
+                      <button type="button" class="game-btn game-btn--ghost" id="gameClearBtn">Очистить</button>
+                      <button type="button" class="game-btn game-btn--ghost" id="gameRandomBtn">Случайная</button>
+                    </div>
+                    <div class="game-result game-result--inline" id="gameResult" role="status" aria-live="polite"></div>
+                  </div>
+                </div>
+              </section>
+            </aside>
             <div class="game-canvas-wrap" id="gameCanvasWrap">
               <canvas id="gameCanvas" width="480" height="480" aria-label="Холст: нарисуйте фигуру по образцу"></canvas>
             </div>
@@ -711,38 +740,8 @@
           <p class="game-hint" id="gameHint"></p>
         </section>
       </div>
-      <aside id="gameSidebarOverlay" class="game-sidebar-overlay" aria-label="Панель режима игры">
-        <section class="game-panel game-sidebar" aria-label="Фигура, жесты и проверка">
-          <div class="game-controls-inner">
-            <div class="game-row-top">
-              <div class="game-field game-field--shape">
-                <label for="gameShapeSelect">Фигура</label>
-                <div id="gameShapePicker" class="game-shape-picker" role="group" aria-label="Выбор фигуры"></div>
-                <select id="gameShapeSelect" class="game-shape-select-vh" aria-label="Выбор фигуры"></select>
-              </div>
-            </div>
-            <div class="game-gesture-bar">
-              <span class="game-gesture-label">Жесты (камера)</span>
-              <label class="game-switch" title="Щепотка указательного и большого пальца" aria-label="Включить рисование жестами">
-                <input type="checkbox" id="gameGestureToggle" />
-                <span class="game-switch-slider" aria-hidden="true"></span>
-              </label>
-              <span class="game-gesture-hint">Включает рисование без касания экрана. Щипок по кнопкам панели — как касание.</span>
-              <span class="game-gesture-status" id="gameGestureStatus" aria-live="polite"></span>
-            </div>
-            <div class="game-actions-row" aria-label="Действия">
-              <div class="game-btns game-btns--actions">
-                <button type="button" class="game-btn game-btn--primary" id="gameCheckBtn">Проверить</button>
-                <button type="button" class="game-btn game-btn--ghost" id="gameClearBtn">Очистить</button>
-                <button type="button" class="game-btn game-btn--ghost" id="gameRandomBtn">Случайная</button>
-              </div>
-              <div class="game-result game-result--inline" id="gameResult" role="status" aria-live="polite"></div>
-            </div>
-          </div>
-        </section>
-      </aside>
     </main>
   </div>
-  <script type="module" src="game.js?v=29"></script>
+  <script type="module" src="game.js?v=30"></script>
 </body>
 </html>
