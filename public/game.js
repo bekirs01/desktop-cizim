@@ -25,18 +25,28 @@ function getCameraAspectRatio() {
   return 16 / 9;
 }
 
-/** На всю ширину контейнера; высота из пропорций камеры. Скролл только у страницы, не у блока холста. */
+/** Вписывает холст в доступную область (ширина и высота внешнего блока), сохраняя пропорции камеры. */
 function layoutGameCanvas() {
   const outer = gameCanvasOuter;
   const wrap = canvas?.parentElement;
   if (!outer || !wrap) return;
-  const aw = outer.getBoundingClientRect().width;
+  const r = outer.getBoundingClientRect();
+  const maxW = r.width;
+  const maxH = r.height;
   const ar = getCameraAspectRatio();
-  if (aw < 8) return;
-  const hBox = Math.max(8, Math.floor(aw / ar));
+  if (maxW < 8 || maxH < 8) return;
+  let boxW = maxW;
+  let boxH = boxW / ar;
+  if (boxH > maxH) {
+    boxH = maxH;
+    boxW = boxH * ar;
+  }
+  boxW = Math.max(8, Math.floor(boxW));
+  boxH = Math.max(8, Math.floor(boxH));
   wrap.style.boxSizing = "border-box";
-  wrap.style.width = "100%";
-  wrap.style.height = `${hBox}px`;
+  wrap.style.width = `${boxW}px`;
+  wrap.style.height = `${boxH}px`;
+  wrap.style.maxWidth = "100%";
 }
 
 function syncGestureToggleAria() {
