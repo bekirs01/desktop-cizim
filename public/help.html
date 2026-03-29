@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DrawFlow | Help</title>
+  <title>DrawFlow | Справка</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -298,7 +298,9 @@
       overflow: hidden;
       border: 1px solid rgba(148, 163, 184, 0.14);
       background: #0a0a12;
-      height: clamp(340px, min(56vw, 62vh), 720px);
+      aspect-ratio: 16 / 9;
+      max-height: min(72vh, 720px);
+      min-height: 200px;
       box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
     }
 
@@ -334,7 +336,7 @@
       .dash-app { padding: 1rem 1rem max(1.6rem, env(safe-area-inset-bottom, 0px)); }
       .help-topbar { margin: -1rem -1rem 1.25rem; padding: 0.85rem 1rem; }
       .help-main { padding: 1.35rem 1.25rem 1.6rem; }
-      .help-camera-wrap { height: clamp(260px, 48vh, 420px); }
+      .help-camera-wrap { max-height: min(56vh, 420px); min-height: 180px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -366,42 +368,42 @@
         </div>
         <a href="/dashboard.html" class="dash-btn dash-btn-ghost">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-          Back to documents
+          К документам
         </a>
       </nav>
     </header>
 
     <main class="help-main">
-      <p class="help-eyebrow">Documentation</p>
+      <p class="help-eyebrow">Документация</p>
       <h1>
         <span class="help-title-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
         </span>
-        Help
+        Справка
       </h1>
 
-      <h2 class="help-section-title">Keyboard shortcuts</h2>
+      <h2 class="help-section-title">Горячие клавиши</h2>
       <ul class="help-hotkeys-list">
-        <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> (macOS <kbd>⌘</kbd>+<kbd>Z</kbd>) — Undo (works on physical Z key, including non-Latin layouts)</li>
-        <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> or <kbd>Ctrl</kbd>+<kbd>Y</kbd> — Redo</li>
-        <li><kbd>←</kbd> <kbd>↑</kbd> <kbd>Page Up</kbd> — Previous slide or canvas page</li>
-        <li><kbd>→</kbd> <kbd>↓</kbd> <kbd>Page Down</kbd> — Next</li>
-        <li><kbd>F4</kbd> — Toggle gesture control</li>
-        <li><kbd>Esc</kbd> — Exit fullscreen</li>
+        <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> (macOS <kbd>⌘</kbd>+<kbd>Z</kbd>) — отмена (срабатывает по физической клавише Z, в том числе при русской раскладке)</li>
+        <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> или <kbd>Ctrl</kbd>+<kbd>Y</kbd> — повтор</li>
+        <li><kbd>←</kbd> <kbd>↑</kbd> <kbd>Page Up</kbd> — предыдущий слайд или страница холста</li>
+        <li><kbd>→</kbd> <kbd>↓</kbd> <kbd>Page Down</kbd> — следующий</li>
+        <li><kbd>F4</kbd> — включить или выключить управление жестами</li>
+        <li><kbd>Esc</kbd> — выйти из полноэкранного режима</li>
       </ul>
-      <p class="help-camera-hint" style="margin-top:0.75rem">If “strokes fade after 1.5s” is enabled on the toolbar, pencil lines disappear on purpose — turn the option off to keep marks on the canvas.</p>
+      <p class="help-camera-hint" style="margin-top:0.75rem">Если на панели включено «штрихи гаснут через 1,5 с», линии карандаша исчезают специально — отключите опцию, чтобы метки оставались на холсте.</p>
 
-      <h2 class="help-section-title spaced">Game mode</h2>
-      <p class="help-camera-hint" style="margin-top:0">From the dashboard, open <strong>Game mode</strong> for a canvas with a faint guide shape. Draw the same shape <strong>anywhere</strong> with mouse, touch, or pinch gesture, then tap <strong>Check</strong> for a score based on shape quality (roundness, corners, straightness), not pixel overlap with the guide.</p>
+      <h2 class="help-section-title spaced">Режим игры</h2>
+      <p class="help-camera-hint" style="margin-top:0">В панели запуска откройте <strong>Режим игры</strong>: на холсте показан бледный контур-образец. Нарисуйте ту же фигуру по этому контуру мышью, касанием или щепоткой, затем нажмите <strong>Проверить</strong> — процент отражает близость вашей линии к серому шаблону.</p>
 
-      <h2 class="help-section-title spaced">Gesture demo</h2>
+      <h2 class="help-section-title spaced">Демонстрация жестов</h2>
       <div class="help-camera-wrap">
-        <iframe id="helpCameraIframe" src="about:blank" title="Camera and gestures demo"></iframe>
+        <iframe id="helpCameraIframe" src="about:blank" title="Камера и жесты — демо"></iframe>
       </div>
-      <p class="help-camera-hint">The camera tracks your hands. This page shows both hands for clarity; on the drawing page (PDF, slides, canvas) choose left or right hand in the toolbar.</p>
+      <p class="help-camera-hint">Камера отслеживает руки. Здесь для наглядности показаны обе руки; на странице рисования (PDF, слайды, холст) в панели можно выбрать левую или правую руку.</p>
       <ul class="help-gesture-tips">
-        <li><strong>Draw:</strong> Pinch index and thumb and move — the line follows while pinched.</li>
-        <li><strong>Erase:</strong> Extend index and middle together like scissors — eraser is active in that pose.</li>
+        <li><strong>Рисование:</strong> щепотка указательного и большого пальца — линия идёт, пока жест удерживается.</li>
+        <li><strong>Ластик:</strong> вытяните указательный и средний вместе «ножницами» — в этой позе активен ластик.</li>
       </ul>
     </main>
   </div>

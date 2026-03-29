@@ -6281,6 +6281,7 @@ if (shareId) {
   canvasFadeEnabled = false;
   cameraWrapper?.classList.remove("black-sheet-mode", "pdf-mode", "pptx-mode", "pptx-loaded");
   if (isEmbed) {
+    document.documentElement.classList.add("embed-camera-root");
     cameraWrapper?.classList.add("white-sheet-mode", "camera-feed-mode");
     document.querySelector(".app")?.classList.add("embed-camera");
     drawMode = false;

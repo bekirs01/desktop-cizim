@@ -5,7 +5,7 @@ import { supabase } from "./supabase-config.js";
 
 if (!supabase) {
   document.body.innerHTML =
-    '<div class="dash-app" style="padding:3rem;text-align:center;color:var(--dash-red,#ff6b6b)">Supabase is not configured.</div>';
+    '<div class="dash-app" style="padding:3rem;text-align:center;color:var(--dash-red,#ff6b6b)">Supabase не настроен.</div>';
 } else {
   const hash = window.location.hash.substring(1);
   const params = new URLSearchParams(hash);

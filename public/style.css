@@ -95,6 +95,38 @@ html.canvas-fullscreen body { overflow: hidden !important; height: 100%; width: 
 .app.embed-camera .main { padding: 0; flex: 1; min-height: 0; }
 .app.embed-camera .camera-section { flex: 1; min-height: 0; }
 .app.embed-camera .camera-wrapper { flex: 1; min-height: 300px; }
+
+html.embed-camera-root,
+html.embed-camera-root body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+html.embed-camera-root .app.embed-camera {
+  min-height: 0 !important;
+  height: 100%;
+  max-height: 100%;
+}
+html.embed-camera-root .app.embed-camera .main {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+html.embed-camera-root .app.embed-camera .camera-section {
+  flex: 1 1 0;
+  min-height: 0 !important;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+html.embed-camera-root .app.embed-camera .camera-wrapper {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  max-height: 100%;
+  overflow: hidden;
+}
 .app.canvas-fullscreen .camera-section { flex: 1; min-height: 0; overflow: hidden; gap: 0; display: flex; flex-direction: column; }
 .app.canvas-fullscreen .camera-wrapper {
   border-radius: 0;

@@ -32,7 +32,6 @@ if (!supabase) {
 (async () => {
   if (!supabase) return;
   const sub = document.getElementById("dashUserSubtitle");
-  const av = document.getElementById("dashUserAvatar");
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
   const name =
@@ -40,11 +39,6 @@ if (!supabase) {
     (user.email || "").split("@")[0] ||
     "";
   if (sub) sub.textContent = name ? `С возвращением, ${name}` : "";
-  if (av) {
-    const local = (user.email || "u").split("@")[0].replace(/[^a-zA-Z0-9]/g, "") || "u";
-    av.textContent = local.slice(0, 2).toUpperCase();
-    if (user.email) av.title = user.email;
-  }
 })();
 
 const pdfList = document.getElementById("pdfList");

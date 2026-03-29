@@ -1,11 +1,12 @@
 /**
- * Режим «повтори фигуру»: подсказка-контур + оценка формы (без привязки к месту).
+ * Режим «повтори фигуру»: серый контур + оценка близости к нему.
  */
-import { getShapePolyline, scoreShapeForm, SHAPE_IDS } from "./app/game/traceScore.js";
+import { getShapePolyline, scoreTraceToTemplate, SHAPE_IDS } from "./app/game/traceScore.js";
 import { mountGameGestures } from "./app/game/gameGestures.js";
 
 const canvas = document.getElementById("gameCanvas");
 const shapeSelect = document.getElementById("gameShapeSelect");
+const shapePickerEl = document.getElementById("gameShapePicker");
 const checkBtn = document.getElementById("gameCheckBtn");
 const clearBtn = document.getElementById("gameClearBtn");
 const randomBtn = document.getElementById("gameRandomBtn");
@@ -111,12 +112,22 @@ function resizeCanvas() {
   redraw();
 }
 
+function syncShapePickerUI() {
+  const id = shapeSelect?.value;
+  shapePickerEl?.querySelectorAll(".game-shape-opt").forEach((btn) => {
+    const on = btn.dataset.shape === id;
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    btn.classList.toggle("game-shape-opt--active", on);
+  });
+}
+
 function loadShape(id) {
   refPolyline = getShapePolyline(id);
   userStrokes = [];
   currentStroke = null;
   resultEl.textContent = "";
   resultEl.classList.remove("game-result--visible");
+  syncShapePickerUI();
   redraw();
 }
 
@@ -307,7 +318,7 @@ shapeSelect?.addEventListener("change", () => loadShape(shapeSelect.value));
 checkBtn?.addEventListener("click", () => {
   const strokes = userStrokes.slice();
   if (currentStroke?.points?.length > 1) strokes.push(currentStroke);
-  const res = scoreShapeForm(shapeSelect.value, strokes, w, h);
+  const res = scoreTraceToTemplate(shapeSelect.value, strokes, w, h);
   resultEl.innerHTML = `<strong>${res.percent}%</strong> — ${res.label}<br><span class="game-result-detail">${res.detail || ""}</span>`;
   resultEl.classList.add("game-result--visible");
 });
@@ -345,6 +356,7 @@ if (typeof ResizeObserver !== "undefined" && gameCanvasOuter) {
 
 if (SHAPE_IDS.length && shapeSelect) {
   shapeSelect.innerHTML = "";
+  shapePickerEl?.replaceChildren();
   const labels = {
     circle: "Круг",
     square: "Квадрат",
@@ -352,11 +364,37 @@ if (SHAPE_IDS.length && shapeSelect) {
     line: "Горизонтальная линия",
     diagonal: "Диагональ",
   };
+  const icons = {
+    circle:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="7"/></svg>',
+    square:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>',
+    triangle:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5 19 17H5Z"/></svg>',
+    line:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="4" y1="12" x2="20" y2="12"/></svg>',
+    diagonal:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="5" y1="19" x2="19" y2="5"/></svg>',
+  };
   for (const id of SHAPE_IDS) {
     const opt = document.createElement("option");
     opt.value = id;
     opt.textContent = labels[id] || id;
     shapeSelect.appendChild(opt);
+    if (shapePickerEl) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "game-shape-opt";
+      btn.dataset.shape = id;
+      btn.title = labels[id] || id;
+      btn.setAttribute("aria-label", labels[id] || id);
+      btn.innerHTML = icons[id] || icons.circle;
+      btn.addEventListener("click", () => {
+        shapeSelect.value = id;
+        shapeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      shapePickerEl.appendChild(btn);
+    }
   }
 }
 
@@ -367,7 +405,7 @@ loadShape(shapeSelect?.value || "circle");
 
 if (hintEl) {
   hintEl.textContent =
-    "Серый контур — подсказка: нарисуйте ту же фигуру в любом месте холста. Оценка по форме (круглость, углы, прямота линии), не по совпадению с контуром. Можно включить жесты: щепотка указательного и большого пальца.";
+    "Серый контур показывает, где и какой фигурой рисовать (вписанный квадрат на холсте). Оценка — насколько близко ваш штрих к этому контуру. Жесты: щепотка указательного и большого пальца.";
 }
 
 window.addEventListener("beforeunload", () => {

@@ -410,6 +410,138 @@ function resampleArcLength(pts, nOut) {
   return out;
 }
 
+/** Нормализованные координаты холста (0–1) → то же «квадратное» пространство, что у серого контура. */
+function canvasNormToHintNorm(nx, ny, bufW, bufH) {
+  const W = bufW > 0 ? bufW : 1;
+  const H = bufH > 0 ? bufH : 1;
+  const side = Math.min(W, H);
+  const ox = (W - side) * 0.5;
+  const oy = (H - side) * 0.5;
+  const px = nx * W;
+  const py = ny * H;
+  return { x: (px - ox) / side, y: (py - oy) / side };
+}
+
+function resamplePolyline(poly, nOut, closed) {
+  if (poly.length < 2) return poly.slice();
+  const edges = [];
+  for (let i = 0; i < poly.length - 1; i++) {
+    const a = poly[i];
+    const b = poly[i + 1];
+    edges.push({ a, b, len: dist(a, b) });
+  }
+  if (closed && poly.length >= 2) {
+    const a = poly[poly.length - 1];
+    const b = poly[0];
+    edges.push({ a, b, len: dist(a, b) });
+  }
+  let tot = 0;
+  const cum = [0];
+  for (const e of edges) {
+    tot += e.len;
+    cum.push(tot);
+  }
+  if (tot < 1e-9) return [poly[0]];
+  const out = [];
+  for (let k = 0; k < nOut; k++) {
+    const t = Math.min(tot, (k / Math.max(1, nOut - 1)) * tot);
+    let j = 0;
+    while (j < edges.length - 1 && cum[j + 1] < t) j++;
+    const e = edges[j];
+    const t0 = cum[j];
+    const u = Math.max(0, Math.min(1, (t - t0) / (e.len || 1e-9)));
+    out.push({
+      x: e.a.x + u * (e.b.x - e.a.x),
+      y: e.a.y + u * (e.b.y - e.a.y),
+    });
+  }
+  return out;
+}
+
+function collectUserSegmentsHint(userStrokes, bufW, bufH) {
+  const segs = [];
+  for (const st of userStrokes || []) {
+    const pts = st?.points;
+    if (!pts || pts.length < 2) continue;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = canvasNormToHintNorm(pts[i].x, pts[i].y, bufW, bufH);
+      const b = canvasNormToHintNorm(pts[i + 1].x, pts[i + 1].y, bufW, bufH);
+      segs.push({ x0: a.x, y0: a.y, x1: b.x, y1: b.y });
+    }
+  }
+  return segs;
+}
+
+function distPointToSegs(px, py, segs) {
+  if (!segs.length) return Infinity;
+  let m = Infinity;
+  for (const s of segs) {
+    m = Math.min(m, pointSegDist(px, py, s.x0, s.y0, s.x1, s.y1));
+  }
+  return m;
+}
+
+function distPointToRefPoly(px, py, poly, closed) {
+  const n = poly.length;
+  if (n < 2) return 0;
+  let m = Infinity;
+  for (let i = 0; i < n - 1; i++) {
+    const a = poly[i];
+    const b = poly[i + 1];
+    m = Math.min(m, pointSegDist(px, py, a.x, a.y, b.x, b.y));
+  }
+  if (closed && n >= 2) {
+    const a = poly[n - 1];
+    const b = poly[0];
+    m = Math.min(m, pointSegDist(px, py, a.x, a.y, b.x, b.y));
+  }
+  return m;
+}
+
+function sampleUserAlongStrokes(userStrokes, bufW, bufH, maxTotal) {
+  const strokes = (userStrokes || []).filter((s) => s?.points?.length >= 2);
+  if (!strokes.length) return [];
+  const per = Math.max(10, Math.floor(maxTotal / strokes.length));
+  const out = [];
+  for (const st of strokes) {
+    const hi = st.points.map((p) => canvasNormToHintNorm(p.x, p.y, bufW, bufH));
+    out.push(...resampleArcLength(hi, per));
+  }
+  return out;
+}
+
+/**
+ * Близость штриха к серому контуру (та же вписанная область, что на холсте).
+ */
+export function scoreTraceToTemplate(shapeId, userStrokes, bufW, bufH) {
+  const closed = shapeId !== "line" && shapeId !== "diagonal";
+  const refPoly = getShapePolyline(shapeId);
+  if (refPoly.length < 2) return tooFew();
+
+  const segs = collectUserSegmentsHint(userStrokes, bufW, bufH);
+  const userSamp = sampleUserAlongStrokes(userStrokes, bufW, bufH, 220);
+  if (userSamp.length < 8 || segs.length < 1) return tooFew();
+
+  const refSamp = resamplePolyline(refPoly, 140, closed);
+
+  let du = 0;
+  for (const p of userSamp) du += distPointToRefPoly(p.x, p.y, refPoly, closed);
+  du /= userSamp.length;
+
+  let dr = 0;
+  for (const p of refSamp) dr += distPointToSegs(p.x, p.y, segs);
+  dr /= refSamp.length;
+
+  const dMean = (du + dr) * 0.5;
+  const dTol = 0.105;
+  const raw = 100 * (1 - Math.min(1, dMean / dTol));
+
+  return finalize(
+    raw,
+    "Считается расстояние до серого контура в той же области холста: насколько линия близка к шаблону и насколько контур «покрыт» рисунком."
+  );
+}
+
 function polygonAreaClosed(pts) {
   const n = pts.length;
   if (n < 3) return 0;
