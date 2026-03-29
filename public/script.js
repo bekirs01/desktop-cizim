@@ -339,7 +339,6 @@ let canvasRealtimeBroadcastProgress = null;
 let canvasRemoteCurrentStroke = null;
 let lastCanvasBroadcastProgress = 0;
 let lastGestureBroadcastProgress = 0;
-let lastEraseSaveTime = 0;
 let lastEraseEndTime = 0;
 let fadeAnimationRaf = null;
 /** Ограничиваем частоту перерисовки только из-за анимации исчезновения (без троттлинга самого рисования). */
@@ -578,7 +577,13 @@ function redoPptx() {
 
 function syncCurrentDocumentPageState() {
   if (pdfMode && pdfDoc) {
-    pdfStrokesByPage[pdfPageNum] = clonePageLayer(pdfStrokes, pdfShapes);
+    const layer = clonePageLayer(pdfStrokes, pdfShapes);
+    layer.fillShapes = pdfFillShapes.map((f) => ({
+      data: new ImageData(new Uint8ClampedArray(f.data.data), f.w, f.h),
+      w: f.w,
+      h: f.h,
+    }));
+    pdfStrokesByPage[pdfPageNum] = layer;
   } else if (pptxMode && pptxViewer) {
     const pageLayer = clonePageLayer(pptxStrokes, pptxShapes);
     pageLayer.fillShapes = pptxFillShapes.map((f) => ({ data: new ImageData(new Uint8ClampedArray(f.data.data), f.w, f.h), w: f.w, h: f.h }));
@@ -2269,6 +2274,7 @@ function setupPdfDrawing() {
     };
   };
   let pdfEraserActive = false;
+  let pdfEraseDirty = false;
   let pdfLastPtrNorm = null;
   let pdfSnapTimerId = null;
   let pdfSnapHoldState = { holdMs: 0, holdRef: null };
@@ -2306,9 +2312,9 @@ function setupPdfDrawing() {
     const p = getNorm(e);
     if (eraserMode) {
       pdfEraserActive = true;
+      pdfEraseDirty = true;
       erasePdfAtPosition(p.x, p.y, 0.08);
       drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
-      if (currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
       return;
     }
     if (drawShape === "select") {
@@ -2405,9 +2411,9 @@ function setupPdfDrawing() {
     }
     if (eraserMode && (pdfEraserActive || e.buttons === 1)) {
       e.preventDefault();
+      pdfEraseDirty = true;
       erasePdfAtPosition(p.x, p.y, 0.08);
       drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
-      if (currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
       return;
     }
     if (pdfShapeInProgress) {
@@ -2437,6 +2443,13 @@ function setupPdfDrawing() {
   const onEnd = (e) => {
     pdfEraserActive = false;
     stopPdfSnapPoll();
+    if (pdfEraseDirty) {
+      pdfEraseDirty = false;
+      pushPdfHistory();
+      savePdfPageState();
+      if (currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
+      drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+    }
     if (drawShape === "select") {
       e.preventDefault();
       if (selectImageResizing) {
@@ -2544,6 +2557,7 @@ function setupCanvasDrawing() {
   };
   let canvasIsDrawing = false;
   let eraserActive = false;
+  let canvasEraseDirty = false;
   let canvasLastPtrNorm = null;
   let canvasSnapTimerId = null;
   let canvasSnapHoldState = { holdMs: 0, holdRef: null };
@@ -2582,9 +2596,9 @@ function setupCanvasDrawing() {
     const p = getNorm(e);
     if (eraserMode) {
       eraserActive = true;
+      canvasEraseDirty = true;
       eraseAtPosition(p.x, p.y, 0.08);
       drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
-      if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
       return;
     }
     if (drawShape === "select") {
@@ -2682,9 +2696,9 @@ function setupCanvasDrawing() {
     }
     if (eraserMode && (eraserActive || e.buttons === 1)) {
       e.preventDefault();
+      canvasEraseDirty = true;
       eraseAtPosition(p.x, p.y, 0.08);
       drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
-      if (currentCanvasShareToken && supabase) savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
       return;
     }
     if (shapeInProgress) {
@@ -2714,6 +2728,14 @@ function setupCanvasDrawing() {
   const onEnd = (e) => {
     eraserActive = false;
     stopCanvasSnapPoll();
+    if (canvasEraseDirty) {
+      canvasEraseDirty = false;
+      pushCanvasHistory();
+      if (currentCanvasShareToken && supabase) {
+        savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
+      }
+      drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+    }
     if (drawShape === "select") {
       e.preventDefault();
       if (selectImageResizing) {
@@ -3438,6 +3460,7 @@ function setupPptxDrawing() {
     return { x: (clientX - rect.left) / rect.width, y: (clientY - rect.top) / rect.height };
   };
   let pptxEraserActive = false;
+  let pptxEraseDirty = false;
   let pptxLastPtrNorm = null;
   let pptxSnapTimerId = null;
   let pptxSnapHoldState = { holdMs: 0, holdRef: null };
@@ -3478,9 +3501,9 @@ function setupPptxDrawing() {
     const p = getNorm(e);
     if (eraserMode) {
       pptxEraserActive = true;
+      pptxEraseDirty = true;
       erasePptxAtPosition(p.x, p.y, 0.08);
       drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
-      if (currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
       return;
     }
     if (drawShape === "select") {
@@ -3576,9 +3599,9 @@ function setupPptxDrawing() {
     }
     if (eraserMode && (pptxEraserActive || e.buttons === 1)) {
       e.preventDefault();
+      pptxEraseDirty = true;
       erasePptxAtPosition(p.x, p.y, 0.08);
       drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
-      if (currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
       return;
     }
     if (pptxShapeInProgress) {
@@ -3608,6 +3631,15 @@ function setupPptxDrawing() {
   const onEnd = (e) => {
     pptxEraserActive = false;
     stopPptxSnapPoll();
+    if (pptxEraseDirty) {
+      pptxEraseDirty = false;
+      pushPptxHistory();
+      if (currentPptxShareToken) {
+        savePptxPageState();
+        savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
+      }
+      drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+    }
     if (drawShape === "select") {
       e.preventDefault();
       if (selectImageResizing) {
@@ -4003,20 +4035,18 @@ function detectLoop() {
         if (pdfMode && pdfDoc) { pdfStrokes = erased.strokes; pdfShapes = erased.shapes; pdfFillShapes = erased.fillShapes || pdfFillShapes; }
         else if (pptxMode && pptxViewer) { pptxStrokes = erased.strokes; pptxShapes = erased.shapes; pptxFillShapes = erased.fillShapes || pptxFillShapes; }
         else { strokes = erased.strokes; shapes = erased.shapes; fillShapes = erased.fillShapes || fillShapes; }
-        const now = Date.now();
-        if (pdfMode && currentPdfShareToken && (now - lastEraseSaveTime >= 200)) {
-          lastEraseSaveTime = now;
-          savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes, true);
-        } else if (pptxMode && currentPptxShareToken && (now - lastEraseSaveTime >= 200)) {
-          lastEraseSaveTime = now;
-          savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes, true);
-        } else if (currentCanvasShareToken && (now - lastEraseSaveTime >= 200)) {
-          lastEraseSaveTime = now;
-          savePageStrokes(currentCanvasShareToken, getCurrentCanvasPageNum(), strokes, shapes, fillShapes);
-        }
         activeRedraw();
       } else if (cursorPos) {
         if (gestureState === "erasing") {
+          if (pdfMode && pdfDoc) {
+            pushPdfHistory();
+            savePdfPageState();
+          } else if (pptxMode && pptxViewer) {
+            pushPptxHistory();
+            savePptxPageState();
+          } else if (!pdfMode && !pptxMode) {
+            pushCanvasHistory();
+          }
           if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes, true);
           if (pptxMode && currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes, true);
           if (!pdfMode && !pptxMode && currentCanvasShareToken && supabase) {
@@ -4329,6 +4359,15 @@ function detectLoop() {
         }
       } else {
         if (gestureState === "erasing") {
+          if (pdfMode && pdfDoc) {
+            pushPdfHistory();
+            savePdfPageState();
+          } else if (pptxMode && pptxViewer) {
+            pushPptxHistory();
+            savePptxPageState();
+          } else if (!pdfMode && !pptxMode) {
+            pushCanvasHistory();
+          }
           if (pdfMode && currentPdfShareToken) savePdfStrokesAndBroadcast(pdfPageNum, activeStrokes, true);
           if (pptxMode && currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes, true);
           if (!pdfMode && !pptxMode && currentCanvasShareToken && supabase) {

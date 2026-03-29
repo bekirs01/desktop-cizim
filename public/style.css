@@ -1697,8 +1697,53 @@ html.touch-draw-ui .draw-toolbar .toolbar-popover-wide {
   .camera-section {
     gap: 0.35rem;
   }
-  .camera-wrapper {
+  .camera-wrapper:not(.pdf-mode.pdf-loaded):not(.pptx-mode.pptx-loaded) {
     min-height: min(55vh, 520px);
+  }
+  .camera-wrapper.pdf-mode.pdf-loaded,
+  .camera-wrapper.pptx-mode.pptx-loaded {
+    min-height: 0 !important;
+    flex: 1 1 0;
+  }
+  .camera-wrapper.pdf-mode.pdf-loaded .pdf-container,
+  .camera-wrapper.pptx-mode.pptx-loaded .pptx-container {
+    flex: 1;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .camera-wrapper.pdf-mode:not(.pdf-loaded) {
+    min-height: min(38vh, 320px);
+  }
+  .camera-section:has(.camera-wrapper.pdf-loaded) .controls,
+  .camera-section:has(.camera-wrapper.pptx-loaded) .controls {
+    padding-top: 0.2rem;
+    margin-top: 0;
+    gap: 0.3rem;
+  }
+  .camera-section:has(.camera-wrapper.pdf-loaded) .drawing-controls .btn-draw,
+  .camera-section:has(.camera-wrapper.pptx-loaded) .drawing-controls .btn-draw {
+    padding: 0.32rem 0.55rem;
+    font-size: 0.78rem;
+    min-height: 38px;
+  }
+  .camera-section:has(.camera-wrapper.pdf-loaded) .pdf-nav-group,
+  .camera-section:has(.camera-wrapper.pptx-loaded) .pdf-nav-group,
+  .camera-section:has(.camera-wrapper.pdf-loaded) #pdfZoomGroup,
+  .camera-section:has(.camera-wrapper.pptx-loaded) #pdfZoomGroup {
+    gap: 0.3rem;
+  }
+  .camera-section:has(.camera-wrapper.pdf-loaded) .pdf-nav-group .btn-small,
+  .camera-section:has(.camera-wrapper.pptx-loaded) .pdf-nav-group .btn-small,
+  .camera-section:has(.camera-wrapper.pdf-loaded) #pdfZoomGroup .btn-small,
+  .camera-section:has(.camera-wrapper.pptx-loaded) #pdfZoomGroup .btn-small {
+    padding: 0.35rem 0.5rem;
+    min-height: 36px;
+  }
+  html.touch-draw-ui body:not(.shared-doc-viewer) .app:not(.embed-camera) .camera-wrapper.pdf-mode.pdf-loaded,
+  html.touch-draw-ui body:not(.shared-doc-viewer) .app:not(.embed-camera) .camera-wrapper.pptx-mode.pptx-loaded {
+    padding-bottom: calc(54px + env(safe-area-inset-bottom, 0px));
   }
 }
 
