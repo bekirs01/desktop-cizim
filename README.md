@@ -1,32 +1,48 @@
-# Desktop Çizim (DrawFlow)
+# DrawFlow (desktop-cizim)
 
-Electron + web: masaüstü üzerinde jest ile çizim, PDF/PPTX ve Supabase ile paylaşım.
+Веб-приложение для совместной работы с **PDF**, **презентациями PPTX** и **холстами**: загрузка из панели, рисование поверх страниц/слайдов, общий доступ и пароли ведущего/зрителя через **Supabase**. Опционально — **жесты с камеры** (щипок и позы) и отдельное **Electron-окно** для прозрачного оверлея; это вспомогательные сценарии, не основной сценарий продукта.
 
-## Hızlı başlangıç
+## Быстрый старт
 
 ```bash
 npm install
-npm start          # HTTP sunucu (varsayılan port 3000) — public/ kökü
-npm run desktop    # Electron şeffaf overlay (public/desktop-overlay.html)
-npm run web        # serve ile public/ (port 8080)
+npm start          # HTTP-сервер (порт 3000), корень — public/
+npm run desktop    # Electron: прозрачный оверлей (public/desktop-overlay.html)
+npm run web        # serve: статика public/ на порту 8080
 ```
 
-## Dokümantasyon
+Открывать через **http://localhost:…**, не через `file://`.
 
-- [Genel kullanım ve özellikler](docs/README.md) (Rusça özgün README)
-- [Supabase kurulumu](docs/SUPABASE_SETUP.md)
-- [Railway deploy](docs/RAILWAY_DEPLOY.md)
+## Возможности (актуально)
 
-## Klasör yapısı
+- Личный кабинет: документы PDF/PPTX, общие холсты, ссылки и пароли доступа.
+- Рисование мышью/тачем поверх камеры или документа; синхронизация штрихов при совместной работе.
+- **Режим игры**: повторение фигуры по контуру с оценкой близости к шаблону.
+- Справка и горячие клавиши (`help.html`).
+- Жесты MediaPipe (по желанию): рисование щипком, ластик, в режиме игры — наведение и «нажатие» по плавающей панели, как в основном режиме рисования.
 
-| Klasör | İçerik |
-|--------|--------|
-| `public/` | HTML, CSS, istemci JS (tarayıcı + Electron yüklemesi) |
-| `server/` | `server.js` — production HTTP sunucusu |
+## Документация
+
+- [Обзор и возможности](docs/README.md) — часть разделов может быть на других языках.
+- [Настройка Supabase](docs/SUPABASE_SETUP.md)
+- [Деплой на Railway](docs/RAILWAY_DEPLOY.md)
+
+## Структура репозитория
+
+| Папка | Назначение |
+|--------|------------|
+| `public/` | HTML, CSS, клиентский JS (браузер и загрузка в Electron) |
+| `server/` | `server.js` — production HTTP-сервер |
 | `database/` | SQL: `setup/`, `migrations/`, `policies/`, `fixes/`, `schemas/` |
-| `docs/` | README, kurulum ve deploy notları |
-| `config/` | `serve.json` (lokal `serve` için) |
-| `supabase/functions/` | Edge Functions (OTP) |
-| `review-needed/` | İncelenmesi önerilen / geçici not dosyaları |
+| `docs/` | Инструкции по настройке и деплою |
+| `config/` | `serve.json` для локального `serve` |
+| `supabase/functions/` | Edge Functions (например, OTP) |
+| `review-needed/` | Черновики и заметки на проверку |
 
-Deploy için `railway.json` ve `nixpacks.toml` proje kökünde kalır.
+В корне: `railway.json`, `nixpacks.toml` — для деплоя.
+
+## Описание на GitHub
+
+Краткое описание репозитория в интерфейсе GitHub задаётся в **Settings → General → Description**. Можно вставить, например:
+
+**DrawFlow — веб: PDF/PPTX и холсты, совместное рисование и Supabase; жесты и Electron-оверлей опционально.**

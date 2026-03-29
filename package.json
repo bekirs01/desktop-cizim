@@ -1,7 +1,7 @@
 {
   "name": "desktop-cizim",
   "version": "1.0.0",
-  "description": "Рисование жестами на рабочем столе",
+  "description": "DrawFlow: PDF/PPTX и холсты, совместное рисование, Supabase; жесты и Electron-оверлей опционально",
   "main": "electron-main.js",
   "scripts": {
     "start": "node server/server.js",
