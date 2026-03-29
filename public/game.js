@@ -25,28 +25,18 @@ function getCameraAspectRatio() {
   return 16 / 9;
 }
 
-/** Вписывает холст в доступную область (ширина и высота внешнего блока), сохраняя пропорции камеры. */
+/** Полная ширина контейнера; высота из пропорций камеры (как до боковой колонки). */
 function layoutGameCanvas() {
   const outer = gameCanvasOuter;
   const wrap = canvas?.parentElement;
   if (!outer || !wrap) return;
-  const r = outer.getBoundingClientRect();
-  const maxW = r.width;
-  const maxH = r.height;
+  const aw = outer.getBoundingClientRect().width;
   const ar = getCameraAspectRatio();
-  if (maxW < 8 || maxH < 8) return;
-  let boxW = maxW;
-  let boxH = boxW / ar;
-  if (boxH > maxH) {
-    boxH = maxH;
-    boxW = boxH * ar;
-  }
-  boxW = Math.max(8, Math.floor(boxW));
-  boxH = Math.max(8, Math.floor(boxH));
+  if (aw < 8) return;
+  const hBox = Math.max(8, Math.floor(aw / ar));
   wrap.style.boxSizing = "border-box";
-  wrap.style.width = `${boxW}px`;
-  wrap.style.height = `${boxH}px`;
-  wrap.style.maxWidth = "100%";
+  wrap.style.width = "100%";
+  wrap.style.height = `${hBox}px`;
 }
 
 function syncGestureToggleAria() {
@@ -287,6 +277,20 @@ async function setGesturesEnabled(on) {
       const unmount = await mountGameGestures({
         mirror: true,
         getCanvasBufferSize: () => ({ w, h }),
+        canvasNormToClient: (nx, ny) => {
+          const r = canvas?.getBoundingClientRect();
+          if (!r?.width) return null;
+          return {
+            clientX: r.left + nx * r.width,
+            clientY: r.top + ny * r.height,
+          };
+        },
+        isOverUiOverlay: (cx, cy) => {
+          const bar = document.getElementById("gameSidebarOverlay");
+          if (!bar) return false;
+          const r = bar.getBoundingClientRect();
+          return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
+        },
         onVideoReady: (vw, vh) => {
           cameraVideoW = vw;
           cameraVideoH = vh;

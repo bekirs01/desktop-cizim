@@ -236,67 +236,39 @@
     }
 
     .game-main {
+      position: relative;
       flex: 1 1 0;
       display: flex;
       flex-direction: column;
       min-height: 0;
-      gap: 0.65rem;
     }
 
-    @media (min-width: 780px) {
-      .game-main {
-        flex-direction: row;
-        align-items: stretch;
-        gap: 0.75rem;
-      }
-    }
-
-    .game-sidebar-column {
-      flex-shrink: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 0.65rem;
-      min-height: 0;
-    }
-
-    @media (min-width: 780px) {
-      .game-sidebar-column {
-        width: min(288px, 30vw);
-        max-height: 100%;
-        overflow-y: auto;
-        overflow-x: hidden;
-        -webkit-overflow-scrolling: touch;
-        padding-right: 0.15rem;
-      }
-    }
-
-    @media (max-width: 779px) {
-      .game-canvas-column {
-        order: -1;
-        flex: 1 1 0;
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-      }
-
-      .game-sidebar-column {
-        flex-shrink: 0;
-        max-height: 42vh;
-        overflow-y: auto;
-      }
-    }
-
-    .game-canvas-column {
+    .game-workspace {
       flex: 1 1 0;
-      min-width: 0;
       min-height: 0;
-      display: flex;
-      flex-direction: column;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .game-sidebar-overlay {
+      position: absolute;
+      left: 0.2rem;
+      top: 0.25rem;
+      z-index: 30;
+      width: min(292px, calc(100vw - 1.5rem));
+      max-height: min(88dvh, calc(100% - 0.6rem));
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      pointer-events: auto;
     }
 
     @media (min-width: 780px) {
-      .game-canvas-column {
-        flex: 1 1 0;
+      .game-sidebar-overlay {
+        left: 0.35rem;
+        top: 0.35rem;
+        width: min(300px, 40vw);
       }
     }
 
@@ -312,20 +284,14 @@
     }
 
     .game-panel.game-sidebar {
-      border-left: 3px solid rgba(108, 92, 231, 0.4);
-      background: linear-gradient(165deg, rgba(24, 24, 34, 0.92) 0%, rgba(17, 17, 24, 0.78) 100%);
-    }
-
-    @media (max-width: 779px) {
-      .game-panel.game-sidebar {
-        border-left: none;
-        border-top: 3px solid rgba(108, 92, 231, 0.35);
-      }
+      border-left: 3px solid rgba(108, 92, 231, 0.45);
+      background: linear-gradient(165deg, rgba(20, 20, 30, 0.94) 0%, rgba(14, 14, 22, 0.88) 100%);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+      margin: 0;
     }
 
     .game-panel.game-stage {
-      flex: 1 1 0;
-      min-height: 0;
+      flex-shrink: 0;
       display: flex;
       flex-direction: column;
     }
@@ -599,14 +565,12 @@
     }
 
     .game-canvas-outer {
-      flex: 1 1 0;
-      min-height: 0;
       width: 100%;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
+      align-items: stretch;
+      justify-content: flex-start;
+      overflow: visible;
     }
 
     .game-canvas-wrap {
@@ -737,7 +701,17 @@
       </div>
     </nav>
     <main class="game-main">
-      <aside class="game-sidebar-column" aria-label="Панель режима игры">
+      <div class="game-workspace">
+        <section class="game-panel game-stage" aria-label="Холст">
+          <div class="game-canvas-outer" id="gameCanvasOuter">
+            <div class="game-canvas-wrap" id="gameCanvasWrap">
+              <canvas id="gameCanvas" width="480" height="480" aria-label="Холст: нарисуйте фигуру по образцу"></canvas>
+            </div>
+          </div>
+          <p class="game-hint" id="gameHint"></p>
+        </section>
+      </div>
+      <aside id="gameSidebarOverlay" class="game-sidebar-overlay" aria-label="Панель режима игры">
         <section class="game-panel game-sidebar" aria-label="Фигура, жесты и проверка">
           <div class="game-controls-inner">
             <div class="game-row-top">
@@ -753,7 +727,7 @@
                 <input type="checkbox" id="gameGestureToggle" />
                 <span class="game-switch-slider" aria-hidden="true"></span>
               </label>
-              <span class="game-gesture-hint">Включает рисование без касания экрана.</span>
+              <span class="game-gesture-hint">Включает рисование без касания экрана. Щипок по кнопкам панели — как касание.</span>
               <span class="game-gesture-status" id="gameGestureStatus" aria-live="polite"></span>
             </div>
             <div class="game-actions-row" aria-label="Действия">
@@ -767,18 +741,8 @@
           </div>
         </section>
       </aside>
-      <div class="game-canvas-column">
-        <section class="game-panel game-stage" aria-label="Холст">
-          <div class="game-canvas-outer" id="gameCanvasOuter">
-            <div class="game-canvas-wrap" id="gameCanvasWrap">
-              <canvas id="gameCanvas" width="480" height="480" aria-label="Холст: нарисуйте фигуру по образцу"></canvas>
-            </div>
-          </div>
-          <p class="game-hint" id="gameHint"></p>
-        </section>
-      </div>
     </main>
   </div>
-  <script type="module" src="game.js?v=28"></script>
+  <script type="module" src="game.js?v=29"></script>
 </body>
 </html>

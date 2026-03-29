@@ -61,11 +61,41 @@ function mapVideoNormToCanvasBufferNorm(nx, ny, vw, vh, cw, ch) {
   };
 }
 
+function simulateUiClick(clientX, clientY) {
+  const el = document.elementFromPoint(clientX, clientY);
+  if (!el) return;
+  const clickable = el.closest("button, a[href], .game-shape-opt, label.game-switch");
+  if (!clickable) return;
+  if (clickable.tagName === "A" && clickable.getAttribute("href")) {
+    clickable.click();
+    return;
+  }
+  if (clickable.tagName === "LABEL" && clickable.classList.contains("game-switch")) {
+    clickable.click();
+    return;
+  }
+  ["mousedown", "mouseup", "click"].forEach((type) => {
+    clickable.dispatchEvent(
+      new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX,
+        clientY,
+        button: 0,
+        buttons: type === "mousedown" ? 1 : 0,
+      })
+    );
+  });
+}
+
 /**
  * @param {{
  *   mirror?: boolean,
  *   canStartPinchStroke?: () => boolean,
  *   getCanvasBufferSize?: () => { w: number, h: number },
+ *   canvasNormToClient?: (nx: number, ny: number) => { clientX: number, clientY: number } | null | undefined,
+ *   isOverUiOverlay?: (clientX: number, clientY: number) => boolean,
  *   onVideoReady?: (videoWidth: number, videoHeight: number) => void,
  *   onPinchStrokeBegin: () => void,
  *   onPinchStrokeSample: (nx: number, ny: number) => void,
@@ -159,6 +189,10 @@ export async function mountGameGestures(hooks) {
         pinchReleaseFrames = 0;
         hooks.onUp();
       }
+      if (gestureState === "ui_pinch") {
+        gestureState = "idle";
+        pinchReleaseFrames = 0;
+      }
       return;
     }
 
@@ -212,12 +246,34 @@ export async function mountGameGestures(hooks) {
         pinchReleaseFrames = 0;
         isPinchActive = true;
       }
+    } else if (gestureState === "ui_pinch") {
+      if (smoothedThumbIndexDist > pinchRelease) {
+        pinchReleaseFrames++;
+        if (pinchReleaseFrames >= PINCH_RELEASE_FRAMES) {
+          const pt = hooks.canvasNormToClient?.(clamp01(drawX), clamp01(drawY));
+          if (pt && hooks.isOverUiOverlay?.(pt.clientX, pt.clientY)) {
+            simulateUiClick(pt.clientX, pt.clientY);
+          }
+          gestureState = "idle";
+          pinchReleaseFrames = 0;
+          smoothedCursor = null;
+          hooks.onCursor?.(false);
+        }
+      } else {
+        pinchReleaseFrames = 0;
+      }
     } else {
       pinchReleaseFrames = 0;
       if (smoothedThumbIndexDist < pinchStart && framesSinceErase >= GESTURE_LOCK_FRAMES && canStart()) {
-        gestureState = "drawing";
-        hooks.onPinchStrokeBegin();
-        isPinchActive = true;
+        const pt = hooks.canvasNormToClient?.(clamp01(drawX), clamp01(drawY));
+        const overUi = pt && hooks.isOverUiOverlay?.(pt.clientX, pt.clientY);
+        if (overUi) {
+          gestureState = "ui_pinch";
+        } else {
+          gestureState = "drawing";
+          hooks.onPinchStrokeBegin();
+          isPinchActive = true;
+        }
       }
     }
 
@@ -237,6 +293,8 @@ export async function mountGameGestures(hooks) {
     if (gestureState === "drawing") {
       gestureState = "idle";
       hooks.onUp();
+    } else if (gestureState === "ui_pinch") {
+      gestureState = "idle";
     }
   };
 }
