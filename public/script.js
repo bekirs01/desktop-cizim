@@ -341,13 +341,11 @@ let lastCanvasBroadcastProgress = 0;
 let lastGestureBroadcastProgress = 0;
 let lastEraseSaveTime = 0;
 let lastEraseEndTime = 0;
-let lastLocalSaveTime = 0;
 let fadeAnimationRaf = null;
 /** Ограничиваем частоту перерисовки только из-за анимации исчезновения (без троттлинга самого рисования). */
 const FADE_REDRAW_MIN_MS = 1000 / 28;
 let lastFadeRedrawWallMs = 0;
 function savePageStrokes(...args) {
-  lastLocalSaveTime = Date.now();
   return _savePageStrokes(...args);
 }
 
@@ -1373,19 +1371,7 @@ function drawStrokesToCanvas(w, h) {
   });
 
   if (currentCanvasShareToken && canvasRemoteCurrentStroke?.points?.length >= 2) {
-    const rawPts = canvasRemoteCurrentStroke.points;
-    const pts = smoothStrokePoints(rawPts);
-    const color = canvasRemoteCurrentStroke.color || drawColor;
-    const lw = canvasRemoteCurrentStroke.lineWidth ?? defLw;
-    dctx.beginPath();
-    dctx.moveTo(sx(pts[0].x), pts[0].y * h);
-    for (let i = 1; i < pts.length; i++) dctx.lineTo(sx(pts[i].x), pts[i].y * h);
-    dctx.strokeStyle = hexToRgba(color, 0.25);
-    dctx.lineWidth = Math.max(lw * 2.5, 12);
-    dctx.stroke();
-    dctx.strokeStyle = hexToRgba(color, canvasRemoteCurrentStroke.opacity ?? 1);
-    dctx.lineWidth = lw;
-    dctx.stroke();
+    drawStrokeWithTool(dctx, canvasRemoteCurrentStroke, sx, h);
   }
 
   if (canvasFadeEnabled) {
@@ -1843,19 +1829,7 @@ function drawStrokesToPdfCanvas(w, h) {
     if (hasActiveFadeStrokes(pdfStrokes, now)) scheduleFadeTick();
   }
   if (pdfRemoteCurrentStroke?.points?.length >= 2) {
-    const rawPts = pdfRemoteCurrentStroke.points;
-    const pts = smoothStrokePoints(rawPts);
-    const color = pdfRemoteCurrentStroke.color || drawColor;
-    const lw = pdfRemoteCurrentStroke.lineWidth ?? defLw;
-    dctx.beginPath();
-    dctx.moveTo(pts[0].x * w, pts[0].y * h);
-    for (let i = 1; i < pts.length; i++) dctx.lineTo(pts[i].x * w, pts[i].y * h);
-    dctx.strokeStyle = hexToRgba(color, 0.25);
-    dctx.lineWidth = Math.max(lw * 2.5, 12);
-    dctx.stroke();
-    dctx.strokeStyle = hexToRgba(color, pdfRemoteCurrentStroke.opacity ?? 1);
-    dctx.lineWidth = lw;
-    dctx.stroke();
+    drawStrokeWithTool(dctx, pdfRemoteCurrentStroke, sxPdf, h);
   }
   drawSelectOverlay(dctx, w, h, sxPdf);
   drawCursorDot(dctx, w, h, true);
@@ -2022,8 +1996,6 @@ async function loadPdfFromShareToken(shareToken, password = null) {
         color: s.color || drawColor,
         lineWidth: s.lineWidth ?? drawLineWidth,
       }));
-      const recentlySaved = lastLocalSaveTime > 0 && Date.now() - lastLocalSaveTime < 2000;
-      if (p === pdfPageNum && recentlySaved) return;
       const u = row.updated_at;
       if (typeof u === "string") {
         const prev = pdfLastRemoteUpdatedAt[p];
@@ -2179,8 +2151,6 @@ async function loadPptxFromShareToken(shareToken, password = null) {
         color: s.color || drawColor,
         lineWidth: s.lineWidth ?? drawLineWidth,
       }));
-      const recentlySaved = lastLocalSaveTime > 0 && Date.now() - lastLocalSaveTime < 2000;
-      if (p === pptxPageNum && recentlySaved) return;
       const u = r.updated_at;
       if (typeof u === "string") {
         const prev = pptxLastRemoteUpdatedAt[p];
@@ -3071,24 +3041,47 @@ async function loadCanvasDocumentWithPages(shareToken) {
       }
       const row = payload?.new || payload?.newRecord || payload?.record;
       if (!row || row.share_token !== shareToken || row.page_num < 1) return;
-      const recentlySaved = lastLocalSaveTime > 0 && Date.now() - lastLocalSaveTime < 2000;
-      if (row.page_num === canvasPageNum && recentlySaved) return;
       canvasRemoteCurrentStroke = null;
       const incoming = (row.strokes || []).map((s) => ({
         points: s.points || [],
         color: s.color || drawColor,
         lineWidth: s.lineWidth ?? drawLineWidth,
       }));
+      const nextStrokes = incoming.map(cloneStroke);
       const loadedShapes = (row.shapes || []).map(cloneShape);
-      deserializeFillShapes(row.fill_shapes || []).then((loadedFills) => {
-        canvasStrokesByPage[row.page_num] = { strokes: incoming, shapes: loadedShapes, fillShapes: loadedFills };
-        if (row.page_num === canvasPageNum) {
-          strokes = incoming;
-          shapes = loadedShapes;
-          fillShapes = loadedFills;
-          if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
-        }
-      });
+      const prevLayer = canvasStrokesByPage[row.page_num];
+      const prevFills = prevLayer?.fillShapes || [];
+      const fillClone = prevFills.map((f) => ({
+        data: new ImageData(new Uint8ClampedArray(f.data.data), f.w, f.h),
+        w: f.w,
+        h: f.h,
+      }));
+      canvasStrokesByPage[row.page_num] = {
+        strokes: nextStrokes,
+        shapes: loadedShapes,
+        fillShapes: fillClone,
+      };
+      if (row.page_num === canvasPageNum) {
+        strokes = nextStrokes.map(cloneStroke);
+        shapes = loadedShapes;
+        fillShapes = fillClone.map((f) => ({
+          data: new ImageData(new Uint8ClampedArray(f.data.data), f.w, f.h),
+          w: f.w,
+          h: f.h,
+        }));
+        if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+      }
+      if (row.fill_shapes !== undefined) {
+        deserializeFillShapes(row.fill_shapes || []).then((loadedFills) => {
+          const layer = canvasStrokesByPage[row.page_num];
+          if (!layer) return;
+          layer.fillShapes = loadedFills;
+          if (row.page_num === canvasPageNum) {
+            fillShapes = loadedFills;
+            if (drawCanvas) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+          }
+        });
+      }
     });
     canvasRealtimeUnsubscribe = sub?.unsubscribe || sub;
     canvasRealtimeBroadcastProgress = sub?.broadcastProgress || null;
@@ -3146,8 +3139,6 @@ async function createSharedCanvas() {
     }
     const row = payload?.new || payload?.newRecord || payload?.record;
     if (!row || row.share_token !== token || row.page_num !== CANVAS_PAGE) return;
-    const recentlySaved = lastLocalSaveTime > 0 && Date.now() - lastLocalSaveTime < 2000;
-    if (recentlySaved) return;
     canvasRemoteCurrentStroke = null;
     const incoming = (row.strokes || []).map((s) => ({
       points: s.points || [],
