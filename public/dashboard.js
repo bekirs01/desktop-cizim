@@ -5,7 +5,12 @@ import { supabase } from "./supabase-config.js";
 import { uploadPdfToSupabase, deletePdfFromSupabase, setPdfSharePasswords } from "./supabase-pdf.js";
 import { createCanvas, deleteCanvas, listCanvases, setCanvasSharePassword } from "./supabase-canvas.js";
 
+function releaseAuthGate() {
+  document.documentElement.classList.remove("auth-gate-pending");
+}
+
 if (!supabase) {
+  releaseAuthGate();
   document.body.innerHTML = '<div class="dash-app"><p style="color:var(--dash-red);padding:3rem;text-align:center;">Supabase не настроен.</p></div>';
 } else {
   const hash = window.location.hash.substring(1);
@@ -19,6 +24,8 @@ if (!supabase) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
     window.location.replace("/login.html");
+  } else {
+    releaseAuthGate();
   }
 }
 

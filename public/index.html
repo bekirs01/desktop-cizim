@@ -1,10 +1,15 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" class="auth-gate-pending">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <title>DrawFlow | Рисование</title>
+  <style>
+    html.auth-gate-pending { background: #0a0a0b; min-height: 100%; }
+    html.auth-gate-pending body { overflow: hidden; }
+    html.auth-gate-pending .app { visibility: hidden !important; pointer-events: none !important; }
+  </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
@@ -23,38 +28,52 @@
   <link rel="stylesheet" href="style.css?v=10">
   <script type="module">
     import { supabase } from './supabase-config.js';
-    if (supabase) {
-      const hash = window.location.hash.substring(1);
-      const params = new URLSearchParams(hash);
-      const accessToken = params.get('access_token');
-      const refreshToken = params.get('refresh_token');
-      if (accessToken) {
-        await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken || '' });
-        window.history.replaceState(null, '', window.location.pathname + window.location.search);
-      }
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        const redirect = encodeURIComponent(window.location.href);
-        window.location.replace('/login.html?redirect=' + redirect);
-        throw new Error('Auth required');
-      }
-      const urlParams = new URLSearchParams(window.location.search);
-      const hasId = !!urlParams.get('id');
-      const hasCanvas = !!urlParams.get('canvas');
-      const hasCameraMode = urlParams.get('mode') === 'camera' || sessionStorage.getItem('pendingCameraMode') === '1';
-      if (!hasId && !hasCanvas && !hasCameraMode) {
-        window.location.replace('/dashboard.html');
-        throw new Error('Redirect');
-      }
-      if (sessionStorage.getItem('pendingCameraMode') === '1') {
-        sessionStorage.removeItem('pendingCameraMode');
-        if (urlParams.get('mode') !== 'camera') {
-          const base = window.location.pathname + window.location.search;
-          window.history.replaceState(null, '', base + (base.includes('?') ? '&' : '?') + 'mode=camera');
-        }
-      }
-      window.supabase = supabase;
+
+    function releaseAuthGate() {
+      document.documentElement.classList.remove('auth-gate-pending');
     }
+
+    (async () => {
+      if (!supabase) {
+        releaseAuthGate();
+        return;
+      }
+      try {
+        const hash = window.location.hash.substring(1);
+        const params = new URLSearchParams(hash);
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+        if (accessToken) {
+          await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken || '' });
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          const redirect = encodeURIComponent(window.location.href);
+          window.location.replace('/login.html?redirect=' + redirect);
+          return;
+        }
+        const urlParams = new URLSearchParams(window.location.search);
+        const hasId = !!urlParams.get('id');
+        const hasCanvas = !!urlParams.get('canvas');
+        const hasCameraMode = urlParams.get('mode') === 'camera' || sessionStorage.getItem('pendingCameraMode') === '1';
+        if (!hasId && !hasCanvas && !hasCameraMode) {
+          window.location.replace('/dashboard.html');
+          return;
+        }
+        if (sessionStorage.getItem('pendingCameraMode') === '1') {
+          sessionStorage.removeItem('pendingCameraMode');
+          if (urlParams.get('mode') !== 'camera') {
+            const base = window.location.pathname + window.location.search;
+            window.history.replaceState(null, '', base + (base.includes('?') ? '&' : '?') + 'mode=camera');
+          }
+        }
+        window.supabase = supabase;
+      } catch (e) {
+        console.error(e);
+      }
+      releaseAuthGate();
+    })();
   </script>
 </head>
 <body>
