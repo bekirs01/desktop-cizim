@@ -68,7 +68,7 @@ import {
 import { toPx } from "./app/overlay/coords.js";
 import { drawHandLandmarks } from "./app/overlay/handDraw.js";
 import { drawPoseSkeleton } from "./app/overlay/poseDraw.js";
-import { drawEyeContours, checkEyesClosed } from "./app/overlay/faceDraw.js";
+import { drawEyeContours, checkEyesClosed, getEyeBlinkState } from "./app/overlay/faceDraw.js";
 
 let PPTXViewer = null;
 (async () => {
@@ -286,6 +286,15 @@ const MIDDLE_THUMB_DOUBLE_WAIT_FACTOR = 1.1;
 const MIDDLE_THUMB_SINGLE_STALE_MS = 720;
 const MIDDLE_THUMB_SEQUENCE_WINDOW_MS = 1000;
 const MIDDLE_THUMB_MIN_TAP_INTERVAL_MS = 18;
+const DOC_SNAP_NAV_COOLDOWN_MS = 140;
+const DOC_SNAP_BOOT_GUARD_MS = 1400;
+const DOC_SNAP_RELEASE_MAX_HOLD_MS = 320;
+const EYE_GESTURE_BOOT_GUARD_MS = 1400;
+const EYE_WINK_MIN_MS = 35;
+const EYE_WINK_MAX_MS = 280;
+const EYE_TRIPLE_BLINK_WINDOW_MS = 1200;
+const EYE_TRIPLE_BLINK_MIN_GAP_MS = 70;
+const EYE_GESTURE_COOLDOWN_MS = 180;
 const GESTURE_RED_PEN_HEX = "#e53935";
 const GESTURE_MODE_CYCLE_COOLDOWN_MS = 280;
 let middleThumbTouchingHyst = false;
@@ -293,6 +302,18 @@ let middleThumbWasTouching = false;
 let middleThumbTapTimes = [];
 let middleThumbGestureTimer = null;
 let gestureModeCycleCooldownUntil = 0;
+let docSnapTouchingByHand = { left: false, right: false };
+let docSnapSeenFramesByHand = { left: 0, right: 0 };
+let docSnapTouchStartAtByHand = { left: 0, right: 0 };
+let docSnapNavCooldownUntil = 0;
+let docSnapReadyAt = performance.now() + DOC_SNAP_BOOT_GUARD_MS;
+let eyeGestureReadyAt = performance.now() + EYE_GESTURE_BOOT_GUARD_MS;
+let eyeGestureCooldownUntil = 0;
+let eyeBlinkStartAt = { left: 0, right: 0, both: 0 };
+let eyeBothBlinkReleaseTimes = [];
+let eyeBlinkState = { leftClosed: false, rightClosed: false, bothClosed: false, leftScore: 0, rightScore: 0 };
+let cachedEyeBlinkState = eyeBlinkState;
+let eyeOriginalPenColor = "#6c5ce7";
 const FINGER_LOST_THRESHOLD = 6;
 const MIN_STROKE_DIST = 0.002;
 /** Шаг от последней точки ≥ этого (норм.) — «заметное» продолжение; микроточки не продлевают «тишину» для snap */
@@ -307,6 +328,7 @@ let gestureSnapHoldFrameAt = 0;
 let cachedLm = null;
 let cachedEyesClosed = false;
 let cachedHandLandmarks = [];
+let cachedDocSnapHands = [];
 let preferredHand = (localStorage.getItem("preferredHand") || "right").toLowerCase(); // "left" | "right"
 let lastStrokesVersion = 0;
 let strokesVersion = 0;
@@ -325,6 +347,7 @@ let pdfStrokesByPage = {};
 let pdfShapesByPage = {};
 let pdfCurrentStroke = { points: [], color: "#6c5ce7" };
 let pdfZoomScale = 1;
+let pdfRenderSeq = 0;
 let pdfIsDrawing = false;
 let currentPdfShareToken = null;
 /** Paylaşılan PDF/PPTX linkinde öğrenci şifresiyle açıldıysa true — çizim/yazma kapalı */
@@ -432,6 +455,7 @@ let pptxIsDrawing = false;
 let pptxShapeInProgress = null;
 let pptxAspectRatio = 16 / 9;
 let currentPptxShareToken = null;
+let pptxRenderSeq = 0;
 
 const OBJECT_COLORS = ["#6c5ce7", "#00cec9", "#ff6b6b", "#ffd93d", "#55efc4", "#74b9ff"];
 let objectIdCounter = 0;
@@ -446,9 +470,10 @@ function savePdfPageState() {
 
 async function savePdfStrokesAndBroadcast(pageNum, strokes, skipBroadcast = false) {
   if (!currentPdfShareToken || sharedDocReadOnly) return;
+  if (pageNum === pdfPageNum && pdfDoc) savePdfPageState();
   const layer = pdfStrokesByPage[pageNum];
-  const sh = layer?.shapes ?? (pageNum === pdfPageNum ? pdfShapes : []);
-  const fsh = layer?.fillShapes ?? (pageNum === pdfPageNum ? pdfFillShapes : []);
+  const sh = pageNum === pdfPageNum ? pdfShapes : (layer?.shapes ?? []);
+  const fsh = pageNum === pdfPageNum ? pdfFillShapes : (layer?.fillShapes ?? []);
   const res = await savePageStrokes(currentPdfShareToken, pageNum, strokes, sh, fsh);
   if (res && pdfRealtimeBroadcast && !skipBroadcast) {
     const ts = typeof res === "object" && res.updated_at ? res.updated_at : undefined;
@@ -1580,11 +1605,11 @@ function handleMiddleThumbTapRisingEdge(nowMs) {
   }, MIDDLE_THUMB_SINGLE_STALE_MS);
 }
 
-function applyGestureRedPen() {
-  if (sharedDocReadOnly) return;
-  const red = GESTURE_RED_PEN_HEX;
+function applyGestureColor(colorHex) {
+  const next = (colorHex || "").trim();
+  if (!next) return;
   if (typeof hexToHsv === "function") {
-    const hv = hexToHsv(red);
+    const hv = hexToHsv(next);
     colorWheelHue = hv.h;
     colorWheelSat = hv.s;
     colorWheelVal = hv.v;
@@ -1592,16 +1617,104 @@ function applyGestureRedPen() {
   if (typeof window.applyColorFromWheel === "function") {
     window.applyColorFromWheel();
   } else {
-    drawColor = red;
+    drawColor = next;
     if (toolbarColor) toolbarColor.value = drawColor;
     if (colorWheelPreview) colorWheelPreview.style.background = drawColor;
-    document.querySelectorAll(".color-preset").forEach((b) => b.classList.remove("active"));
     if (pdfMode && pdfDoc) pdfCurrentStroke.color = drawColor;
     else if (pptxMode && pptxViewer) pptxCurrentStroke.color = drawColor;
     else currentStroke.color = drawColor;
     if (typeof updateThicknessOpacityPreviews === "function") updateThicknessOpacityPreviews();
   }
+  document.querySelectorAll(".color-preset").forEach((b) => {
+    const bc = (b.dataset.color || "").toLowerCase();
+    b.classList.toggle("active", bc === next.toLowerCase());
+  });
+}
+
+function applyGestureRedPen() {
+  if (sharedDocReadOnly) return;
+  const red = GESTURE_RED_PEN_HEX;
+  if ((drawColor || "").toLowerCase() !== red.toLowerCase()) {
+    eyeOriginalPenColor = drawColor || eyeOriginalPenColor;
+  }
+  applyGestureColor(red);
   showGestureModeHint("Kalem rengi: kırmızı");
+}
+
+function applyGestureOriginalPen() {
+  if (sharedDocReadOnly) return;
+  const red = GESTURE_RED_PEN_HEX.toLowerCase();
+  const fallback = eyeOriginalPenColor || "#6c5ce7";
+  const target = (fallback || "").toLowerCase() === red ? "#6c5ce7" : fallback;
+  applyGestureColor(target);
+  showGestureModeHint("Kalem rengi: orijinal");
+}
+
+function handleEyeGestureFrame(nowMs) {
+  if (sharedDocReadOnly) {
+    cachedEyeBlinkState = { ...eyeBlinkState };
+    return false;
+  }
+  if (nowMs < eyeGestureReadyAt || nowMs < eyeGestureCooldownUntil) {
+    cachedEyeBlinkState = { ...eyeBlinkState };
+    return false;
+  }
+  let consumed = false;
+
+  const prevLeft = !!cachedEyeBlinkState?.leftClosed;
+  const prevRight = !!cachedEyeBlinkState?.rightClosed;
+  const curLeft = !!eyeBlinkState?.leftClosed;
+  const curRight = !!eyeBlinkState?.rightClosed;
+  const prevBoth = !!cachedEyeBlinkState?.bothClosed;
+  const curBoth = !!eyeBlinkState?.bothClosed;
+
+  if (curLeft && !prevLeft) eyeBlinkStartAt.left = nowMs;
+  if (curRight && !prevRight) eyeBlinkStartAt.right = nowMs;
+  if (curBoth && !prevBoth) eyeBlinkStartAt.both = nowMs;
+
+  if (!curBoth && prevBoth) {
+    const startedAt = eyeBlinkStartAt.both || nowMs;
+    const dur = nowMs - startedAt;
+    if (dur >= EYE_WINK_MIN_MS && dur <= EYE_WINK_MAX_MS) {
+      const last = eyeBothBlinkReleaseTimes[eyeBothBlinkReleaseTimes.length - 1];
+      if (!last || nowMs - last >= EYE_TRIPLE_BLINK_MIN_GAP_MS) {
+        eyeBothBlinkReleaseTimes.push(nowMs);
+      }
+      eyeBothBlinkReleaseTimes = eyeBothBlinkReleaseTimes.filter((t) => nowMs - t <= EYE_TRIPLE_BLINK_WINDOW_MS);
+      if (eyeBothBlinkReleaseTimes.length >= 3) {
+        eyeBothBlinkReleaseTimes = [];
+        applyGestureToolModeCycle();
+        eyeGestureCooldownUntil = nowMs + EYE_GESTURE_COOLDOWN_MS;
+        consumed = true;
+      }
+    }
+    eyeBlinkStartAt.both = 0;
+  }
+
+  if (!consumed && !curRight && prevRight && !prevBoth) {
+    const startedAt = eyeBlinkStartAt.right || nowMs;
+    const dur = nowMs - startedAt;
+    if (dur >= EYE_WINK_MIN_MS && dur <= EYE_WINK_MAX_MS && !curLeft) {
+      applyGestureOriginalPen();
+      eyeGestureCooldownUntil = nowMs + EYE_GESTURE_COOLDOWN_MS;
+      consumed = true;
+    }
+    eyeBlinkStartAt.right = 0;
+  }
+
+  if (!consumed && !curLeft && prevLeft && !prevBoth) {
+    const startedAt = eyeBlinkStartAt.left || nowMs;
+    const dur = nowMs - startedAt;
+    if (dur >= EYE_WINK_MIN_MS && dur <= EYE_WINK_MAX_MS && !curRight) {
+      applyGestureRedPen();
+      eyeGestureCooldownUntil = nowMs + EYE_GESTURE_COOLDOWN_MS;
+      consumed = true;
+    }
+    eyeBlinkStartAt.left = 0;
+  }
+
+  cachedEyeBlinkState = { ...eyeBlinkState };
+  return consumed;
 }
 
 function drawSelectOverlay(dctx, w, h, sx) {
@@ -1789,7 +1902,10 @@ function restoreCameraAspect() {
 // ========== PDF РЕЖИМ ==========
 async function renderPdfPage(retry = 0) {
   if (!pdfDoc || !pdfCanvas || !pdfDrawCanvas || !pdfPageWrap) return;
-  const page = await pdfDoc.getPage(pdfPageNum);
+  const seq = ++pdfRenderSeq;
+  const targetPage = pdfPageNum;
+  const page = await pdfDoc.getPage(targetPage);
+  if (seq !== pdfRenderSeq) return;
   const container = pdfContainer;
   let maxW = container.clientWidth || 0;
   let maxH = container.clientHeight || 0;
@@ -1797,6 +1913,7 @@ async function renderPdfPage(retry = 0) {
     requestAnimationFrame(() => renderPdfPage(retry + 1));
     return;
   }
+  if (seq !== pdfRenderSeq || targetPage !== pdfPageNum) return;
   maxW = maxW || 800;
   maxH = maxH || 600;
   const viewport = page.getViewport({ scale: 1 });
@@ -1821,6 +1938,7 @@ async function renderPdfPage(retry = 0) {
   const scaledViewport = page.getViewport({ scale });
   const w = Math.floor(scaledViewport.width);
   const h = Math.floor(scaledViewport.height);
+  if (seq !== pdfRenderSeq || targetPage !== pdfPageNum) return;
   if (cameraWrapper) {
     cameraWrapper.style.width = "";
     cameraWrapper.style.height = "";
@@ -1839,6 +1957,7 @@ async function renderPdfPage(retry = 0) {
     canvasContext: ctx,
     viewport: scaledViewport,
   }).promise;
+  if (seq !== pdfRenderSeq || targetPage !== pdfPageNum) return;
   pdfDrawCanvas.width = pdfDrawCanvas.width;
   drawStrokesToPdfCanvas(w, h);
 }
@@ -2388,9 +2507,10 @@ let pptxRemoteCurrentStroke = null;
 
 async function savePptxStrokesAndBroadcast(pageNum, strokes, skipBroadcast = false) {
   if (!currentPptxShareToken || sharedDocReadOnly) return;
+  if (pageNum === pptxPageNum && pptxViewer) savePptxPageState();
   const layer = pptxStrokesByPage[pageNum];
-  const sh = layer?.shapes ?? (pageNum === pptxPageNum ? pptxShapes : []);
-  const fsh = layer?.fillShapes ?? (pageNum === pptxPageNum ? pptxFillShapes : []);
+  const sh = pageNum === pptxPageNum ? pptxShapes : (layer?.shapes ?? []);
+  const fsh = pageNum === pptxPageNum ? pptxFillShapes : (layer?.fillShapes ?? []);
   const res = await savePageStrokes(currentPptxShareToken, pageNum, strokes, sh, fsh);
   if (res && pptxRealtimeBroadcast && !skipBroadcast) {
     const ts = typeof res === "object" && res.updated_at ? res.updated_at : undefined;
@@ -2424,6 +2544,7 @@ async function loadPdfFromFile(file) {
     if (pdfClearBtn) pdfClearBtn.disabled = false;
     if (drawBtn) drawBtn.disabled = false;
     if (clearDrawBtn) clearDrawBtn.disabled = false;
+    loadPdfPageState();
     await renderPdfPage();
     updateDocumentOverlays();
   } catch (err) {
@@ -3539,6 +3660,8 @@ function drawStrokesToPptxCanvas(w, h) {
 
 async function renderPptxSlide() {
   if (!pptxViewer || !pptxCanvas || !pptxDrawCanvas) return;
+  const seq = ++pptxRenderSeq;
+  const targetSlide = pptxPageNum;
   const container = pptxContainer;
   const fs = isCanvasFullscreenMode();
   // pptxviewjs centers the slide with Math.min(scaleX, scaleY); canvas aspect must match slide EMU aspect
@@ -3558,6 +3681,7 @@ async function renderPptxSlide() {
     : (container?.clientWidth || 800);
   targetW = Math.max(1, Math.ceil(availW));
   targetH = Math.max(1, Math.round(targetW / pptxAspectRatio));
+  if (seq !== pptxRenderSeq || targetSlide !== pptxPageNum) return;
   setWrapperAspect(targetW, targetH);
   pptxCanvas.style.width = "";
   pptxCanvas.style.height = "";
@@ -3567,8 +3691,10 @@ async function renderPptxSlide() {
   pptxCanvas.height = targetH;
   pptxDrawCanvas.width = targetW;
   pptxDrawCanvas.height = targetH;
-  await pptxViewer.goToSlide(pptxPageNum - 1);
+  if (seq !== pptxRenderSeq || targetSlide !== pptxPageNum) return;
+  await pptxViewer.goToSlide(targetSlide - 1);
   await pptxViewer.render();
+  if (seq !== pptxRenderSeq || targetSlide !== pptxPageNum) return;
   const dpr = typeof window !== "undefined" && window.devicePixelRatio ? window.devicePixelRatio : 1;
   let lw = parseFloat(pptxCanvas.style.width);
   let lh = parseFloat(pptxCanvas.style.height);
@@ -3582,6 +3708,7 @@ async function renderPptxSlide() {
     pptxDrawCanvas.width = lw;
     pptxDrawCanvas.height = lh;
   }
+  if (seq !== pptxRenderSeq || targetSlide !== pptxPageNum) return;
   drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
 }
 
@@ -3613,6 +3740,7 @@ async function loadPptxFromFile(file) {
     if (pptxClearBtn) pptxClearBtn.disabled = false;
     if (drawBtn) drawBtn.disabled = false;
     if (clearDrawBtn) clearDrawBtn.disabled = false;
+    loadPptxPageState();
     await renderPptxSlide();
     updateDocumentOverlays();
   } catch (err) {
@@ -3979,7 +4107,7 @@ function detectLoop() {
   lastVideoTime = t;
 
   const drawModeHandOnly = drawMode;
-  const shouldDetect = drawModeHandOnly || (frameCount % DETECT_EVERY_N_FRAMES) === 0;
+  const shouldDetect = drawModeHandOnly || showSkeleton || (frameCount % DETECT_EVERY_N_FRAMES) === 0;
 
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
@@ -3993,7 +4121,7 @@ function detectLoop() {
   }
 
   try {
-    let lm, handLandmarks;
+    let lm, handLandmarks, docSnapHands;
 
     if (shouldDetect) {
       // 2. Pose — пропускаем в режиме рисования (только рука нужна)
@@ -4011,16 +4139,18 @@ function detectLoop() {
         }
       }
 
-      // 3. Yüz / Göz — пропускаем в режиме рисования
-      if (!drawModeHandOnly && faceLandmarker) {
+      // 3. Yüz / Göz — göz jestleri için çizim modunda da aktif
+      if (faceLandmarker) {
         try {
           const faceRes = faceLandmarker.detectForVideo(video, t);
           if (faceRes.faceLandmarks?.length > 0) {
             window.eyesClosed = checkEyesClosed(faceRes);
+            eyeBlinkState = getEyeBlinkState(faceRes, cachedEyeBlinkState);
             cachedEyesClosed = window.eyesClosed;
-            if (showSkeleton) drawEyeContours(ctx, faceRes.faceLandmarks[0], w, h, MIRROR_CAMERA);
+            if (showSkeleton) drawEyeContours(ctx, faceRes.faceLandmarks[0], w, h, MIRROR_CAMERA, eyeBlinkState);
           } else {
             window.eyesClosed = false;
+            eyeBlinkState = { leftClosed: false, rightClosed: false, bothClosed: false, leftScore: 0, rightScore: 0 };
             cachedEyesClosed = false;
           }
         } catch (_) {}
@@ -4028,11 +4158,19 @@ function detectLoop() {
 
       // 4. El - 21 landmark (sadece seçilen el: sol/sağ)
       handLandmarks = [];
+      docSnapHands = [];
       if (handLandmarker) {
         try {
           const handRes = handLandmarker.detectForVideo(video, t);
           const rawLm = handRes.landmarks || [];
           const handedness = handRes.handedness || [];
+          for (let i = 0; i < rawLm.length; i++) {
+            const h = handedness[i];
+            const labelRaw =
+              h?.[0]?.categoryName || h?.[0]?.display_name || (typeof h === "string" ? h : "") || "";
+            const label = normalizeHandLabel(labelRaw);
+            if (label) docSnapHands.push({ hand: rawLm[i], label });
+          }
           cachedOffHandLandmark = null;
           if (drawMode && drawShape === "select" && !embedTrackBothHands) {
             for (let i = 0; i < rawLm.length; i++) {
@@ -4057,13 +4195,16 @@ function detectLoop() {
             }
           }
           cachedHandLandmarks = handLandmarks;
+          cachedDocSnapHands = docSnapHands;
           if (showSkeleton) drawHandLandmarks(ctx, handLandmarks, w, h, MIRROR_CAMERA);
         } catch (_) {}
       }
     } else {
       lm = cachedLm;
       window.eyesClosed = cachedEyesClosed;
+      eyeBlinkState = cachedEyeBlinkState || { leftClosed: false, rightClosed: false, bothClosed: false, leftScore: 0, rightScore: 0 };
       handLandmarks = cachedHandLandmarks || [];
+      docSnapHands = cachedDocSnapHands || [];
       if (lm && showSkeleton) drawPoseSkeleton(ctx, lm, w, h, MIRROR_CAMERA, MIN_VIS);
       if (handLandmarks?.length && showSkeleton) drawHandLandmarks(ctx, handLandmarks, w, h, MIRROR_CAMERA);
     }
@@ -4072,6 +4213,8 @@ function detectLoop() {
       updateObjects(handLandmarks, dt);
       drawObjects(ctx, w, h);
     }
+
+    const eyeGestureConsumedFrame = handleEyeGestureFrame(t);
 
     // 4b. İki parmak (işaret+orta) = клик по кнопкам (не в режиме рисования, там = ластик)
     if (handLandmarker && handLandmarks.length > 0 && !drawMode) {
@@ -4112,6 +4255,7 @@ function detectLoop() {
       }
       let cursorPos = null;
       let twoFingerPos = null;
+      let docSnapNavConsumedFrame = false;
       let handIdx = -1;
       for (let i = 0; i < handLandmarks.length; i++) {
         cursorPos = getPinchCursorPosition(handLandmarks[i]);
@@ -4143,32 +4287,88 @@ function detectLoop() {
 
       {
         const nowMs = performance.now();
-        const handForMiddle =
-          handIdx >= 0
-            ? handLandmarks[handIdx]
-            : twoFingerHandIdx >= 0
-              ? handLandmarks[twoFingerHandIdx]
-              : null;
-        if (handForMiddle && !overToolbar && !sharedDocReadOnly) {
-          const touching = stepMiddleThumbTouching(handForMiddle, middleThumbTouchingHyst);
-          middleThumbTouchingHyst = touching;
-          if (
-            nowMs >= gestureModeCycleCooldownUntil &&
-            gestureState !== "drawing" &&
-            gestureState !== "erasing" &&
-            touching &&
-            !middleThumbWasTouching
-          ) {
-            handleMiddleThumbTapRisingEdge(nowMs);
+        const docNavActive = ((pdfMode && pdfDoc) || (pptxMode && pptxViewer)) && !sharedDocReadOnly;
+        if (docNavActive) {
+          if (nowMs < docSnapReadyAt || overToolbar || gestureState !== "idle" || eyeGestureConsumedFrame) {
+            docSnapTouchingByHand.left = false;
+            docSnapTouchingByHand.right = false;
+            docSnapSeenFramesByHand.left = 0;
+            docSnapSeenFramesByHand.right = 0;
+            docSnapTouchStartAtByHand.left = 0;
+            docSnapTouchStartAtByHand.right = 0;
+          } else if (nowMs >= docSnapNavCooldownUntil) {
+            const handByLabel = { left: null, right: null };
+            for (const entry of docSnapHands || []) {
+              if (!entry?.label || !entry?.hand) continue;
+              if (!handByLabel[entry.label]) handByLabel[entry.label] = entry.hand;
+            }
+            for (const label of ["left", "right"]) {
+              const hand = handByLabel[label];
+              if (hand) docSnapSeenFramesByHand[label] = Math.min(8, docSnapSeenFramesByHand[label] + 1);
+              else docSnapSeenFramesByHand[label] = 0;
+              const prevTouch = docSnapTouchingByHand[label];
+              const touching = hand ? stepMiddleThumbTouching(hand, prevTouch) : false;
+              if (touching && !prevTouch) {
+                // Temas anı değil, şıklatma sonrası ayrılma anını bekle.
+                docSnapTouchStartAtByHand[label] = nowMs;
+              } else if (!touching && prevTouch) {
+                const startedAt = docSnapTouchStartAtByHand[label] || nowMs;
+                const holdMs = nowMs - startedAt;
+                const isSnapRelease =
+                  holdMs <= DOC_SNAP_RELEASE_MAX_HOLD_MS && docSnapSeenFramesByHand[label] >= 2;
+                if (isSnapRelease) {
+                  const navigated = label === "right" ? tryNavigatePdfPptxNext() : tryNavigatePdfPptxPrev();
+                  if (navigated) {
+                    showGestureModeHint(label === "right" ? "Slayt: ileri" : "Slayt: geri");
+                    docSnapNavCooldownUntil = nowMs + DOC_SNAP_NAV_COOLDOWN_MS;
+                    docSnapNavConsumedFrame = true;
+                  }
+                }
+                docSnapTouchStartAtByHand[label] = 0;
+              }
+              docSnapTouchingByHand[label] = touching;
+            }
+          } else {
+            docSnapTouchingByHand.left = false;
+            docSnapTouchingByHand.right = false;
+            docSnapTouchStartAtByHand.left = 0;
+            docSnapTouchStartAtByHand.right = 0;
           }
-          middleThumbWasTouching = touching;
         } else {
-          middleThumbTouchingHyst = false;
-          middleThumbWasTouching = false;
+          const handForMiddle =
+            handIdx >= 0
+              ? handLandmarks[handIdx]
+              : twoFingerHandIdx >= 0
+                ? handLandmarks[twoFingerHandIdx]
+                : null;
+          if (handForMiddle && !overToolbar && !sharedDocReadOnly && !eyeGestureConsumedFrame) {
+            const touching = stepMiddleThumbTouching(handForMiddle, middleThumbTouchingHyst);
+            middleThumbTouchingHyst = touching;
+            middleThumbWasTouching = touching;
+          } else {
+            middleThumbTouchingHyst = false;
+            middleThumbWasTouching = false;
+          }
+          docSnapTouchingByHand.left = false;
+          docSnapTouchingByHand.right = false;
+          docSnapSeenFramesByHand.left = 0;
+          docSnapSeenFramesByHand.right = 0;
+          docSnapTouchStartAtByHand.left = 0;
+          docSnapTouchStartAtByHand.right = 0;
         }
       }
 
-      if (overToolbar) {
+      if (docSnapNavConsumedFrame || eyeGestureConsumedFrame) {
+        // Snap ile sayfa değiştiği frame'de çizim/erase'i devre dışı bırak.
+        shapeInProgress = null;
+        wasPinching = false;
+        pinchReleaseFrames = 0;
+        smoothedCursor = null;
+        smoothedPinch = null;
+        smoothedErasePos = null;
+        window.drawCursor = null;
+        updateGestureCursor(0, 0, false);
+      } else if (overToolbar) {
         shapeInProgress = null;
         const { clientX, clientY } = normToClient(cursorPos.x, cursorPos.y, w, h);
         simulateMouseMoveAtPosition(cursorPos.x, cursorPos.y, w, h);
@@ -4199,7 +4399,7 @@ function detectLoop() {
       framesSinceDraw++;
       framesSinceErase++;
 
-      if (overToolbar) {
+      if (overToolbar || docSnapNavConsumedFrame || eyeGestureConsumedFrame) {
         // пропускаем рисование/стирание — только панель
       } else if ((gestureState === "erasing" && twoFingerPos) || (gestureState === "idle" && twoFingerPos && !cursorPos && framesSinceDraw >= GESTURE_LOCK_FRAMES && twoFingerHeldFrames >= 4)) {
         if (gestureState !== "erasing") {
@@ -4787,9 +4987,11 @@ async function startCamera() {
         throw new Error("Ваш браузер не поддерживает камеру. Используйте Chrome или Firefox.");
       }
 
-      ensureMediaPipeModelsLoaded().catch(() => {});
-
-      stream = await openCameraStreamWithFallback();
+      const [, camStream] = await Promise.all([
+        ensureMediaPipeModelsLoaded().catch((e) => console.warn("Model yükleme hatası:", e)),
+        openCameraStreamWithFallback(),
+      ]);
+      stream = camStream;
       if (epoch !== cameraStartEpoch) {
         stream.getTracks().forEach((t) => t.stop());
         stream = null;
@@ -5004,6 +5206,13 @@ function tryNavigateDocPrev() {
 function tryNavigateDocNext() {
   if (tryNavigateCanvasPageNext()) return true;
   return tryNavigatePdfPptxNext();
+}
+
+function normalizeHandLabel(raw) {
+  const label = (raw || "").toLowerCase();
+  if (label.includes("left")) return "left";
+  if (label.includes("right")) return "right";
+  return "";
 }
 
 function resetDocTransientStrokeState() {
@@ -5987,6 +6196,7 @@ pdfPrevBtn?.addEventListener("click", async () => {
     pptxPageNum--;
     loadPptxPageState();
     resetDocTransientStrokeState();
+    docSnapReadyAt = performance.now() + 220;
     if (pdfPageInfo) pdfPageInfo.textContent = `${pptxPageNum} / ${pptxTotalPages}`;
     pdfPrevBtn.disabled = pptxPageNum <= 1;
     pdfNextBtn.disabled = false;
@@ -5998,6 +6208,7 @@ pdfPrevBtn?.addEventListener("click", async () => {
   pdfPageNum--;
   loadPdfPageState();
   resetDocTransientStrokeState();
+  docSnapReadyAt = performance.now() + 220;
   if (pdfPageInfo) pdfPageInfo.textContent = `${pdfPageNum} / ${pdfTotalPages}`;
   pdfPrevBtn.disabled = pdfPageNum <= 1;
   pdfNextBtn.disabled = false;
@@ -6012,6 +6223,7 @@ pdfNextBtn?.addEventListener("click", async () => {
     pptxPageNum++;
     loadPptxPageState();
     resetDocTransientStrokeState();
+    docSnapReadyAt = performance.now() + 220;
     if (pdfPageInfo) pdfPageInfo.textContent = `${pptxPageNum} / ${pptxTotalPages}`;
     pdfNextBtn.disabled = pptxPageNum >= pptxTotalPages;
     pdfPrevBtn.disabled = false;
@@ -6023,6 +6235,7 @@ pdfNextBtn?.addEventListener("click", async () => {
   pdfPageNum++;
   loadPdfPageState();
   resetDocTransientStrokeState();
+  docSnapReadyAt = performance.now() + 220;
   if (pdfPageInfo) pdfPageInfo.textContent = `${pdfPageNum} / ${pdfTotalPages}`;
   pdfNextBtn.disabled = pdfPageNum >= pdfTotalPages;
   pdfPrevBtn.disabled = false;
@@ -6030,7 +6243,7 @@ pdfNextBtn?.addEventListener("click", async () => {
 });
 
 pdfClearBtn?.addEventListener("click", () => {
-  clearPdf();
+  if (clearPageModal) clearPageModal.style.display = "flex";
 });
 
 document.getElementById("zoomInBtn")?.addEventListener("click", () => {
@@ -6258,6 +6471,7 @@ pptxClearBtn?.addEventListener("click", () => {
 });
 
 let docRefitRaf = null;
+let docRefitStableTimer = null;
 function scheduleDocRefit() {
   if (docRefitRaf) cancelAnimationFrame(docRefitRaf);
   docRefitRaf = requestAnimationFrame(async () => {
@@ -6296,8 +6510,11 @@ function scheduleDocRefit() {
 
 function scheduleDocRefitStable() {
   scheduleDocRefit();
-  setTimeout(() => scheduleDocRefit(), 150);
-  setTimeout(() => scheduleDocRefit(), 400);
+  if (docRefitStableTimer) clearTimeout(docRefitStableTimer);
+  docRefitStableTimer = setTimeout(() => {
+    docRefitStableTimer = null;
+    scheduleDocRefit();
+  }, 280);
 }
 
 window.addEventListener("resize", scheduleDocRefit);
@@ -6524,11 +6741,4 @@ if (urlParams.get("embed") === "1") {
   if (dashLink) dashLink.target = "_top";
 }
 
-(function scheduleMediaPipePrefetch() {
-  const run = () => ensureMediaPipeModelsLoaded().catch(() => {});
-  if (typeof requestIdleCallback !== "undefined") {
-    requestIdleCallback(run, { timeout: 12000 });
-  } else {
-    setTimeout(run, 2000);
-  }
-})();
+ensureMediaPipeModelsLoaded().catch(() => {});

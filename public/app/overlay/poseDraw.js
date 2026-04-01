@@ -18,7 +18,8 @@ export function drawPoseSkeleton(ctx, lm, w, h, mirrorCamera, minVis) {
     }
   });
   ctx.fillStyle = "#6c5ce7";
-  lm.forEach((p) => {
+  lm.forEach((p, idx) => {
+    if (idx < 11) return;
     if ((p?.visibility ?? 1) > minVis) {
       const pt = toPx(p, w, h, mirrorCamera);
       ctx.beginPath();
