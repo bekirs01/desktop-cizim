@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DrawFlow | Пазл на двоих</title>
+  <style>
+    :root {
+      --bg: #09090d;
+      --panel: rgba(20, 20, 28, 0.88);
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #f3f4f6;
+      --muted: #9ca3af;
+      --accent: #6366f1;
+      --accent2: #f97316;
+      --ok: #22c55e;
+      --bad: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at 20% 20%, #1f1f35 0%, var(--bg) 45%), var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(10, 10, 16, 0.7);
+      backdrop-filter: blur(8px);
+    }
+    .title {
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    button, a.btn {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 14px;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    button.primary { background: linear-gradient(135deg, var(--accent), #818cf8); border-color: transparent; }
+    .status {
+      padding: 8px 14px;
+      font-size: 13px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      background: rgba(7, 7, 12, 0.6);
+    }
+    .winner { color: var(--ok); font-weight: 700; }
+    .stage {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #000;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="title">Камерный пазл на двоих (4 руки)</div>
+    <div class="actions">
+      <select id="gridSizeSelect" style="border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:10px;padding:8px 10px;font-size:14px;">
+        <option value="3">3x3</option>
+        <option value="4">4x4</option>
+      </select>
+      <button id="captureBtn" class="primary">Сфотографировать и начать</button>
+      <button id="reshuffleBtn">Перемешать снова</button>
+      <a class="btn" href="/dashboard.html">Назад</a>
+    </div>
+  </div>
+  <div class="status" id="statusText">Запуск камеры... Игрок слева играет двумя руками слева, игрок справа — двумя руками справа. Щепотка (указательный + большой) перетаскивает фрагмент.</div>
+  <div class="status" id="timerText">Время: 0.0 c</div>
+  <div class="stage">
+    <video id="video" autoplay playsinline muted style="display:none"></video>
+    <canvas id="stageCanvas" width="1280" height="720"></canvas>
+  </div>
+
+  <script type="module" src="/two-player-puzzle.js"></script>
+</body>
+</html>
