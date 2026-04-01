@@ -280,9 +280,11 @@ let twoFingerHeldFrames = 0;
 const PINCH_RELEASE_FRAMES = 4;
 const DIST_SMOOTH_ALPHA = 0.6;
 /** Orta+b başparmak: 2 dokunuş = mod, 3 = kırmızı. 2. dokunuştan sonra kısa süre bekleyip (3. yoksa) mod değişir. */
-const MIDDLE_THUMB_DOUBLE_WAIT_MS = 95;
+const MIDDLE_THUMB_DOUBLE_WAIT_MS_MIN = 70;
+const MIDDLE_THUMB_DOUBLE_WAIT_MS_MAX = 130;
+const MIDDLE_THUMB_DOUBLE_WAIT_FACTOR = 1.1;
 const MIDDLE_THUMB_SINGLE_STALE_MS = 720;
-const MIDDLE_THUMB_SEQUENCE_WINDOW_MS = 850;
+const MIDDLE_THUMB_SEQUENCE_WINDOW_MS = 1000;
 const MIDDLE_THUMB_MIN_TAP_INTERVAL_MS = 18;
 const GESTURE_RED_PEN_HEX = "#e53935";
 const GESTURE_MODE_CYCLE_COOLDOWN_MS = 280;
@@ -1555,12 +1557,20 @@ function handleMiddleThumbTapRisingEdge(nowMs) {
     return;
   }
   if (middleThumbTapTimes.length === 2) {
+    const firstGapMs = Math.max(
+      MIDDLE_THUMB_MIN_TAP_INTERVAL_MS,
+      middleThumbTapTimes[1] - middleThumbTapTimes[0]
+    );
+    const adaptiveWaitMs = Math.max(
+      MIDDLE_THUMB_DOUBLE_WAIT_MS_MIN,
+      Math.min(MIDDLE_THUMB_DOUBLE_WAIT_MS_MAX, Math.round(firstGapMs * MIDDLE_THUMB_DOUBLE_WAIT_FACTOR))
+    );
     middleThumbGestureTimer = window.setTimeout(() => {
       middleThumbGestureTimer = null;
       middleThumbTapTimes = [];
       applyGestureToolModeCycle();
       gestureModeCycleCooldownUntil = performance.now() + GESTURE_MODE_CYCLE_COOLDOWN_MS;
-    }, MIDDLE_THUMB_DOUBLE_WAIT_MS);
+    }, adaptiveWaitMs);
     return;
   }
   middleThumbGestureTimer = window.setTimeout(() => {
