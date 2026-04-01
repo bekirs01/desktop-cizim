@@ -2,7 +2,7 @@ import { HAND_CONNECTIONS } from "./app/config/landmarks.js";
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
 const statusText = document.getElementById("statusText");
 const scoreText = document.getElementById("scoreText");
 const startBtn = document.getElementById("startBtn");
@@ -22,6 +22,10 @@ let running = false;
 let nextTrackId = 1;
 let prevTracks = [];
 const motionByTrack = new Map();
+let cachedTracked = [];
+let lastDetectMs = 0;
+let detectIntervalMs = 33;
+let lowPerfMode = false;
 
 const players = [
   makePlayer(0, "Игрок 1", "rgba(99,102,241,0.95)"),
@@ -117,6 +121,15 @@ function detectHands(ts) {
   }
   prevTracks = tracked.map((t) => ({ id: t.id, cx: t.cx, cy: t.cy }));
   return tracked;
+}
+
+function getTrackedHands(ts) {
+  if (!handLandmarker) return cachedTracked;
+  if (!lastDetectMs || ts - lastDetectMs >= detectIntervalMs) {
+    cachedTracked = detectHands(ts);
+    lastDetectMs = ts;
+  }
+  return cachedTracked;
 }
 
 function isGunPose(hand, handScale = 0.2) {
@@ -241,6 +254,13 @@ function drawHands(tracked) {
       ctx.lineTo(p2.x, p2.y);
       ctx.stroke();
     }
+    if (!lowPerfMode) {
+      const tip = toCanvasPoint(t.hand[8]);
+      ctx.beginPath();
+      ctx.fillStyle = color;
+      ctx.arc(tip.x, tip.y, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 }
 
@@ -319,10 +339,12 @@ function render(ts) {
   if (!lastTs) lastTs = ts;
   const dt = Math.min(0.05, (ts - lastTs) / 1000);
   lastTs = ts;
+  lowPerfMode = dt > 0.038;
+  detectIntervalMs = lowPerfMode ? 50 : 33;
 
   fitCanvas();
   drawVideo();
-  const tracked = detectHands(ts);
+  const tracked = getTrackedHands(ts);
   assignAndFire(tracked, dt);
 
   const elapsed = ts / 1000;
@@ -335,7 +357,7 @@ function render(ts) {
 
 async function initCamera() {
   stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+    video: { facingMode: "user", width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 30, max: 30 } },
     audio: false,
   });
   video.srcObject = stream;

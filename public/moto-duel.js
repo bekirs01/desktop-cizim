@@ -2,7 +2,7 @@ import { HAND_CONNECTIONS } from "./app/config/landmarks.js";
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
 const statusText = document.getElementById("statusText");
 const timerText = document.getElementById("timerText");
 const startBtn = document.getElementById("startBtn");
@@ -21,6 +21,10 @@ let endElapsedSec = 0;
 
 let prevTracks = [];
 let nextTrackId = 1;
+let cachedTracked = [];
+let lastDetectMs = 0;
+let detectIntervalMs = 33;
+let lowPerfMode = false;
 
 const players = [
   createPlayer(0, "Игрок 1", "rgba(99,102,241,0.95)"),
@@ -117,6 +121,15 @@ function detectHands(ts) {
   }
   prevTracks = tracked.map((h) => ({ id: h.id, cx: h.cx, cy: h.cy }));
   return tracked;
+}
+
+function getTrackedHands(ts) {
+  if (!handLandmarker) return cachedTracked;
+  if (!lastDetectMs || ts - lastDetectMs >= detectIntervalMs) {
+    cachedTracked = detectHands(ts);
+    lastDetectMs = ts;
+  }
+  return cachedTracked;
 }
 
 function assignHandsToPlayers(tracked) {
@@ -281,6 +294,7 @@ function drawLane(p, x, y, w, h, elapsedSec) {
 }
 
 function drawHands(tracked) {
+  if (lowPerfMode) return;
   for (const t of tracked) {
     const color = t.cx < canvas.width / 2 ? "rgba(99,102,241,0.9)" : "rgba(249,115,22,0.9)";
     ctx.strokeStyle = color;
@@ -338,11 +352,13 @@ function render(ts) {
   if (!lastTs) lastTs = ts;
   const dt = Math.min(0.05, (ts - lastTs) / 1000);
   lastTs = ts;
+  lowPerfMode = dt > 0.038;
+  detectIntervalMs = lowPerfMode ? 50 : 33;
 
   fitCanvas();
   drawVideo();
 
-  const tracked = detectHands(ts);
+  const tracked = getTrackedHands(ts);
   assignHandsToPlayers(tracked);
 
   const elapsedSec = startTs ? (ts - startTs) / 1000 : 0;
@@ -373,7 +389,7 @@ function render(ts) {
 
 async function initCamera() {
   stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+    video: { facingMode: "user", width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 30, max: 30 } },
     audio: false,
   });
   video.srcObject = stream;

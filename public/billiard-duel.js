@@ -2,7 +2,7 @@ import { HAND_CONNECTIONS } from "./app/config/landmarks.js";
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
 const statusText = document.getElementById("statusText");
 const infoText = document.getElementById("infoText");
 const startBtn = document.getElementById("startBtn");
@@ -32,6 +32,10 @@ let cueBallId = 0;
 let lastTracked = [];
 let nextTrackId = 1;
 let shotCooldown = 0;
+let cachedHands = [];
+let lastDetectMs = 0;
+let detectIntervalMs = 33;
+let lowPerfMode = false;
 const singleHandShot = {
   phase: "idle", // idle | palm_ready | charging
   handId: null,
@@ -212,6 +216,15 @@ function detectHands(ts) {
   }
   lastTracked = tracked.map((h) => ({ id: h.id, x: h.x, y: h.y }));
   return tracked;
+}
+
+function getHandsForFrame(ts) {
+  if (!handLandmarker) return cachedHands;
+  if (!lastDetectMs || ts - lastDetectMs >= detectIntervalMs) {
+    cachedHands = detectHands(ts);
+    lastDetectMs = ts;
+  }
+  return cachedHands;
 }
 
 function getCueBall() {
@@ -520,6 +533,7 @@ function settleTurn() {
 }
 
 function drawHands(hands) {
+  if (lowPerfMode) return;
   for (const h of hands) {
     ctx.strokeStyle = "rgba(56,189,248,0.85)";
     ctx.lineWidth = 2;
@@ -538,10 +552,12 @@ function render(ts) {
   if (!lastTs) lastTs = ts;
   const dt = Math.min(0.05, (ts - lastTs) / 1000);
   lastTs = ts;
+  lowPerfMode = dt > 0.038;
+  detectIntervalMs = lowPerfMode ? 50 : 33;
 
   drawVideoBg();
   drawTable();
-  const hands = detectHands(ts);
+  const hands = getHandsForFrame(ts);
   if (phase === "aim") tryShootFromHands(hands, dt);
   updatePhysics(dt);
 
@@ -552,7 +568,7 @@ function render(ts) {
 
 async function initCamera() {
   stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+    video: { facingMode: "user", width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 30, max: 30 } },
     audio: false,
   });
   video.srcObject = stream;
