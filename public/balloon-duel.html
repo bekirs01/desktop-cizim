@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DrawFlow | Шариковая дуэль</title>
+  <style>
+    :root{
+      --bg:#090b12; --panel:rgba(18,22,33,.88); --border:rgba(255,255,255,.12);
+      --text:#eef2ff; --muted:#9ca3af; --acc:#6366f1; --acc2:#f97316;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:radial-gradient(circle at 20% 20%,#1b2240 0%,#080a12 60%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+    .top{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);background:rgba(9,12,20,.78);backdrop-filter:blur(8px)}
+    .title{font-weight:700}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+    button,a.btn{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:10px;padding:8px 12px;font-size:14px;cursor:pointer;text-decoration:none}
+    button.primary{border-color:transparent;background:linear-gradient(135deg,var(--acc),#818cf8)}
+    .status{padding:8px 12px;font-size:13px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(8,10,18,.72)}
+    .stage{flex:1;min-height:0}
+    canvas{width:100%;height:100%;display:block;background:#000}
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div class="title">Шариковая дуэль (2 игрока)</div>
+    <div class="actions">
+      <label for="targetSelect" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#cbd5e1;border:1px solid var(--border);border-radius:10px;padding:6px 8px;background:var(--panel)">
+        Лимит:
+        <select id="targetSelect" style="background:#0f172a;color:#e2e8f0;border:1px solid var(--border);border-radius:8px;padding:4px 6px;">
+          <option value="10">10</option>
+          <option value="15">15</option>
+        </select>
+      </label>
+      <button id="startBtn" class="primary">Старт</button>
+      <button id="restartBtn">Рестарт</button>
+      <a class="btn" href="/game-select.html">Назад</a>
+    </div>
+  </div>
+  <div class="status" id="statusText">Запуск... Управление: поза «пистолет» + быстрый взмах рукой вверх = выстрел.</div>
+  <div class="status" id="scoreText">Счёт: Игрок 1 — 0 | Игрок 2 — 0</div>
+  <div class="stage">
+    <video id="video" autoplay playsinline muted style="display:none"></video>
+    <canvas id="gameCanvas" width="1280" height="720"></canvas>
+  </div>
+  <script type="module" src="/balloon-duel.js"></script>
+</body>
+</html>
