@@ -446,8 +446,9 @@ function savePdfPageState() {
 
 async function savePdfStrokesAndBroadcast(pageNum, strokes, skipBroadcast = false) {
   if (!currentPdfShareToken || sharedDocReadOnly) return;
-  const sh = pdfStrokesByPage[pdfPageNum]?.shapes ?? pdfShapes;
-  const fsh = pdfStrokesByPage[pdfPageNum]?.fillShapes ?? pdfFillShapes;
+  const layer = pdfStrokesByPage[pageNum];
+  const sh = layer?.shapes ?? (pageNum === pdfPageNum ? pdfShapes : []);
+  const fsh = layer?.fillShapes ?? (pageNum === pdfPageNum ? pdfFillShapes : []);
   const res = await savePageStrokes(currentPdfShareToken, pageNum, strokes, sh, fsh);
   if (res && pdfRealtimeBroadcast && !skipBroadcast) {
     const ts = typeof res === "object" && res.updated_at ? res.updated_at : undefined;
@@ -2387,8 +2388,9 @@ let pptxRemoteCurrentStroke = null;
 
 async function savePptxStrokesAndBroadcast(pageNum, strokes, skipBroadcast = false) {
   if (!currentPptxShareToken || sharedDocReadOnly) return;
-  const sh = pptxShapes;
-  const fsh = pptxFillShapes;
+  const layer = pptxStrokesByPage[pageNum];
+  const sh = layer?.shapes ?? (pageNum === pptxPageNum ? pptxShapes : []);
+  const fsh = layer?.fillShapes ?? (pageNum === pptxPageNum ? pptxFillShapes : []);
   const res = await savePageStrokes(currentPptxShareToken, pageNum, strokes, sh, fsh);
   if (res && pptxRealtimeBroadcast && !skipBroadcast) {
     const ts = typeof res === "object" && res.updated_at ? res.updated_at : undefined;
@@ -5004,6 +5006,14 @@ function tryNavigateDocNext() {
   return tryNavigatePdfPptxNext();
 }
 
+function resetDocTransientStrokeState() {
+  // Sayfa geçişinde sadece o ana ait geçici stroke buffer'larını temizle.
+  pdfCurrentStroke = { points: [], color: drawColor, lineWidth: drawLineWidth };
+  pptxCurrentStroke = { points: [], color: drawColor, lineWidth: drawLineWidth };
+  pdfRemoteCurrentStroke = null;
+  pptxRemoteCurrentStroke = null;
+}
+
 // ========== ОБРАБОТЧИКИ СОБЫТИЙ ==========
 const fullscreenBtn = document.getElementById("fullscreenBtn");
 const exitFullscreenBtn = document.getElementById("exitFullscreenBtn");
@@ -5976,6 +5986,7 @@ pdfPrevBtn?.addEventListener("click", async () => {
     if (currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
     pptxPageNum--;
     loadPptxPageState();
+    resetDocTransientStrokeState();
     if (pdfPageInfo) pdfPageInfo.textContent = `${pptxPageNum} / ${pptxTotalPages}`;
     pdfPrevBtn.disabled = pptxPageNum <= 1;
     pdfNextBtn.disabled = false;
@@ -5986,6 +5997,7 @@ pdfPrevBtn?.addEventListener("click", async () => {
   savePdfPageState();
   pdfPageNum--;
   loadPdfPageState();
+  resetDocTransientStrokeState();
   if (pdfPageInfo) pdfPageInfo.textContent = `${pdfPageNum} / ${pdfTotalPages}`;
   pdfPrevBtn.disabled = pdfPageNum <= 1;
   pdfNextBtn.disabled = false;
@@ -5999,6 +6011,7 @@ pdfNextBtn?.addEventListener("click", async () => {
     if (currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
     pptxPageNum++;
     loadPptxPageState();
+    resetDocTransientStrokeState();
     if (pdfPageInfo) pdfPageInfo.textContent = `${pptxPageNum} / ${pptxTotalPages}`;
     pdfNextBtn.disabled = pptxPageNum >= pptxTotalPages;
     pdfPrevBtn.disabled = false;
@@ -6009,6 +6022,7 @@ pdfNextBtn?.addEventListener("click", async () => {
   savePdfPageState();
   pdfPageNum++;
   loadPdfPageState();
+  resetDocTransientStrokeState();
   if (pdfPageInfo) pdfPageInfo.textContent = `${pdfPageNum} / ${pdfTotalPages}`;
   pdfNextBtn.disabled = pdfPageNum >= pdfTotalPages;
   pdfPrevBtn.disabled = false;
