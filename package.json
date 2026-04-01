@@ -1,12 +1,9 @@
 {
   "name": "desktop-cizim",
   "version": "1.0.0",
-  "description": "DrawFlow: PDF/PPTX и холсты, совместное рисование, Supabase; жесты и Electron-оверлей опционально",
-  "main": "electron-main.js",
+  "description": "DrawFlow: web app for PDF/PPTX/canvas with realtime drawing and Supabase",
   "scripts": {
     "start": "node server/server.js",
-    "desktop": "electron .",
-    "electron": "electron .",
     "web": "serve public -l 8080 -c ../config/serve.json",
     "dev": "npx serve public -l 3457 -c ../config/serve.json",
     "tunnel": "npx --yes localtunnel --port 3457",
@@ -15,13 +12,7 @@
   "engines": {
     "node": ">=18"
   },
-  "devDependencies": {
-    "@electron/rebuild": "^4.0.3",
-    "electron": "^28.3.3"
-  },
   "dependencies": {
-    "@nut-tree-fork/nut-js": "^4.2.6",
-    "robotjs": "^0.6.0",
     "serve": "^14.2.2"
   }
 }
