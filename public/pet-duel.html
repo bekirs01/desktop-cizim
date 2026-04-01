@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DrawFlow | Дуэль Кот и Пёс</title>
+  <style>
+    :root{
+      --bg:#0a0d16; --panel:rgba(20,26,40,.9); --border:rgba(255,255,255,.14); --text:#eef2ff; --muted:#9aa4b2;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;background:radial-gradient(circle at 15% 15%,#1f2a44 0%,#0a0d16 60%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column}
+    .top{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);background:rgba(9,12,20,.84)}
+    .title{font-weight:700}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);background:rgba(11,15,24,.78)}
+    .controls label{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:13px}
+    .controls input,.controls select{background:#0f172a;color:#e2e8f0;border:1px solid var(--border);border-radius:6px;padding:4px 6px}
+    button,a.btn{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:10px;padding:8px 12px;font-size:14px;cursor:pointer;text-decoration:none}
+    button.primary{border-color:transparent;background:linear-gradient(135deg,#6366f1,#818cf8)}
+    .status{padding:8px 12px;font-size:13px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .stage{flex:1;min-height:0}
+    canvas{width:100%;height:100%;display:block;background:#000}
+    video{display:none}
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div class="title">Кот vs Пёс (2 игрока)</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button id="startBtn" class="primary">Старт</button>
+      <button id="resetBtn">Рестарт</button>
+      <a class="btn" href="/game-select.html">Назад</a>
+    </div>
+  </div>
+
+  <div class="controls">
+    <label>Игрок 1 <input id="name1" value="Игрок 1" /></label>
+    <label>Персонаж
+      <select id="char1">
+        <option value="cat">Кот</option>
+        <option value="dog">Пёс</option>
+      </select>
+    </label>
+    <label>Бросок
+      <select id="item1">
+        <option value="bone">Кость (Урон 22)</option>
+        <option value="food">Корм (Урон 16)</option>
+        <option value="brick">Мяч (Урон 28)</option>
+      </select>
+    </label>
+    <label>Игрок 2 <input id="name2" value="Игрок 2" /></label>
+    <label>Персонаж
+      <select id="char2">
+        <option value="dog">Пёс</option>
+        <option value="cat">Кот</option>
+      </select>
+    </label>
+    <label>Бросок
+      <select id="item2">
+        <option value="bone">Кость (Урон 22)</option>
+        <option value="food">Корм (Урон 16)</option>
+        <option value="brick">Мяч (Урон 28)</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="status" id="statusText">Подготовка камеры...</div>
+  <div class="status" id="hpText">Здоровье: -</div>
+
+  <div class="stage">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="gameCanvas" width="1280" height="720"></canvas>
+  </div>
+
+  <script type="module" src="/pet-duel.js"></script>
+</body>
+</html>
