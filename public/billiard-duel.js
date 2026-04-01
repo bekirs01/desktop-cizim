@@ -9,6 +9,10 @@ const startBtn = document.getElementById("startBtn");
 const resetBtn = document.getElementById("resetBtn");
 
 const MIRROR = true;
+const IS_LOW_END = (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) || (navigator.deviceMemory && navigator.deviceMemory <= 4);
+const DETECT_INTERVAL_MS = IS_LOW_END ? 50 : 33;
+const CAMERA_WIDTH = IS_LOW_END ? 960 : 1280;
+const CAMERA_HEIGHT = IS_LOW_END ? 540 : 720;
 const BALL_R = 16;
 const FRICTION = 0.985;
 const RESTITUTION = 0.98;
@@ -34,8 +38,6 @@ let nextTrackId = 1;
 let shotCooldown = 0;
 let cachedHands = [];
 let lastDetectMs = 0;
-let detectIntervalMs = 33;
-let lowPerfMode = false;
 const singleHandShot = {
   phase: "idle", // idle | palm_ready | charging
   handId: null,
@@ -220,7 +222,7 @@ function detectHands(ts) {
 
 function getHandsForFrame(ts) {
   if (!handLandmarker) return cachedHands;
-  if (!lastDetectMs || ts - lastDetectMs >= detectIntervalMs) {
+  if (!lastDetectMs || ts - lastDetectMs >= DETECT_INTERVAL_MS) {
     cachedHands = detectHands(ts);
     lastDetectMs = ts;
   }
@@ -533,7 +535,6 @@ function settleTurn() {
 }
 
 function drawHands(hands) {
-  if (lowPerfMode) return;
   for (const h of hands) {
     ctx.strokeStyle = "rgba(56,189,248,0.85)";
     ctx.lineWidth = 2;
@@ -552,8 +553,6 @@ function render(ts) {
   if (!lastTs) lastTs = ts;
   const dt = Math.min(0.05, (ts - lastTs) / 1000);
   lastTs = ts;
-  lowPerfMode = dt > 0.038;
-  detectIntervalMs = lowPerfMode ? 50 : 33;
 
   drawVideoBg();
   drawTable();
@@ -568,7 +567,7 @@ function render(ts) {
 
 async function initCamera() {
   stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "user", width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 30, max: 30 } },
+    video: { facingMode: "user", width: { ideal: CAMERA_WIDTH }, height: { ideal: CAMERA_HEIGHT }, frameRate: { ideal: 30, max: 30 } },
     audio: false,
   });
   video.srcObject = stream;

@@ -70,6 +70,13 @@ import { drawHandLandmarks } from "./app/overlay/handDraw.js";
 import { drawPoseSkeleton } from "./app/overlay/poseDraw.js";
 import { drawEyeContours, checkEyesClosed, getEyeBlinkState } from "./app/overlay/faceDraw.js";
 
+const IS_LOW_END_DEVICE =
+  (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) ||
+  (navigator.deviceMemory && navigator.deviceMemory <= 4);
+const CAMERA_PROFILE = IS_LOW_END_DEVICE
+  ? { width: 960, height: 540, maxWidth: 1280, maxHeight: 720 }
+  : { width: VIDEO_WIDTH, height: VIDEO_HEIGHT, maxWidth: 1920, maxHeight: 1080 };
+
 let PPTXViewer = null;
 (async () => {
   const urls = [
@@ -4941,8 +4948,9 @@ async function openCameraStreamWithFallback() {
     {
       video: {
         facingMode: "user",
-        width: { ideal: VIDEO_WIDTH, max: 1920 },
-        height: { ideal: VIDEO_HEIGHT, max: 1080 },
+        width: { ideal: CAMERA_PROFILE.width, max: CAMERA_PROFILE.maxWidth },
+        height: { ideal: CAMERA_PROFILE.height, max: CAMERA_PROFILE.maxHeight },
+        frameRate: { ideal: 30, max: 30 },
       },
       audio: false,
     },

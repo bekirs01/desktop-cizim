@@ -13,6 +13,12 @@ const CURSOR_SMOOTH = 0.45;
 const GESTURE_LOCK_FRAMES = 6;
 const PINCH_RELEASE_FRAMES = 4;
 const DIST_SMOOTH_ALPHA = 0.6;
+const IS_LOW_END_DEVICE =
+  (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) ||
+  (navigator.deviceMemory && navigator.deviceMemory <= 4);
+const DETECT_INTERVAL_MS = IS_LOW_END_DEVICE ? 50 : 33;
+const CAMERA_WIDTH = IS_LOW_END_DEVICE ? 960 : 1280;
+const CAMERA_HEIGHT = IS_LOW_END_DEVICE ? 540 : 720;
 let visionPromise = null;
 let handLandmarkerPromise = null;
 
@@ -136,8 +142,9 @@ export async function mountGameGestures(hooks) {
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: "user",
-        width: { ideal: 1280, max: 1920 },
-        height: { ideal: 720, max: 1080 },
+        width: { ideal: CAMERA_WIDTH, max: 1920 },
+        height: { ideal: CAMERA_HEIGHT, max: 1080 },
+        frameRate: { ideal: 30, max: 30 },
       },
       audio: false,
     });
@@ -169,6 +176,8 @@ export async function mountGameGestures(hooks) {
   let raf = 0;
   let stopped = false;
   let wasToolbarPinch = false;
+  let lastDetectAt = 0;
+  let lastRes = null;
 
   function clamp01(v) {
     return Math.max(0, Math.min(1, v));
@@ -191,11 +200,15 @@ export async function mountGameGestures(hooks) {
     if (t <= lastVideoTime) return;
     lastVideoTime = t;
 
-    let res;
-    try {
-      res = handLandmarker.detectForVideo(video, t);
-    } catch (_) {
-      return;
+    let res = lastRes;
+    if (!lastDetectAt || t - lastDetectAt >= DETECT_INTERVAL_MS) {
+      try {
+        res = handLandmarker.detectForVideo(video, t);
+        lastRes = res;
+        lastDetectAt = t;
+      } catch (_) {
+        return;
+      }
     }
     const rawLm = pickHand(res?.landmarks);
     if (!rawLm) {

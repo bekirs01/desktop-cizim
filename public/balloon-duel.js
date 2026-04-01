@@ -10,6 +10,10 @@ const restartBtn = document.getElementById("restartBtn");
 const targetSelect = document.getElementById("targetSelect");
 
 const MIRROR = true;
+const IS_LOW_END = (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) || (navigator.deviceMemory && navigator.deviceMemory <= 4);
+const DETECT_INTERVAL_MS = IS_LOW_END ? 50 : 33;
+const CAMERA_WIDTH = IS_LOW_END ? 960 : 1280;
+const CAMERA_HEIGHT = IS_LOW_END ? 540 : 720;
 const DEFAULT_TARGET_SCORE = 10;
 let targetScore = DEFAULT_TARGET_SCORE;
 
@@ -24,8 +28,6 @@ let prevTracks = [];
 const motionByTrack = new Map();
 let cachedTracked = [];
 let lastDetectMs = 0;
-let detectIntervalMs = 33;
-let lowPerfMode = false;
 
 const players = [
   makePlayer(0, "Игрок 1", "rgba(99,102,241,0.95)"),
@@ -125,7 +127,7 @@ function detectHands(ts) {
 
 function getTrackedHands(ts) {
   if (!handLandmarker) return cachedTracked;
-  if (!lastDetectMs || ts - lastDetectMs >= detectIntervalMs) {
+  if (!lastDetectMs || ts - lastDetectMs >= DETECT_INTERVAL_MS) {
     cachedTracked = detectHands(ts);
     lastDetectMs = ts;
   }
@@ -254,13 +256,11 @@ function drawHands(tracked) {
       ctx.lineTo(p2.x, p2.y);
       ctx.stroke();
     }
-    if (!lowPerfMode) {
-      const tip = toCanvasPoint(t.hand[8]);
-      ctx.beginPath();
-      ctx.fillStyle = color;
-      ctx.arc(tip.x, tip.y, 3.2, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    const tip = toCanvasPoint(t.hand[8]);
+    ctx.beginPath();
+    ctx.fillStyle = color;
+    ctx.arc(tip.x, tip.y, 3.2, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
@@ -339,8 +339,6 @@ function render(ts) {
   if (!lastTs) lastTs = ts;
   const dt = Math.min(0.05, (ts - lastTs) / 1000);
   lastTs = ts;
-  lowPerfMode = dt > 0.038;
-  detectIntervalMs = lowPerfMode ? 50 : 33;
 
   fitCanvas();
   drawVideo();
@@ -357,7 +355,7 @@ function render(ts) {
 
 async function initCamera() {
   stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "user", width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 30, max: 30 } },
+    video: { facingMode: "user", width: { ideal: CAMERA_WIDTH }, height: { ideal: CAMERA_HEIGHT }, frameRate: { ideal: 30, max: 30 } },
     audio: false,
   });
   video.srcObject = stream;

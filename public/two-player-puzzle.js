@@ -10,6 +10,10 @@ const reshuffleBtn = document.getElementById("reshuffleBtn");
 const gridSizeSelect = document.getElementById("gridSizeSelect");
 
 const MIRROR = true;
+const IS_LOW_END = (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) || (navigator.deviceMemory && navigator.deviceMemory <= 4);
+const DETECT_INTERVAL_MS = IS_LOW_END ? 50 : 33;
+const CAMERA_WIDTH = IS_LOW_END ? 960 : 1280;
+const CAMERA_HEIGHT = IS_LOW_END ? 540 : 720;
 
 let gridSize = 3;
 let handLandmarker = null;
@@ -24,9 +28,6 @@ const pinchStateByTrack = new Map();
 const activeDrags = new Map();
 let cachedRawHands = [];
 let lastDetectMs = 0;
-let detectIntervalMs = 33;
-let lowPerfMode = false;
-let lastFrameMs = 0;
 
 let boardRects = [];
 let boards = [];
@@ -299,14 +300,12 @@ function drawHandOverlay(hand, color) {
     ctx.lineTo(pb.x, pb.y);
     ctx.stroke();
   }
-  if (!lowPerfMode) {
-    ctx.fillStyle = color;
-    for (let i = 0; i < hand.length; i++) {
-      const p = toCanvasPoint(hand[i]);
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, i === 8 || i === 4 ? 4 : 2.3, 0, Math.PI * 2);
-      ctx.fill();
-    }
+  ctx.fillStyle = color;
+  for (let i = 0; i < hand.length; i++) {
+    const p = toCanvasPoint(hand[i]);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, i === 8 || i === 4 ? 4 : 2.3, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
@@ -411,17 +410,12 @@ function drawGuides() {
 
 function renderLoop() {
   const now = performance.now();
-  if (!lastFrameMs) lastFrameMs = now;
-  const dt = Math.min(0.05, (now - lastFrameMs) / 1000);
-  lastFrameMs = now;
-  lowPerfMode = dt > 0.038;
-  detectIntervalMs = lowPerfMode ? 50 : 33;
   fitCanvasToViewport();
   drawVideoFrame();
   drawGuides();
 
   let rawHands = cachedRawHands;
-  if (handLandmarker && (!lastDetectMs || now - lastDetectMs >= detectIntervalMs)) {
+  if (handLandmarker && (!lastDetectMs || now - lastDetectMs >= DETECT_INTERVAL_MS)) {
     const res = handLandmarker.detectForVideo(video, now);
     rawHands = res.landmarks || [];
     cachedRawHands = rawHands;
@@ -471,7 +465,7 @@ function renderLoop() {
 
 async function initCamera() {
   stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "user", width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 30, max: 30 } },
+    video: { facingMode: "user", width: { ideal: CAMERA_WIDTH }, height: { ideal: CAMERA_HEIGHT }, frameRate: { ideal: 30, max: 30 } },
     audio: false,
   });
   video.srcObject = stream;
