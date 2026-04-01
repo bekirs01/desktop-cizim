@@ -63,6 +63,7 @@ import {
   isIndexThumbPinch,
   getPinchCursorPosition,
   getThumbIndexSize,
+  stepMiddleThumbTouching,
 } from "./app/gestures/handGeometry.js";
 import { toPx } from "./app/overlay/coords.js";
 import { drawHandLandmarks } from "./app/overlay/handDraw.js";
@@ -278,6 +279,18 @@ let pinchReleaseFrames = 0;
 let twoFingerHeldFrames = 0;
 const PINCH_RELEASE_FRAMES = 4;
 const DIST_SMOOTH_ALPHA = 0.6;
+/** Orta+b başparmak: 2 dokunuş = mod, 3 = kırmızı. 2. dokunuştan sonra kısa süre bekleyip (3. yoksa) mod değişir. */
+const MIDDLE_THUMB_DOUBLE_WAIT_MS = 95;
+const MIDDLE_THUMB_SINGLE_STALE_MS = 720;
+const MIDDLE_THUMB_SEQUENCE_WINDOW_MS = 850;
+const MIDDLE_THUMB_MIN_TAP_INTERVAL_MS = 18;
+const GESTURE_RED_PEN_HEX = "#e53935";
+const GESTURE_MODE_CYCLE_COOLDOWN_MS = 280;
+let middleThumbTouchingHyst = false;
+let middleThumbWasTouching = false;
+let middleThumbTapTimes = [];
+let middleThumbGestureTimer = null;
+let gestureModeCycleCooldownUntil = 0;
 const FINGER_LOST_THRESHOLD = 6;
 const MIN_STROKE_DIST = 0.002;
 /** Шаг от последней точки ≥ этого (норм.) — «заметное» продолжение; микроточки не продлевают «тишину» для snap */
@@ -1433,6 +1446,151 @@ function clearSelectionToolState() {
   selectScaleLastZ = null;
   selectScaleZSmooth = null;
   selectScaleGateMissFrames = 0;
+}
+
+function applyGestureToolModeCycle() {
+  if (sharedDocReadOnly) return;
+  let phase = 0;
+  if (drawShape === "select") phase = 2;
+  else if (canvasFadeEnabled) phase = 1;
+  else phase = 0;
+  const next = (phase + 1) % 3;
+  const ft = document.getElementById("fadeToggle");
+  if (next === 0) {
+    canvasFadeEnabled = false;
+    if (ft) ft.checked = false;
+    drawShape = "free";
+    eraserMode = false;
+    clearSelectionToolState();
+    setActiveToolOnly("pen");
+  } else if (next === 1) {
+    canvasFadeEnabled = true;
+    if (ft) ft.checked = true;
+    drawShape = "free";
+    eraserMode = false;
+    clearSelectionToolState();
+    setActiveToolOnly("pen");
+    scheduleFadeTick();
+  } else {
+    canvasFadeEnabled = false;
+    if (ft) ft.checked = false;
+    drawShape = "select";
+    eraserMode = false;
+    clearSelectionToolState();
+    setActiveToolOnly("select");
+    colorPopover?.classList.remove("visible");
+    figuresPopover?.classList.remove("visible");
+    thicknessPopover?.classList.remove("visible");
+    opacityPopover?.classList.remove("visible");
+  }
+  if (pdfMode && pdfDoc && pdfDrawCanvas?.width)
+    drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+  else if (pptxMode && pptxViewer && pptxDrawCanvas?.width)
+    drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+  else if (drawCanvas?.width) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
+  const label =
+    drawShape === "select" ? "Taşı / seç" : canvasFadeEnabled ? "Silinen kalem" : "Kalem";
+  showGestureModeHint(`Mod: ${label}`);
+}
+
+function showGestureModeHint(message) {
+  let el = document.getElementById("gestureModeHint");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "gestureModeHint";
+    el.setAttribute("aria-live", "polite");
+    el.className = "gesture-mode-hint";
+    Object.assign(el.style, {
+      position: "fixed",
+      zIndex: "99999",
+      left: "50%",
+      bottom: "max(1.1rem, env(safe-area-inset-bottom, 0px))",
+      transform: "translateX(-50%)",
+      maxWidth: "min(92vw, 22rem)",
+      padding: "0.55rem 1rem",
+      borderRadius: "12px",
+      fontFamily: "system-ui, -apple-system, sans-serif",
+      fontSize: "0.95rem",
+      fontWeight: "600",
+      color: "#fafafa",
+      background: "rgba(18, 18, 22, 0.9)",
+      border: "1px solid rgba(255,255,255,0.12)",
+      boxShadow: "0 8px 28px rgba(0,0,0,0.35)",
+      pointerEvents: "none",
+      textAlign: "center",
+    });
+    document.body.appendChild(el);
+  }
+  el.textContent = message;
+  el.style.opacity = "1";
+  el.removeAttribute("hidden");
+  if (el._gestureHintHide1) clearTimeout(el._gestureHintHide1);
+  if (el._gestureHintHide2) clearTimeout(el._gestureHintHide2);
+  el._gestureHintHide1 = setTimeout(() => {
+    el.style.opacity = "0";
+    el._gestureHintHide2 = setTimeout(() => {
+      el.textContent = "";
+      el.setAttribute("hidden", "");
+    }, 200);
+  }, 2400);
+}
+
+function clearMiddleThumbGestureTimer() {
+  if (middleThumbGestureTimer != null) {
+    clearTimeout(middleThumbGestureTimer);
+    middleThumbGestureTimer = null;
+  }
+}
+
+function handleMiddleThumbTapRisingEdge(nowMs) {
+  clearMiddleThumbGestureTimer();
+  middleThumbTapTimes = middleThumbTapTimes.filter((t) => nowMs - t <= MIDDLE_THUMB_SEQUENCE_WINDOW_MS);
+  const last = middleThumbTapTimes[middleThumbTapTimes.length - 1];
+  if (last && nowMs - last < MIDDLE_THUMB_MIN_TAP_INTERVAL_MS) return;
+  middleThumbTapTimes.push(nowMs);
+  if (middleThumbTapTimes.length >= 3) {
+    middleThumbTapTimes = [];
+    applyGestureRedPen();
+    gestureModeCycleCooldownUntil = nowMs + GESTURE_MODE_CYCLE_COOLDOWN_MS;
+    return;
+  }
+  if (middleThumbTapTimes.length === 2) {
+    middleThumbGestureTimer = window.setTimeout(() => {
+      middleThumbGestureTimer = null;
+      middleThumbTapTimes = [];
+      applyGestureToolModeCycle();
+      gestureModeCycleCooldownUntil = performance.now() + GESTURE_MODE_CYCLE_COOLDOWN_MS;
+    }, MIDDLE_THUMB_DOUBLE_WAIT_MS);
+    return;
+  }
+  middleThumbGestureTimer = window.setTimeout(() => {
+    middleThumbGestureTimer = null;
+    middleThumbTapTimes = [];
+  }, MIDDLE_THUMB_SINGLE_STALE_MS);
+}
+
+function applyGestureRedPen() {
+  if (sharedDocReadOnly) return;
+  const red = GESTURE_RED_PEN_HEX;
+  if (typeof hexToHsv === "function") {
+    const hv = hexToHsv(red);
+    colorWheelHue = hv.h;
+    colorWheelSat = hv.s;
+    colorWheelVal = hv.v;
+  }
+  if (typeof window.applyColorFromWheel === "function") {
+    window.applyColorFromWheel();
+  } else {
+    drawColor = red;
+    if (toolbarColor) toolbarColor.value = drawColor;
+    if (colorWheelPreview) colorWheelPreview.style.background = drawColor;
+    document.querySelectorAll(".color-preset").forEach((b) => b.classList.remove("active"));
+    if (pdfMode && pdfDoc) pdfCurrentStroke.color = drawColor;
+    else if (pptxMode && pptxViewer) pptxCurrentStroke.color = drawColor;
+    else currentStroke.color = drawColor;
+    if (typeof updateThicknessOpacityPreviews === "function") updateThicknessOpacityPreviews();
+  }
+  showGestureModeHint("Kalem rengi: kırmızı");
 }
 
 function drawSelectOverlay(dctx, w, h, sx) {
@@ -3970,6 +4128,33 @@ function detectLoop() {
         return normX < 0.06 || isPointOverToolbar(clientX, clientY);
       })();
       drawToolbarGestureInside = !!overToolbar;
+
+      {
+        const nowMs = performance.now();
+        const handForMiddle =
+          handIdx >= 0
+            ? handLandmarks[handIdx]
+            : twoFingerHandIdx >= 0
+              ? handLandmarks[twoFingerHandIdx]
+              : null;
+        if (handForMiddle && !overToolbar && !sharedDocReadOnly) {
+          const touching = stepMiddleThumbTouching(handForMiddle, middleThumbTouchingHyst);
+          middleThumbTouchingHyst = touching;
+          if (
+            nowMs >= gestureModeCycleCooldownUntil &&
+            gestureState !== "drawing" &&
+            gestureState !== "erasing" &&
+            touching &&
+            !middleThumbWasTouching
+          ) {
+            handleMiddleThumbTapRisingEdge(nowMs);
+          }
+          middleThumbWasTouching = touching;
+        } else {
+          middleThumbTouchingHyst = false;
+          middleThumbWasTouching = false;
+        }
+      }
 
       if (overToolbar) {
         shapeInProgress = null;

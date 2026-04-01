@@ -85,6 +85,47 @@ export function getThumbIndexDistance(hand) {
   return Math.hypot(idxTip.x - thumbTip.x, idxTip.y - thumbTip.y);
 }
 
+/** Orta parmak ucu (12) ile başparmak ucu (4) arası mesafe (normalize). */
+export function getThumbMiddleDistance(hand) {
+  if (!hand || hand.length < 13) return Infinity;
+  const midTip = hand[12], thumbTip = hand[4];
+  return Math.hypot(midTip.x - thumbTip.x, midTip.y - thumbTip.y);
+}
+
+/**
+ * Orta+b başparmak “baskın” pinch: işaret+b başparmaktan belirgin şekilde daha yakın.
+ * Böylece normal çizim (işaret+başparmak) ile karışmaz.
+ */
+export function isMiddleThumbPinchDominant(hand) {
+  if (!hand || hand.length < 13) return false;
+  const dTm = getThumbMiddleDistance(hand);
+  const dTi = getThumbIndexDistance(hand);
+  const pinchStart = getPinchStartThreshold(hand);
+  return dTm < pinchStart && dTm < dTi * 0.88;
+}
+
+/**
+ * Orta+b başparmak dokunuşu — gevşek eşik + histerezis (titremeyi azaltır).
+ * wasTouching true iken bırakma için daha geniş eşik kullanılır.
+ * İşaret parmağı başparmakta ise (çizim pinch) orta jest sayılmaz.
+ */
+export function stepMiddleThumbTouching(hand, wasTouching) {
+  if (!hand || hand.length < 13) return false;
+  const dTm = getThumbMiddleDistance(hand);
+  const dTi = getThumbIndexDistance(hand);
+  const hs = getHandSize(hand);
+  const touchTh = Math.max(0.048, Math.min(0.16, hs * 0.58));
+  const releaseTh = Math.max(touchTh * 1.32, touchTh + 0.016);
+  const indexClearlyPinching = dTi < getPinchStartThreshold(hand) * 0.92 && dTi < dTm * 0.82;
+  if (wasTouching) {
+    if (dTm > releaseTh) return false;
+    if (indexClearlyPinching) return false;
+    return true;
+  }
+  if (indexClearlyPinching) return false;
+  return dTm < touchTh && dTm < dTi * 0.98;
+}
+
 export function getHandSize(hand) {
   if (!hand || hand.length < 10) return 0.2;
   return Math.hypot(hand[0].x - hand[9].x, hand[0].y - hand[9].y);
