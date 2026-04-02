@@ -48,6 +48,7 @@
       margin: 0;
       height: 100%;
       overflow: hidden;
+      color-scheme: dark;
       background-color: var(--dash-bg);
       background: linear-gradient(160deg, var(--dash-bg) 0%, var(--dash-bg-end) 50%, #0a0512 100%);
       font-family: var(--dash-font);
@@ -59,6 +60,7 @@
       margin: 0;
       min-height: 100%;
       font-family: var(--dash-font);
+      background-color: var(--dash-bg);
       background: linear-gradient(160deg, var(--dash-bg) 0%, var(--dash-bg-end) 50%, #0a0512 100%);
       color: var(--dash-text);
       display: flex;
@@ -69,50 +71,10 @@
       overscroll-behavior: none;
     }
 
-    body::before {
-      content: '';
-      position: fixed;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background:
-        radial-gradient(ellipse at 25% 25%, rgba(108, 92, 231, 0.06) 0%, transparent 50%),
-        radial-gradient(ellipse at 75% 75%, rgba(0, 206, 201, 0.04) 0%, transparent 50%);
-      pointer-events: none;
-      z-index: 0;
-    }
+    /* Ağır blur / ekstra katmanlar zayıf GPU’da tam ekran titremesine yol açıyordu — kaldırıldı. */
 
     .liquid-glass {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 0;
-      overflow: hidden;
-    }
-
-    .liquid-glass .blob {
-      position: absolute;
-      border-radius: 50%;
-      opacity: 0.85;
-    }
-
-    .liquid-glass .blob-1 {
-      top: -15%;
-      right: -10%;
-      width: 55%;
-      height: 65%;
-      background: radial-gradient(ellipse 80% 70% at 30% 40%, rgba(191,36,255,0.35) 0%, transparent 65%);
-      filter: blur(70px);
-    }
-
-    .liquid-glass .blob-2 {
-      bottom: -20%;
-      left: -15%;
-      width: 50%;
-      height: 60%;
-      background: radial-gradient(ellipse 75% 65% at 60% 50%, rgba(36,142,255,0.3) 0%, transparent 65%);
-      filter: blur(65px);
+      display: none;
     }
 
     .game-app {
@@ -166,10 +128,7 @@
       font-weight: 700;
       letter-spacing: -0.02em;
       line-height: 1.2;
-      background: linear-gradient(135deg, var(--dash-accent-light), var(--dash-green));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      color: var(--dash-accent-light);
     }
 
     .game-brand-sub {
@@ -197,10 +156,8 @@
       justify-content: center;
       text-decoration: none;
       color: var(--dash-text-mid);
-      background: var(--dash-glass);
+      background: rgba(28, 28, 40, 0.95);
       border: 1px solid var(--dash-glass-border);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
       font-size: 1.1rem;
       font-weight: 700;
       line-height: 1;
@@ -221,10 +178,8 @@
       border-radius: var(--dash-radius-sm);
       text-decoration: none;
       color: var(--dash-text-mid);
-      background: var(--dash-glass);
+      background: rgba(28, 28, 40, 0.95);
       border: 1px solid var(--dash-glass-border);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
       white-space: nowrap;
       transition: color 0.2s, background 0.2s, border-color 0.2s;
     }
@@ -271,9 +226,7 @@
     }
 
     .game-panel {
-      background: var(--dash-surface);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
+      background: rgba(22, 22, 32, 0.98);
       border: 1px solid var(--dash-glass-border);
       border-radius: var(--dash-radius);
       padding: 1rem 1.1rem;

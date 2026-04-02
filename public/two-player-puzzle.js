@@ -18,6 +18,8 @@ const CAMERA_HEIGHT = IS_LOW_END ? 540 : 720;
 let gridSize = 3;
 let handLandmarker = null;
 let animationId = 0;
+/** DOM’u her karede güncellemek zayıf makinelerde titremeye yol açar; sadece metin değişince yaz. */
+let lastTimerDomText = "";
 let stream = null;
 let winner = null;
 let gameStartedAt = 0;
@@ -447,6 +449,7 @@ function renderLoop() {
   }
 
   if (timerText) {
+    let nextTimer = "Время: 0.0 c";
     if (boards.length && gameStartedAt) {
       const elapsed = (now - gameStartedAt) / 1000;
       const t1 = boards[0]?.finishTimeSec;
@@ -454,9 +457,11 @@ function renderLoop() {
       const parts = [`Время: ${elapsed.toFixed(1)} c`];
       if (t1 != null) parts.push(`Игрок 1: ${t1.toFixed(1)} c`);
       if (t2 != null) parts.push(`Игрок 2: ${t2.toFixed(1)} c`);
-      timerText.textContent = parts.join(" | ");
-    } else {
-      timerText.textContent = "Время: 0.0 c";
+      nextTimer = parts.join(" | ");
+    }
+    if (nextTimer !== lastTimerDomText) {
+      lastTimerDomText = nextTimer;
+      timerText.textContent = nextTimer;
     }
   }
 

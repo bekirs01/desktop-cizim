@@ -28,6 +28,7 @@ let prevTracks = [];
 const motionByTrack = new Map();
 let cachedTracked = [];
 let lastDetectMs = 0;
+let lastRunningStatusAt = 0;
 
 const players = [
   makePlayer(0, "Игрок 1", "rgba(99,102,241,0.95)"),
@@ -314,10 +315,6 @@ function drawScene(elapsed) {
 
     ctx.restore();
   }
-  scoreText.textContent = `Счёт: Игрок 1 — ${players[0].score} | Игрок 2 — ${players[1].score}`;
-  if (!running) return;
-  const t = elapsed.toFixed(1);
-  setStatus(`Игра идёт (${t} c). Поза «пистолет» + резкий взмах вверх = выстрел.`);
 }
 
 function resetGame() {
@@ -349,6 +346,13 @@ function render(ts) {
   if (running) spawnAndMoveBalloons(dt, elapsed);
   drawScene(elapsed);
   drawHands(tracked);
+
+  if (running && ts - lastRunningStatusAt >= 250) {
+    lastRunningStatusAt = ts;
+    setStatus(
+      `Игра идёт (${(elapsed).toFixed(1)} c). Поза «пистолет» + резкий взмах вверх = выстрел.`,
+    );
+  }
 
   raf = requestAnimationFrame(render);
 }

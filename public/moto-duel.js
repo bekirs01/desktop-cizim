@@ -19,6 +19,7 @@ let handLandmarker = null;
 let stream = null;
 let raf = 0;
 let lastTs = 0;
+let lastTimerDomText = "";
 let running = false;
 let startTs = 0;
 let endElapsedSec = 0;
@@ -380,7 +381,11 @@ function render(ts) {
 
   if (timerText) {
     const shown = running ? Math.min(elapsedSec, GAME_DURATION_SEC) : endElapsedSec;
-    timerText.textContent = `Время: ${shown.toFixed(1)} c / ${GAME_DURATION_SEC} c`;
+    const label = `Время: ${shown.toFixed(1)} c / ${GAME_DURATION_SEC} c`;
+    if (label !== lastTimerDomText) {
+      lastTimerDomText = label;
+      timerText.textContent = label;
+    }
   }
 
   raf = requestAnimationFrame(render);
