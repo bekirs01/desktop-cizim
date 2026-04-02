@@ -101,36 +101,37 @@ export function clampNorm(v) {
   return Math.max(0, Math.min(1, v));
 }
 
+/** Taşıma sırasında clamp yok: kenara taşıyıp geri çekince noktalar 0–1’e yapışıp silinmiş gibi bozulmasın. */
 export function offsetStrokeNorm(stroke, dx, dy) {
   if (!stroke?.points) return;
-  stroke.points = stroke.points.map((p) => ({ x: clampNorm(p.x + dx), y: clampNorm(p.y + dy) }));
+  stroke.points = stroke.points.map((p) => ({ x: p.x + dx, y: p.y + dy }));
 }
 
 export function offsetShapeNorm(sh, dx, dy) {
   if (sh.type === "circle") {
-    sh.cx = clampNorm(sh.cx + dx);
-    sh.cy = clampNorm(sh.cy + dy);
+    sh.cx = sh.cx + dx;
+    sh.cy = sh.cy + dy;
   } else if (sh.type === "rect" || sh.type === "ellipse") {
-    sh.x = clampNorm(sh.x + dx);
-    sh.y = clampNorm(sh.y + dy);
+    sh.x = sh.x + dx;
+    sh.y = sh.y + dy;
   } else if (sh.type === "line" || sh.type === "arrow") {
-    sh.x1 = clampNorm(sh.x1 + dx);
-    sh.y1 = clampNorm(sh.y1 + dy);
-    sh.x2 = clampNorm(sh.x2 + dx);
-    sh.y2 = clampNorm(sh.y2 + dy);
+    sh.x1 = sh.x1 + dx;
+    sh.y1 = sh.y1 + dy;
+    sh.x2 = sh.x2 + dx;
+    sh.y2 = sh.y2 + dy;
   } else if (sh.type === "triangle") {
-    sh.x1 = clampNorm(sh.x1 + dx);
-    sh.y1 = clampNorm(sh.y1 + dy);
-    sh.x2 = clampNorm(sh.x2 + dx);
-    sh.y2 = clampNorm(sh.y2 + dy);
-    sh.x3 = clampNorm(sh.x3 + dx);
-    sh.y3 = clampNorm(sh.y3 + dy);
+    sh.x1 = sh.x1 + dx;
+    sh.y1 = sh.y1 + dy;
+    sh.x2 = sh.x2 + dx;
+    sh.y2 = sh.y2 + dy;
+    sh.x3 = sh.x3 + dx;
+    sh.y3 = sh.y3 + dy;
   } else if (sh.type === "text") {
-    sh.x = clampNorm(sh.x + dx);
-    sh.y = clampNorm(sh.y + dy);
+    sh.x = sh.x + dx;
+    sh.y = sh.y + dy;
   } else if (sh.type === "image") {
-    sh.x = clampNorm(sh.x + dx);
-    sh.y = clampNorm(sh.y + dy);
+    sh.x = sh.x + dx;
+    sh.y = sh.y + dy;
   }
 }
 

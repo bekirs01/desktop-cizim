@@ -314,6 +314,8 @@ let docSnapSeenFramesByHand = { left: 0, right: 0 };
 let docSnapTouchStartAtByHand = { left: 0, right: 0 };
 let docSnapNavCooldownUntil = 0;
 let docSnapReadyAt = performance.now() + DOC_SNAP_BOOT_GUARD_MS;
+/** Жест «след./пред. страница» не должен заходить повторно, пока идёт async render. */
+let pdfPptxNavInProgress = false;
 let eyeGestureReadyAt = performance.now() + EYE_GESTURE_BOOT_GUARD_MS;
 let eyeGestureCooldownUntil = 0;
 let eyeBlinkStartAt = { left: 0, right: 0, both: 0 };
@@ -1524,8 +1526,12 @@ function applyGestureToolModeCycle() {
     drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
   else if (drawCanvas?.width) drawStrokesToCanvas(drawCanvas.width, drawCanvas.height);
   const label =
-    drawShape === "select" ? "Taşı / seç" : canvasFadeEnabled ? "Silinen kalem" : "Kalem";
-  showGestureModeHint(`Mod: ${label}`);
+    drawShape === "select"
+      ? "Перемещение / выбор"
+      : canvasFadeEnabled
+        ? "Угасающий карандаш"
+        : "Карандаш";
+  showGestureModeHint(`Режим: ${label}`);
 }
 
 function showGestureModeHint(message) {
@@ -1645,7 +1651,7 @@ function applyGestureRedPen() {
     eyeOriginalPenColor = drawColor || eyeOriginalPenColor;
   }
   applyGestureColor(red);
-  showGestureModeHint("Kalem rengi: kırmızı");
+  showGestureModeHint("Карандаш: красный");
 }
 
 function applyGestureOriginalPen() {
@@ -1654,7 +1660,7 @@ function applyGestureOriginalPen() {
   const fallback = eyeOriginalPenColor || "#6c5ce7";
   const target = (fallback || "").toLowerCase() === red ? "#6c5ce7" : fallback;
   applyGestureColor(target);
-  showGestureModeHint("Kalem rengi: orijinal");
+  showGestureModeHint("Карандаш: исходный цвет");
 }
 
 function handleEyeGestureFrame(nowMs) {
@@ -4244,6 +4250,7 @@ function detectLoop() {
 
     // 5. Çizim / Silgi - pinch ile çizim (işaret+başparmak), imleç göster
     if (drawMode && handLandmarker) {
+      const docNavBusy = pdfPptxNavInProgress && ((pdfMode && pdfDoc) || (pptxMode && pptxViewer));
       let activeStrokes = strokes;
       let activeShapes = shapes;
       let activeCurrentStroke = currentStroke;
@@ -4296,7 +4303,13 @@ function detectLoop() {
         const nowMs = performance.now();
         const docNavActive = ((pdfMode && pdfDoc) || (pptxMode && pptxViewer)) && !sharedDocReadOnly;
         if (docNavActive) {
-          if (nowMs < docSnapReadyAt || overToolbar || gestureState !== "idle" || eyeGestureConsumedFrame) {
+          if (
+            nowMs < docSnapReadyAt ||
+            overToolbar ||
+            gestureState !== "idle" ||
+            eyeGestureConsumedFrame ||
+            docNavBusy
+          ) {
             docSnapTouchingByHand.left = false;
             docSnapTouchingByHand.right = false;
             docSnapSeenFramesByHand.left = 0;
@@ -4326,7 +4339,7 @@ function detectLoop() {
                 if (isSnapRelease) {
                   const navigated = label === "right" ? tryNavigatePdfPptxNext() : tryNavigatePdfPptxPrev();
                   if (navigated) {
-                    showGestureModeHint(label === "right" ? "Slayt: ileri" : "Slayt: geri");
+                    showGestureModeHint(label === "right" ? "Слайд: вперёд" : "Слайд: назад");
                     docSnapNavCooldownUntil = nowMs + DOC_SNAP_NAV_COOLDOWN_MS;
                     docSnapNavConsumedFrame = true;
                   }
@@ -4365,8 +4378,8 @@ function detectLoop() {
         }
       }
 
-      if (docSnapNavConsumedFrame || eyeGestureConsumedFrame) {
-        // Snap ile sayfa değiştiği frame'de çizim/erase'i devre dışı bırak.
+      if (docSnapNavConsumedFrame || eyeGestureConsumedFrame || docNavBusy) {
+        // Snap / смена страницы: не тянуть линию со старым activeCurrentStroke этого кадра.
         shapeInProgress = null;
         wasPinching = false;
         pinchReleaseFrames = 0;
@@ -4406,8 +4419,8 @@ function detectLoop() {
       framesSinceDraw++;
       framesSinceErase++;
 
-      if (overToolbar || docSnapNavConsumedFrame || eyeGestureConsumedFrame) {
-        // пропускаем рисование/стирание — только панель
+      if (overToolbar || docSnapNavConsumedFrame || eyeGestureConsumedFrame || docNavBusy) {
+        // пропускаем рисование/стирание — только панель (docNavBusy — пока async render страницы)
       } else if ((gestureState === "erasing" && twoFingerPos) || (gestureState === "idle" && twoFingerPos && !cursorPos && framesSinceDraw >= GESTURE_LOCK_FRAMES && twoFingerHeldFrames >= 4)) {
         if (gestureState !== "erasing") {
           gestureState = "erasing";
@@ -5193,7 +5206,8 @@ function tryNavigatePdfPptxPrev() {
   if (!docOk) return false;
   if (pdfNavGroup && pdfNavGroup.style.display === "none") return false;
   if (pdfPrevBtn?.disabled) return false;
-  pdfPrevBtn.click();
+  if (pdfPptxNavInProgress) return false;
+  void runPdfPptxPrevNavigation();
   return true;
 }
 
@@ -5202,7 +5216,8 @@ function tryNavigatePdfPptxNext() {
   if (!docOk) return false;
   if (pdfNavGroup && pdfNavGroup.style.display === "none") return false;
   if (pdfNextBtn?.disabled) return false;
-  pdfNextBtn.click();
+  if (pdfPptxNavInProgress) return false;
+  void runPdfPptxNextNavigation();
   return true;
 }
 
@@ -5229,6 +5244,131 @@ function resetDocTransientStrokeState() {
   pptxCurrentStroke = { points: [], color: drawColor, lineWidth: drawLineWidth };
   pdfRemoteCurrentStroke = null;
   pptxRemoteCurrentStroke = null;
+}
+
+/** После смены страницы PDF/PPTX сбросить конвейер жестов — иначе локальный activeCurrentStroke и gestureState одного кадра пишут в «чужой» буфер поверх нового слайда. */
+function resetGesturePipelineAfterDocPageChange() {
+  gestureState = GESTURE_STATE.IDLE;
+  wasPinching = false;
+  pinchReleaseFrames = 0;
+  smoothedCursor = null;
+  smoothedPinch = null;
+  smoothedErasePos = null;
+  shapeInProgress = null;
+  wasToolbarPinch = false;
+  fingerLostFrames = 0;
+  twoFingerHeldFrames = 0;
+  framesSinceDraw = GESTURE_LOCK_FRAMES;
+  framesSinceErase = GESTURE_LOCK_FRAMES;
+}
+
+/** Сразу перерисовать штрихи текущей страницы на overlay до завершения async render — иначе при жесте остаётся «чужая» картинка. */
+function syncPdfDrawOverlayAfterPageChange() {
+  if (!pdfDrawCanvas || !pdfDoc) return;
+  const cw = pdfDrawCanvas.width;
+  const ch = pdfDrawCanvas.height;
+  if (cw > 0 && ch > 0) drawStrokesToPdfCanvas(cw, ch);
+}
+
+function syncPptxDrawOverlayAfterPageChange() {
+  if (!pptxDrawCanvas || !pptxViewer) return;
+  const cw = pptxDrawCanvas.width;
+  const ch = pptxDrawCanvas.height;
+  if (cw > 0 && ch > 0) drawStrokesToPptxCanvas(cw, ch);
+}
+
+async function runPdfPptxPrevNavigation() {
+  if (pdfPptxNavInProgress) return;
+  if (pptxMode && pptxViewer) {
+    if (pptxPageNum <= 1) return;
+    pdfPptxNavInProgress = true;
+    try {
+      savePptxPageState();
+      if (currentPptxShareToken && !sharedDocReadOnly) {
+        await savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
+      }
+      pptxPageNum--;
+      loadPptxPageState();
+      resetDocTransientStrokeState();
+      resetGesturePipelineAfterDocPageChange();
+      docSnapReadyAt = performance.now() + 220;
+      if (pdfPageInfo) pdfPageInfo.textContent = `${pptxPageNum} / ${pptxTotalPages}`;
+      if (pdfPrevBtn) pdfPrevBtn.disabled = pptxPageNum <= 1;
+      if (pdfNextBtn) pdfNextBtn.disabled = false;
+      syncPptxDrawOverlayAfterPageChange();
+      await renderPptxSlide();
+    } finally {
+      pdfPptxNavInProgress = false;
+    }
+    return;
+  }
+  if (pdfPageNum <= 1 || !pdfDoc) return;
+  pdfPptxNavInProgress = true;
+  try {
+    savePdfPageState();
+    if (currentPdfShareToken && !sharedDocReadOnly) {
+      await savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
+    }
+    pdfPageNum--;
+    loadPdfPageState();
+    resetDocTransientStrokeState();
+    resetGesturePipelineAfterDocPageChange();
+    docSnapReadyAt = performance.now() + 220;
+    if (pdfPageInfo) pdfPageInfo.textContent = `${pdfPageNum} / ${pdfTotalPages}`;
+    if (pdfPrevBtn) pdfPrevBtn.disabled = pdfPageNum <= 1;
+    if (pdfNextBtn) pdfNextBtn.disabled = false;
+    syncPdfDrawOverlayAfterPageChange();
+    await renderPdfPage();
+  } finally {
+    pdfPptxNavInProgress = false;
+  }
+}
+
+async function runPdfPptxNextNavigation() {
+  if (pdfPptxNavInProgress) return;
+  if (pptxMode && pptxViewer) {
+    if (pptxPageNum >= pptxTotalPages) return;
+    pdfPptxNavInProgress = true;
+    try {
+      savePptxPageState();
+      if (currentPptxShareToken && !sharedDocReadOnly) {
+        await savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
+      }
+      pptxPageNum++;
+      loadPptxPageState();
+      resetDocTransientStrokeState();
+      resetGesturePipelineAfterDocPageChange();
+      docSnapReadyAt = performance.now() + 220;
+      if (pdfPageInfo) pdfPageInfo.textContent = `${pptxPageNum} / ${pptxTotalPages}`;
+      if (pdfNextBtn) pdfNextBtn.disabled = pptxPageNum >= pptxTotalPages;
+      if (pdfPrevBtn) pdfPrevBtn.disabled = false;
+      syncPptxDrawOverlayAfterPageChange();
+      await renderPptxSlide();
+    } finally {
+      pdfPptxNavInProgress = false;
+    }
+    return;
+  }
+  if (pdfPageNum >= pdfTotalPages || !pdfDoc) return;
+  pdfPptxNavInProgress = true;
+  try {
+    savePdfPageState();
+    if (currentPdfShareToken && !sharedDocReadOnly) {
+      await savePdfStrokesAndBroadcast(pdfPageNum, pdfStrokes);
+    }
+    pdfPageNum++;
+    loadPdfPageState();
+    resetDocTransientStrokeState();
+    resetGesturePipelineAfterDocPageChange();
+    docSnapReadyAt = performance.now() + 220;
+    if (pdfPageInfo) pdfPageInfo.textContent = `${pdfPageNum} / ${pdfTotalPages}`;
+    if (pdfNextBtn) pdfNextBtn.disabled = pdfPageNum >= pdfTotalPages;
+    if (pdfPrevBtn) pdfPrevBtn.disabled = false;
+    syncPdfDrawOverlayAfterPageChange();
+    await renderPdfPage();
+  } finally {
+    pdfPptxNavInProgress = false;
+  }
 }
 
 // ========== ОБРАБОТЧИКИ СОБЫТИЙ ==========
@@ -6196,58 +6336,12 @@ pdfFileInput?.addEventListener("change", async (e) => {
   e.target.value = "";
 });
 
-pdfPrevBtn?.addEventListener("click", async () => {
-  if (pptxMode && pptxViewer) {
-    if (pptxPageNum <= 1) return;
-    savePptxPageState();
-    if (currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
-    pptxPageNum--;
-    loadPptxPageState();
-    resetDocTransientStrokeState();
-    docSnapReadyAt = performance.now() + 220;
-    if (pdfPageInfo) pdfPageInfo.textContent = `${pptxPageNum} / ${pptxTotalPages}`;
-    pdfPrevBtn.disabled = pptxPageNum <= 1;
-    pdfNextBtn.disabled = false;
-    await renderPptxSlide();
-    return;
-  }
-  if (pdfPageNum <= 1 || !pdfDoc) return;
-  savePdfPageState();
-  pdfPageNum--;
-  loadPdfPageState();
-  resetDocTransientStrokeState();
-  docSnapReadyAt = performance.now() + 220;
-  if (pdfPageInfo) pdfPageInfo.textContent = `${pdfPageNum} / ${pdfTotalPages}`;
-  pdfPrevBtn.disabled = pdfPageNum <= 1;
-  pdfNextBtn.disabled = false;
-  await renderPdfPage();
+pdfPrevBtn?.addEventListener("click", () => {
+  void runPdfPptxPrevNavigation();
 });
 
-pdfNextBtn?.addEventListener("click", async () => {
-  if (pptxMode && pptxViewer) {
-    if (pptxPageNum >= pptxTotalPages) return;
-    savePptxPageState();
-    if (currentPptxShareToken) savePptxStrokesAndBroadcast(pptxPageNum, pptxStrokes);
-    pptxPageNum++;
-    loadPptxPageState();
-    resetDocTransientStrokeState();
-    docSnapReadyAt = performance.now() + 220;
-    if (pdfPageInfo) pdfPageInfo.textContent = `${pptxPageNum} / ${pptxTotalPages}`;
-    pdfNextBtn.disabled = pptxPageNum >= pptxTotalPages;
-    pdfPrevBtn.disabled = false;
-    await renderPptxSlide();
-    return;
-  }
-  if (pdfPageNum >= pdfTotalPages || !pdfDoc) return;
-  savePdfPageState();
-  pdfPageNum++;
-  loadPdfPageState();
-  resetDocTransientStrokeState();
-  docSnapReadyAt = performance.now() + 220;
-  if (pdfPageInfo) pdfPageInfo.textContent = `${pdfPageNum} / ${pdfTotalPages}`;
-  pdfNextBtn.disabled = pdfPageNum >= pdfTotalPages;
-  pdfPrevBtn.disabled = false;
-  await renderPdfPage();
+pdfNextBtn?.addEventListener("click", () => {
+  void runPdfPptxNextNavigation();
 });
 
 pdfClearBtn?.addEventListener("click", () => {

@@ -93,12 +93,12 @@ export function drawEyeContours(ctx, pts, w, h, mirrorCamera, blinkState = null)
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  const leftClosed = blinkState?.leftClosed ?? false;
-  const rightClosed = blinkState?.rightClosed ?? false;
-  const leftScore = blinkState?.leftScore ?? 0;
-  const rightScore = blinkState?.rightScore ?? 0;
-  const closedStates = [leftClosed, rightClosed];
-  const scores = [leftScore, rightScore];
+  const rawL = blinkState?.leftClosed ?? false;
+  const rawR = blinkState?.rightClosed ?? false;
+  // Селфи с зеркалом: blendshape L/R у модели часто совпадает с «камерной» стороной, а не с лицом — меняем для совпадения с картинкой.
+  const closedLeft = mirrorCamera ? rawR : rawL;
+  const closedRight = mirrorCamera ? rawL : rawR;
+  const closedStates = [closedLeft, closedRight];
 
   const outlines = [EYE_LEFT_OUTLINE, EYE_RIGHT_OUTLINE];
   for (let ei = 0; ei < outlines.length; ei++) {
@@ -153,37 +153,8 @@ export function drawEyeContours(ctx, pts, w, h, mirrorCamera, blinkState = null)
   }
 
   if (pts.length > 477) {
-    drawIris(ctx, pts, IRIS_LEFT, w, h, mirrorCamera, leftClosed);
-    drawIris(ctx, pts, IRIS_RIGHT, w, h, mirrorCamera, rightClosed);
-  }
-
-  const labelPairs = [
-    { idx: EYE_LEFT_OUTLINE, closed: leftClosed, score: leftScore, label: "L" },
-    { idx: EYE_RIGHT_OUTLINE, closed: rightClosed, score: rightScore, label: "R" },
-  ];
-  for (const { idx, closed, score, label } of labelPairs) {
-    let cx = 0, cy = 0, n = 0;
-    for (const i of idx) {
-      const p = pts[i];
-      if (!p) continue;
-      const pt = toPx(p, w, h, mirrorCamera);
-      cx += pt.x; cy += pt.y; n++;
-    }
-    if (n === 0) continue;
-    cx /= n; cy /= n;
-
-    ctx.save();
-    ctx.font = "bold 11px 'Plus Jakarta Sans', sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillStyle = closed ? "rgba(255, 80, 80, 0.95)" : "rgba(0, 220, 255, 0.85)";
-    ctx.shadowColor = "rgba(0,0,0,0.6)";
-    ctx.shadowBlur = 3;
-    const stateText = closed ? "KAPALI" : "ACIK";
-    ctx.fillText(`${label}: ${stateText}`, cx, cy - 18);
-    ctx.font = "9px monospace";
-    ctx.fillStyle = "rgba(200,200,200,0.7)";
-    ctx.fillText(`${(score * 100).toFixed(0)}%`, cx, cy - 8);
-    ctx.restore();
+    drawIris(ctx, pts, IRIS_LEFT, w, h, mirrorCamera, closedStates[0]);
+    drawIris(ctx, pts, IRIS_RIGHT, w, h, mirrorCamera, closedStates[1]);
   }
 }
 

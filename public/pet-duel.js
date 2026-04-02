@@ -2,7 +2,7 @@ import { HAND_CONNECTIONS } from "./app/config/landmarks.js";
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+const ctx = canvas.getContext("2d", { alpha: false });
 const statusText = document.getElementById("statusText");
 const hpText = document.getElementById("hpText");
 const startBtn = document.getElementById("startBtn");
