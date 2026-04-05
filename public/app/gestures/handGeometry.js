@@ -126,6 +126,29 @@ export function stepMiddleThumbTouching(hand, wasTouching) {
   return dTm < touchTh && dTm < dTi * 0.98;
 }
 
+/** Полностью открытая ладонь: все 4 пальца разогнуты и раздвинуты. */
+export function isOpenPalm(hand) {
+  if (!hand || hand.length < 21) return false;
+  const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const hs = Math.max(0.12, getHandSize(hand));
+  const extMin = hs * 0.34;
+  const spreadMin = hs * 0.2;
+  const idxExt = d(hand[8], hand[5]) > extMin;
+  const midExt = d(hand[12], hand[9]) > extMin;
+  const ringExt = d(hand[16], hand[13]) > extMin;
+  const pinkExt = d(hand[20], hand[17]) > extMin;
+  const spread =
+    d(hand[8], hand[12]) > spreadMin &&
+    d(hand[12], hand[16]) > spreadMin * 0.82 &&
+    d(hand[16], hand[20]) > spreadMin * 0.72;
+  const yOrder =
+    hand[8].y < hand[6].y &&
+    hand[12].y < hand[10].y &&
+    hand[16].y < hand[14].y &&
+    hand[20].y < hand[18].y;
+  return idxExt && midExt && ringExt && pinkExt && spread && yOrder;
+}
+
 export function getHandSize(hand) {
   if (!hand || hand.length < 10) return 0.2;
   return Math.hypot(hand[0].x - hand[9].x, hand[0].y - hand[9].y);

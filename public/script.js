@@ -64,6 +64,7 @@ import {
   getPinchCursorPosition,
   getThumbIndexSize,
   stepMiddleThumbTouching,
+  isOpenPalm,
 } from "./app/gestures/handGeometry.js";
 import { toPx } from "./app/overlay/coords.js";
 import { drawHandLandmarks } from "./app/overlay/handDraw.js";
@@ -312,6 +313,7 @@ let gestureModeCycleCooldownUntil = 0;
 let docSnapTouchingByHand = { left: false, right: false };
 let docSnapSeenFramesByHand = { left: 0, right: 0 };
 let docSnapTouchStartAtByHand = { left: 0, right: 0 };
+let docSnapOpenPalmFramesByHand = { left: 0, right: 0 };
 let docSnapNavCooldownUntil = 0;
 let docSnapReadyAt = performance.now() + DOC_SNAP_BOOT_GUARD_MS;
 /** Жест «след./пред. страница» не должен заходить повторно, пока идёт async render. */
@@ -391,12 +393,56 @@ let fadeAnimationRaf = null;
 /** Ограничиваем частоту перерисовки только из-за анимации исчезновения (без троттлинга самого рисования). */
 const FADE_REDRAW_MIN_MS = 1000 / 28;
 let lastFadeRedrawWallMs = 0;
+const fillShapeCanvasCache = new WeakMap();
 function savePageStrokes(...args) {
   return _savePageStrokes(...args);
 }
 
 function hasActiveFadeStrokes(strokesArr = [], now = Date.now()) {
   return Array.isArray(strokesArr) && strokesArr.some((s) => s?._ts && (now - s._ts) <= FADE_DURATION_MS);
+}
+
+function needsGestureFrameRedraw() {
+  const hasCursor = !!window.drawCursor;
+  const hasShapePreview = !!shapeInProgress || !!pdfShapeInProgress || !!pptxShapeInProgress;
+  const hasSelectPreview = !!selectMarqueeNorm || !!selectDragging || !!selectImageResizing;
+  const hasGestureWork = gestureState !== GESTURE_STATE.IDLE || hasCursor || hasShapePreview || hasSelectPreview;
+  if (pdfMode && pdfDoc) {
+    return (
+      hasGestureWork ||
+      (pdfCurrentStroke?.points?.length > 0) ||
+      (pdfRemoteCurrentStroke?.points?.length >= 2) ||
+      !!pointerPosition ||
+      hasActiveFadeStrokes(pdfStrokes)
+    );
+  }
+  if (pptxMode && pptxViewer) {
+    return (
+      hasGestureWork ||
+      (pptxCurrentStroke?.points?.length > 0) ||
+      hasActiveFadeStrokes(pptxStrokes)
+    );
+  }
+  return (
+    hasGestureWork ||
+    (currentStroke?.points?.length > 0) ||
+    (canvasRemoteCurrentStroke?.points?.length >= 2) ||
+    hasActiveFadeStrokes(strokes)
+  );
+}
+
+function getCachedFillShapeCanvas(fillShape) {
+  if (!fillShape?.data || !fillShape.w || !fillShape.h) return null;
+  const key = fillShape.data;
+  const cached = fillShapeCanvasCache.get(key);
+  if (cached && cached.width === fillShape.w && cached.height === fillShape.h) return cached;
+  const c = document.createElement("canvas");
+  c.width = fillShape.w;
+  c.height = fillShape.h;
+  const cctx = c.getContext("2d");
+  cctx.putImageData(fillShape.data, 0, 0);
+  fillShapeCanvasCache.set(key, c);
+  return c;
 }
 
 function scheduleFadeTick() {
@@ -1248,10 +1294,8 @@ function drawStrokesToCanvas(w, h) {
   const sx = (x) => (MIRROR_CAMERA ? (1 - x) * w : x * w);
 
   fillShapes.forEach((f) => {
-    const t = document.createElement("canvas");
-    t.width = f.w; t.height = f.h;
-    t.getContext("2d").putImageData(f.data, 0, 0);
-    dctx.drawImage(t, 0, 0, f.w, f.h, 0, 0, w, h);
+    const t = getCachedFillShapeCanvas(f);
+    if (t) dctx.drawImage(t, 0, 0, f.w, f.h, 0, 0, w, h);
   });
 
   const defLw = drawLineWidth || 4;
@@ -1980,10 +2024,8 @@ function drawStrokesToPdfCanvas(w, h) {
   const dctx = pdfDrawCanvas.getContext("2d");
   dctx.clearRect(0, 0, pdfDrawCanvas.width, pdfDrawCanvas.height);
   pdfFillShapes.forEach((f) => {
-    const t = document.createElement("canvas");
-    t.width = f.w; t.height = f.h;
-    t.getContext("2d").putImageData(f.data, 0, 0);
-    dctx.drawImage(t, 0, 0, f.w, f.h, 0, 0, pdfDrawCanvas.width, pdfDrawCanvas.height);
+    const t = getCachedFillShapeCanvas(f);
+    if (t) dctx.drawImage(t, 0, 0, f.w, f.h, 0, 0, pdfDrawCanvas.width, pdfDrawCanvas.height);
   });
   const defLw = drawLineWidth || 4;
   pdfShapes.forEach((sh) => {
@@ -2198,18 +2240,18 @@ async function loadPdfFromShareToken(shareToken, password = null) {
   if (!shareToken || !supabase) return false;
   try {
     const { data, error } = await supabase.rpc("get_pdf_by_share_token", { token: shareToken, pwd: password || null });
-    if (error) throw new Error("PDF bulunamadı");
+    if (error) throw new Error("PDF не найден");
     const row = data?.[0];
-    if (!row) throw new Error("PDF bulunamadı");
+    if (!row) throw new Error("PDF не найден");
     if (row.needs_password === true) {
       return { needsPassword: true };
     }
     const accessMode = row.access_mode || "editor";
     const storagePath = row.storage_path;
-    if (!storagePath) throw new Error("PDF bulunamadı");
+    if (!storagePath) throw new Error("PDF не найден");
     const { data: urlData } = supabase.storage.from("pdfs").getPublicUrl(storagePath);
     const pdfUrl = urlData?.publicUrl;
-    if (!pdfUrl) throw new Error("PDF URL alınamadı");
+    if (!pdfUrl) throw new Error("Не удалось получить URL PDF");
     pdfDoc = await pdfjsLib.getDocument({ url: pdfUrl }).promise;
     currentPdfShareToken = shareToken;
     pdfTotalPages = pdfDoc.numPages;
@@ -2358,10 +2400,10 @@ async function loadPdfFromShareToken(shareToken, password = null) {
     applySharedDocViewerMode(accessMode === "viewer");
     return true;
   } catch (err) {
-    console.error("PDF yükleme hatası:", err);
+    console.error("Ошибка загрузки PDF:", err);
     sharedDocReadOnly = false;
     document.body.classList.remove("shared-doc-viewer");
-    alert("PDF açılamadı: " + (err.message || "Bilinmeyen hata"));
+    alert("Не удалось открыть PDF: " + (err.message || "Неизвестная ошибка"));
     return false;
   }
 }
@@ -3528,10 +3570,8 @@ function drawStrokesToPptxCanvas(w, h) {
   const dctx = pptxDrawCanvas.getContext("2d");
   dctx.clearRect(0, 0, pptxDrawCanvas.width, pptxDrawCanvas.height);
   pptxFillShapes.forEach((f) => {
-    const t = document.createElement("canvas");
-    t.width = f.w; t.height = f.h;
-    t.getContext("2d").putImageData(f.data, 0, 0);
-    dctx.drawImage(t, 0, 0, f.w, f.h, 0, 0, w, h);
+    const t = getCachedFillShapeCanvas(f);
+    if (t) dctx.drawImage(t, 0, 0, f.w, f.h, 0, 0, w, h);
   });
   const defLw = drawLineWidth || 4;
   pptxShapes.forEach((sh) => {
@@ -4227,7 +4267,7 @@ function detectLoop() {
       drawObjects(ctx, w, h);
     }
 
-    const eyeGestureConsumedFrame = handleEyeGestureFrame(t);
+    const eyeGestureConsumedFrame = disableEyeGestureInEmbed ? false : handleEyeGestureFrame(t);
 
     // 4b. İki parmak (işaret+orta) = клик по кнопкам (не в режиме рисования, там = ластик)
     if (handLandmarker && handLandmarks.length > 0 && !drawMode) {
@@ -4249,6 +4289,7 @@ function detectLoop() {
     }
 
     // 5. Çizim / Silgi - pinch ile çizim (işaret+başparmak), imleç göster
+    let frameHasGestureInput = false;
     if (drawMode && handLandmarker) {
       const docNavBusy = pdfPptxNavInProgress && ((pdfMode && pdfDoc) || (pptxMode && pptxViewer));
       let activeStrokes = strokes;
@@ -4290,6 +4331,7 @@ function detectLoop() {
       }
       if (twoFingerPos && !cursorPos) twoFingerHeldFrames = Math.min(10, twoFingerHeldFrames + 1);
       else twoFingerHeldFrames = Math.max(0, twoFingerHeldFrames - 1);
+      if (cursorPos || twoFingerPos) frameHasGestureInput = true;
 
       // 5a. Панель: указательный над полосой слева или панелью = мышь, щепотка = клик
       const overToolbar = cursorPos && (() => {
@@ -4301,7 +4343,12 @@ function detectLoop() {
 
       {
         const nowMs = performance.now();
-        const docNavActive = ((pdfMode && pdfDoc) || (pptxMode && pptxViewer)) && !sharedDocReadOnly;
+        const canvasNavActive =
+          isCanvasDocument &&
+          canvasTotalPages > 1 &&
+          canvasPageNavGroup &&
+          canvasPageNavGroup.style.display !== "none";
+        const docNavActive = (((pdfMode && pdfDoc) || (pptxMode && pptxViewer)) || canvasNavActive) && !sharedDocReadOnly;
         if (docNavActive) {
           if (
             nowMs < docSnapReadyAt ||
@@ -4316,6 +4363,8 @@ function detectLoop() {
             docSnapSeenFramesByHand.right = 0;
             docSnapTouchStartAtByHand.left = 0;
             docSnapTouchStartAtByHand.right = 0;
+            docSnapOpenPalmFramesByHand.left = 0;
+            docSnapOpenPalmFramesByHand.right = 0;
           } else if (nowMs >= docSnapNavCooldownUntil) {
             const handByLabel = { left: null, right: null };
             for (const entry of docSnapHands || []) {
@@ -4326,6 +4375,10 @@ function detectLoop() {
               const hand = handByLabel[label];
               if (hand) docSnapSeenFramesByHand[label] = Math.min(8, docSnapSeenFramesByHand[label] + 1);
               else docSnapSeenFramesByHand[label] = 0;
+              const palmOpen = hand ? isOpenPalm(hand) : false;
+              docSnapOpenPalmFramesByHand[label] = palmOpen
+                ? Math.min(10, docSnapOpenPalmFramesByHand[label] + 1)
+                : 0;
               const prevTouch = docSnapTouchingByHand[label];
               const touching = hand ? stepMiddleThumbTouching(hand, prevTouch) : false;
               if (touching && !prevTouch) {
@@ -4337,7 +4390,11 @@ function detectLoop() {
                 const isSnapRelease =
                   holdMs <= DOC_SNAP_RELEASE_MAX_HOLD_MS && docSnapSeenFramesByHand[label] >= 2;
                 if (isSnapRelease) {
-                  const navigated = label === "right" ? tryNavigatePdfPptxNext() : tryNavigatePdfPptxPrev();
+                  const supportLabel = label === "right" ? "left" : "right";
+                  const supportHandReady = docSnapOpenPalmFramesByHand[supportLabel] >= 2;
+                  const navigated = supportHandReady
+                    ? (label === "right" ? tryNavigateDocNext() : tryNavigateDocPrev())
+                    : false;
                   if (navigated) {
                     showGestureModeHint(label === "right" ? "Слайд: вперёд" : "Слайд: назад");
                     docSnapNavCooldownUntil = nowMs + DOC_SNAP_NAV_COOLDOWN_MS;
@@ -4353,6 +4410,8 @@ function detectLoop() {
             docSnapTouchingByHand.right = false;
             docSnapTouchStartAtByHand.left = 0;
             docSnapTouchStartAtByHand.right = 0;
+            docSnapOpenPalmFramesByHand.left = 0;
+            docSnapOpenPalmFramesByHand.right = 0;
           }
         } else {
           const handForMiddle =
@@ -4375,6 +4434,8 @@ function detectLoop() {
           docSnapSeenFramesByHand.right = 0;
           docSnapTouchStartAtByHand.left = 0;
           docSnapTouchStartAtByHand.right = 0;
+          docSnapOpenPalmFramesByHand.left = 0;
+          docSnapOpenPalmFramesByHand.right = 0;
         }
       }
 
@@ -4851,9 +4912,11 @@ function detectLoop() {
       updateGestureCursor(0, 0, false);
     }
     updateDrawToolbarOpenState();
-    if (pdfMode && pdfDoc) drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
-    else if (pptxMode && pptxViewer) drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
-    else drawStrokesToCanvas(w, h);
+    if (frameHasGestureInput || needsGestureFrameRedraw()) {
+      if (pdfMode && pdfDoc) drawStrokesToPdfCanvas(pdfDrawCanvas.width, pdfDrawCanvas.height);
+      else if (pptxMode && pptxViewer) drawStrokesToPptxCanvas(pptxDrawCanvas.width, pptxDrawCanvas.height);
+      else drawStrokesToCanvas(w, h);
+    }
 
     if (whiteSheetMode && previewCanvas && stream) {
       const pw = 120, ph = 90;
@@ -5009,7 +5072,7 @@ async function startCamera() {
       }
 
       const [, camStream] = await Promise.all([
-        ensureMediaPipeModelsLoaded().catch((e) => console.warn("Model yükleme hatası:", e)),
+        ensureMediaPipeModelsLoaded().catch((e) => console.warn("Ошибка загрузки модели:", e)),
         openCameraStreamWithFallback(),
       ]);
       stream = camStream;
@@ -6296,8 +6359,8 @@ pdfFileInput?.addEventListener("change", async (e) => {
   let uploadError = null;
   const result = await uploadPdfToSupabase(file, null, (err) => { uploadError = err; });
   if (uploadError) {
-    alert("PDF veritabanına kaydedilemedi: " + uploadError);
-    console.error("PDF upload hatası:", uploadError);
+    alert("Не удалось сохранить PDF в базу данных: " + uploadError);
+    console.error("Ошибка загрузки PDF:", uploadError);
   }
   if (result?.shareId) {
     currentPdfShareToken = result.shareId;
@@ -6327,7 +6390,7 @@ pdfFileInput?.addEventListener("change", async (e) => {
       if (shareUrlInput) shareUrlInput.value = localStorage.getItem("shareBaseUrl") || "";
     }
     if (errorMessage) {
-      errorMessage.textContent = "PDF kaydedildi. Çizimler anlık kaydediliyor.";
+      errorMessage.textContent = "PDF сохранён. Штрихи синхронизируются в реальном времени.";
       errorMessage.style.color = "var(--accent)";
       errorMessage.classList.add("visible");
       setTimeout(() => { errorMessage.textContent = ""; errorMessage.classList.remove("visible"); }, 3000);
@@ -6525,7 +6588,7 @@ pdfCopyLinkBtn?.addEventListener("click", async () => {
   if (!link) return;
   const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(link);
   if (isLocalhost) {
-    alert("Bu link localhost — arkadaşın açamaz.\n\nÖnce yukarıdaki alana tünel URL'ini gir (npm run share sonrası çıkan https://xxx.loca.lt) ve OK'a bas.");
+    alert("Это ссылка localhost — другой пользователь её не откроет.\n\nСначала вставьте выше tunnel URL (после npm run share, формат https://xxx.loca.lt) и нажмите OK.");
     if (shareUrlRow) shareUrlRow.style.display = "flex";
     return;
   }
@@ -6535,7 +6598,7 @@ pdfCopyLinkBtn?.addEventListener("click", async () => {
     pdfCopyLinkBtn.textContent = "Ссылка скопирована!";
     setTimeout(() => { pdfCopyLinkBtn.textContent = orig; }, 1500);
   } catch (e) {
-    console.warn("Kopyalama hatası:", e);
+    console.warn("Ошибка копирования:", e);
   }
   await showShareLinkWithQr(link);
 });
@@ -6637,6 +6700,7 @@ const canvasId = urlParams.get("canvas");
 const isCameraMode = urlParams.get("mode") === "camera";
 /** Страница справки: embed + hands=both — показывать обе руки, не фильтровать по preferredHand */
 const embedTrackBothHands = urlParams.get("embed") === "1" && urlParams.get("hands") === "both";
+const disableEyeGestureInEmbed = urlParams.get("embed") === "1" && urlParams.get("noeye") === "1";
 
 if (shareId) {
   pdfMode = true;

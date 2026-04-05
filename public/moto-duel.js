@@ -5,14 +5,16 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d", { alpha: false });
 const statusText = document.getElementById("statusText");
 const timerText = document.getElementById("timerText");
-const startBtn = document.getElementById("startBtn");
 const restartBtn = document.getElementById("restartBtn");
 
 const MIRROR = true;
 const IS_LOW_END = (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) || (navigator.deviceMemory && navigator.deviceMemory <= 4);
-const DETECT_INTERVAL_MS = IS_LOW_END ? 50 : 33;
-const CAMERA_WIDTH = IS_LOW_END ? 960 : 1280;
-const CAMERA_HEIGHT = IS_LOW_END ? 540 : 720;
+const DETECT_INTERVAL_MS = IS_LOW_END ? 66 : 33;
+const CAMERA_WIDTH = IS_LOW_END ? 854 : 1280;
+const CAMERA_HEIGHT = IS_LOW_END ? 480 : 720;
+const CAMERA_MAX_FPS = IS_LOW_END ? 24 : 30;
+const SHOW_HAND_SKELETON = !IS_LOW_END;
+const RENDER_SCALE = IS_LOW_END ? 0.86 : 1;
 const GAME_DURATION_SEC = 45;
 
 let handLandmarker = null;
@@ -57,8 +59,8 @@ function setStatus(text) {
 }
 
 function fitCanvas() {
-  const w = Math.max(760, window.innerWidth);
-  const h = Math.max(420, window.innerHeight - 126);
+  const w = Math.max(760, Math.floor(window.innerWidth * RENDER_SCALE));
+  const h = Math.max(420, Math.floor((window.innerHeight - 126) * RENDER_SCALE));
   if (canvas.width !== w || canvas.height !== h) {
     canvas.width = w;
     canvas.height = h;
@@ -297,6 +299,7 @@ function drawLane(p, x, y, w, h, elapsedSec) {
 }
 
 function drawHands(tracked) {
+  if (!SHOW_HAND_SKELETON || !running) return;
   for (const t of tracked) {
     const color = t.cx < canvas.width / 2 ? "rgba(99,102,241,0.9)" : "rgba(249,115,22,0.9)";
     ctx.strokeStyle = color;
@@ -343,7 +346,6 @@ function startGame() {
   running = true;
   startTs = performance.now();
   endElapsedSec = 0;
-  winner = null;
   for (let i = 0; i < players.length; i++) {
     players[i] = createPlayer(i, `Игрок ${i + 1}`, i === 0 ? "rgba(99,102,241,0.95)" : "rgba(249,115,22,0.95)");
   }
@@ -355,7 +357,6 @@ function render(ts) {
   const dt = Math.min(0.05, (ts - lastTs) / 1000);
   lastTs = ts;
 
-  fitCanvas();
   drawVideo();
 
   const tracked = getTrackedHands(ts);
@@ -393,7 +394,7 @@ function render(ts) {
 
 async function initCamera() {
   stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "user", width: { ideal: CAMERA_WIDTH }, height: { ideal: CAMERA_HEIGHT }, frameRate: { ideal: 30, max: 30 } },
+    video: { facingMode: "user", width: { ideal: CAMERA_WIDTH }, height: { ideal: CAMERA_HEIGHT }, frameRate: { ideal: CAMERA_MAX_FPS, max: CAMERA_MAX_FPS } },
     audio: false,
   });
   video.srcObject = stream;
@@ -416,7 +417,6 @@ async function initModel() {
   });
 }
 
-startBtn.addEventListener("click", startGame);
 restartBtn.addEventListener("click", startGame);
 
 window.addEventListener("resize", fitCanvas);
@@ -431,7 +431,7 @@ window.addEventListener("beforeunload", () => {
   await initCamera();
   setStatus("Камера запущена. Загружаем модель рук...");
   await initModel();
-  setStatus("Готово. Нажмите «Старт».");
+  startGame();
   raf = requestAnimationFrame(render);
 })().catch((err) => {
   console.error(err);

@@ -122,10 +122,10 @@ async function loadPdfWithPassword(shareId, password = null) {
   const { data, error } = await supabase.rpc("get_pdf_by_share_token", { token: shareId, pwd: password || null });
   if (error) return { error: error.message };
   const row = data?.[0];
-  if (!row) return { error: "PDF bulunamadı" };
+  if (!row) return { error: "PDF не найден" };
   if (row.needs_password === true) return { needsPassword: true };
   const path = row.storage_path;
-  if (!path) return { error: "PDF bulunamadı" };
+  if (!path) return { error: "PDF не найден" };
   return { path };
 }
 
@@ -133,12 +133,12 @@ async function loadPdfWithPassword(shareId, password = null) {
   const params = new URLSearchParams(window.location.search);
   const shareId = params.get("id");
   if (!shareId) {
-    showError("Geçersiz paylaşım linki. Örnek: view.html?id=abc12345");
+    showError("Некорректная ссылка. Пример: view.html?id=abc12345");
     return;
   }
 
   if (!supabase) {
-    showError("Supabase yapılandırılmamış. supabase-config.js içinde URL ve KEY girin.");
+    showError("Supabase не настроен. Укажите URL и KEY в supabase-config.js.");
     return;
   }
 
@@ -176,7 +176,7 @@ async function loadPdfWithPassword(shareId, password = null) {
     const { data: urlData } = supabase.storage.from("pdfs").getPublicUrl(path);
     const pdfUrl = urlData?.publicUrl;
     if (!pdfUrl) {
-      showError("PDF URL'si alınamadı.");
+      showError("Не удалось получить URL PDF.");
       return;
     }
 
@@ -185,7 +185,7 @@ async function loadPdfWithPassword(shareId, password = null) {
     currentPage = 1;
     allStrokes = (await fetchStrokesLegacy(id)) || [];
 
-    // Mobil uygulama çizimlerini anında göster
+    // Сразу показывать штрихи из мобильного клиента
     subscribeStrokes(id, (payload) => {
       if (payload?.event === "pointer_position") {
         const { x, y } = payload.payload || {};
@@ -232,7 +232,7 @@ async function loadPdfWithPassword(shareId, password = null) {
       await renderPage();
     });
   } catch (err) {
-    showError("Yükleme hatası: " + (err.message || "Bilinmeyen hata"));
+    showError("Ошибка загрузки: " + (err.message || "Неизвестная ошибка"));
   }
   }
 

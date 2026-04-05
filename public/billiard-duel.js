@@ -5,7 +5,6 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d", { alpha: false });
 const statusText = document.getElementById("statusText");
 const infoText = document.getElementById("infoText");
-const startBtn = document.getElementById("startBtn");
 const resetBtn = document.getElementById("resetBtn");
 
 const MIRROR = true;
@@ -16,7 +15,8 @@ const CAMERA_HEIGHT = IS_LOW_END ? 540 : 720;
 const BALL_R = 16;
 const FRICTION = 0.985;
 const RESTITUTION = 0.98;
-const STOP_EPS = 12;
+const STOP_EPS = 18;
+const STOP_SNAP_MAX = 22;
 
 let stream = null;
 let handLandmarker = null;
@@ -47,6 +47,8 @@ const singleHandShot = {
   maxPull: 0,
   bestPullDx: 0,
   bestPullDy: 0,
+  smoothAimNx: 1,
+  smoothAimNy: 0,
 };
 
 let turnPocketed = [];
@@ -124,6 +126,8 @@ function resetRack() {
   singleHandShot.maxPull = 0;
   singleHandShot.bestPullDx = 0;
   singleHandShot.bestPullDy = 0;
+  singleHandShot.smoothAimNx = 1;
+  singleHandShot.smoothAimNy = 0;
   shotCooldown = 0;
   running = true;
   updateInfo();
@@ -197,10 +201,24 @@ function detectHands(ts) {
   if (!handLandmarker) return [];
   const res = handLandmarker.detectForVideo(video, ts);
   const items = (res.landmarks || []).map((hand) => {
-    const i = toCanvasPoint(hand[8]);
-    const palm = [hand[0], hand[5], hand[9], hand[13], hand[17]];
-    const nz = palm.reduce((s, p) => s + (p.z || 0), 0) / palm.length;
-    return { hand, x: i.x, y: i.y, nx: hand[8].x, ny: hand[8].y, nz };
+    const tip = toCanvasPoint(hand[8]);
+    const palmCenterNorm = {
+      x: (hand[0].x + hand[5].x + hand[9].x + hand[13].x + hand[17].x) / 5,
+      y: (hand[0].y + hand[5].y + hand[9].y + hand[13].y + hand[17].y) / 5,
+    };
+    const palmCenter = toCanvasPoint(palmCenterNorm);
+    const palmPoints = [hand[0], hand[5], hand[9], hand[13], hand[17]];
+    const nz = palmPoints.reduce((s, p) => s + (p.z || 0), 0) / palmPoints.length;
+    return {
+      hand,
+      x: palmCenter.x,
+      y: palmCenter.y,
+      tipX: tip.x,
+      tipY: tip.y,
+      nx: hand[8].x,
+      ny: hand[8].y,
+      nz,
+    };
   });
   const tracked = [];
   const used = new Set();
@@ -296,6 +314,12 @@ function tryShootFromHands(hands, dt) {
   const len = Math.hypot(dirX, dirY) || 1;
   let aimNx = dirX / len;
   let aimNy = dirY / len;
+  const smoothFactor = singleHandShot.phase === "charging" ? 0.24 : 0.15;
+  singleHandShot.smoothAimNx += (aimNx - singleHandShot.smoothAimNx) * smoothFactor;
+  singleHandShot.smoothAimNy += (aimNy - singleHandShot.smoothAimNy) * smoothFactor;
+  const smoothLen = Math.hypot(singleHandShot.smoothAimNx, singleHandShot.smoothAimNy) || 1;
+  aimNx = singleHandShot.smoothAimNx / smoothLen;
+  aimNy = singleHandShot.smoothAimNy / smoothLen;
 
   const palm = isPalmOpen(hand.hand);
   const fist = isFist(hand.hand);
@@ -383,35 +407,38 @@ function drawAim(cue, nx, ny, hand, charging, maxPull) {
   const py = hand.y;
   const pullRatio = Math.max(0, Math.min(1, maxPull / 220));
   const cueLen = 120 + pullRatio * 120;
+  const headX = cue.x - nx * BALL_R;
+  const headY = cue.y - ny * BALL_R;
 
   ctx.save();
 
-  // Tek elle sanal ıstaka
   ctx.strokeStyle = charging ? "rgba(250,204,21,0.95)" : "rgba(56,189,248,0.9)";
   ctx.lineWidth = charging ? 6 : 4;
   ctx.beginPath();
   ctx.moveTo(px - nx * cueLen, py - ny * cueLen);
-  ctx.lineTo(px + nx * 16, py + ny * 16);
+  ctx.lineTo(headX - nx * 8, headY - ny * 8);
   ctx.stroke();
 
-  // Topun gidiş tahmini
-  ctx.strokeStyle = "rgba(255,255,255,0.72)";
-  ctx.lineWidth = 2;
-  ctx.setLineDash([8, 6]);
+  ctx.strokeStyle = "rgba(255,255,255,0.78)";
+  ctx.lineWidth = charging ? 2.6 : 2.2;
+  ctx.setLineDash([10, 8]);
   ctx.beginPath();
   ctx.moveTo(cue.x, cue.y);
-  ctx.lineTo(cue.x + nx * 190, cue.y + ny * 190);
+  ctx.lineTo(cue.x + nx * 220, cue.y + ny * 220);
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Nişangah
   ctx.beginPath();
-  ctx.arc(px, py, 10, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255,255,255,0.2)";
+  ctx.arc(cue.x + nx * 220, cue.y + ny * 220, 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(px, py, 9, 0, Math.PI * 2);
   ctx.strokeStyle = "rgba(255,255,255,0.85)";
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // Güç barı
   ctx.fillStyle = "rgba(15,23,42,0.78)";
   ctx.fillRect(18, 18, 190, 24);
   ctx.fillStyle = charging ? "rgba(250,204,21,0.95)" : "rgba(148,163,184,0.85)";
@@ -430,8 +457,16 @@ function updatePhysics(dt) {
     b.y += b.vy * dt;
     b.vx *= FRICTION;
     b.vy *= FRICTION;
-    if (Math.abs(b.vx) < STOP_EPS) b.vx = 0;
-    if (Math.abs(b.vy) < STOP_EPS) b.vy = 0;
+    if (Math.abs(b.vx) < STOP_EPS) {
+      const tailX = (b.vx * dt * FRICTION) / (1 - FRICTION);
+      b.x += Math.max(-STOP_SNAP_MAX, Math.min(STOP_SNAP_MAX, tailX));
+      b.vx = 0;
+    }
+    if (Math.abs(b.vy) < STOP_EPS) {
+      const tailY = (b.vy * dt * FRICTION) / (1 - FRICTION);
+      b.y += Math.max(-STOP_SNAP_MAX, Math.min(STOP_SNAP_MAX, tailY));
+      b.vy = 0;
+    }
     const left = table.x + BALL_R, right = table.x + table.w - BALL_R;
     const top = table.y + BALL_R, bottom = table.y + table.h - BALL_R;
     if (b.x < left) { b.x = left; b.vx *= -RESTITUTION; }
@@ -594,7 +629,6 @@ function startGame() {
   resetRack();
 }
 
-startBtn.addEventListener("click", startGame);
 resetBtn.addEventListener("click", startGame);
 window.addEventListener("resize", () => initTable());
 window.addEventListener("beforeunload", () => {
@@ -603,9 +637,9 @@ window.addEventListener("beforeunload", () => {
 });
 
 (async function init() {
-  setStatus("Камера izni isteniyor...");
+  setStatus("Запрашивается доступ к камере...");
   await initCamera();
-  setStatus("Камера hazır. Модель рук загружается...");
+  setStatus("Камера готова. Загружается модель рук...");
   await initModel();
   initTable();
   resetRack();

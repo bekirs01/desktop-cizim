@@ -5,7 +5,6 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d", { alpha: false });
 const statusText = document.getElementById("statusText");
 const scoreText = document.getElementById("scoreText");
-const startBtn = document.getElementById("startBtn");
 const restartBtn = document.getElementById("restartBtn");
 const targetSelect = document.getElementById("targetSelect");
 
@@ -382,7 +381,6 @@ async function initModel() {
   });
 }
 
-startBtn.addEventListener("click", startGame);
 restartBtn.addEventListener("click", startGame);
 
 window.addEventListener("resize", fitCanvas);
@@ -397,7 +395,7 @@ window.addEventListener("beforeunload", () => {
   setStatus("Камера запущена. Загружаем модель рук...");
   await initModel();
   resetGame();
-  setStatus("Готово. Нажмите «Старт».");
+  startGame();
   raf = requestAnimationFrame(render);
 })().catch((err) => {
   console.error(err);

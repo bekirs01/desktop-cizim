@@ -13,56 +13,64 @@
     body{margin:0;min-height:100vh;background-color:#0a0d16;background:radial-gradient(circle at 15% 15%,#1f2a44 0%,#0a0d16 60%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column}
     .top{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);background:#0d111c}
     .title{font-weight:700}
-    .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);background:#121722}
+    .controls{display:grid;grid-template-columns:repeat(2,minmax(320px,1fr));gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);background:#121722}
+    .player-card{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:10px;background:rgba(20,26,40,.88)}
+    .player-title{width:100%;font-size:12px;color:#93c5fd;text-transform:uppercase;letter-spacing:.04em}
     .controls label{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:13px}
     .controls input,.controls select{background:#0f172a;color:#e2e8f0;border:1px solid var(--border);border-radius:6px;padding:4px 6px}
     button,a.btn{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:10px;padding:8px 12px;font-size:14px;cursor:pointer;text-decoration:none}
     button.primary{border-color:transparent;background:linear-gradient(135deg,#6366f1,#818cf8)}
-    .status{padding:8px 12px;font-size:13px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .status{padding:9px 12px;font-size:13px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .stage{flex:1;min-height:0}
     canvas{width:100%;height:100%;display:block;background:#000}
     video{display:none}
+    @media (max-width:900px){.controls{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
   <div class="top">
     <div class="title">Кот vs Пёс (2 игрока)</div>
     <div style="display:flex;gap:8px;align-items:center">
-      <button id="startBtn" class="primary">Старт</button>
       <button id="resetBtn">Рестарт</button>
       <a class="btn" href="/game-select.html">Назад</a>
     </div>
   </div>
 
   <div class="controls">
-    <label>Игрок 1 <input id="name1" value="Игрок 1" /></label>
-    <label>Персонаж
-      <select id="char1">
-        <option value="cat">Кот</option>
-        <option value="dog">Пёс</option>
-      </select>
-    </label>
-    <label>Бросок
-      <select id="item1">
-        <option value="bone">Кость (Урон 22)</option>
-        <option value="food">Корм (Урон 16)</option>
-        <option value="brick">Мяч (Урон 28)</option>
-      </select>
-    </label>
-    <label>Игрок 2 <input id="name2" value="Игрок 2" /></label>
-    <label>Персонаж
-      <select id="char2">
-        <option value="dog">Пёс</option>
-        <option value="cat">Кот</option>
-      </select>
-    </label>
-    <label>Бросок
-      <select id="item2">
-        <option value="bone">Кость (Урон 22)</option>
-        <option value="food">Корм (Урон 16)</option>
-        <option value="brick">Мяч (Урон 28)</option>
-      </select>
-    </label>
+    <div class="player-card">
+      <div class="player-title">Синий игрок (левая сторона)</div>
+      <label>Имя <input id="name1" value="Игрок 1" /></label>
+      <label>Персонаж
+        <select id="char1">
+          <option value="cat">Кот</option>
+          <option value="dog">Пёс</option>
+        </select>
+      </label>
+      <label>Бросок
+        <select id="item1">
+          <option value="bone">Кость (Урон 22)</option>
+          <option value="food">Корм (Урон 16)</option>
+          <option value="brick">Мяч (Урон 28)</option>
+        </select>
+      </label>
+    </div>
+    <div class="player-card">
+      <div class="player-title">Оранжевый игрок (правая сторона)</div>
+      <label>Имя <input id="name2" value="Игрок 2" /></label>
+      <label>Персонаж
+        <select id="char2">
+          <option value="dog">Пёс</option>
+          <option value="cat">Кот</option>
+        </select>
+      </label>
+      <label>Бросок
+        <select id="item2">
+          <option value="bone">Кость (Урон 22)</option>
+          <option value="food">Корм (Урон 16)</option>
+          <option value="brick">Мяч (Урон 28)</option>
+        </select>
+      </label>
+    </div>
   </div>
 
   <div class="status" id="statusText">Подготовка камеры...</div>

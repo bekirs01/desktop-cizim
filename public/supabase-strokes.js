@@ -114,7 +114,7 @@ export async function savePageStrokes(shareToken, pageNum, strokes, shapes, fill
     onConflict: "share_token,page_num",
   });
   if (error) {
-    console.warn("Sayfa kaydetme hatası:", error);
+    console.warn("Ошибка сохранения страницы:", error);
     return false;
   }
   return { updated_at: payload.updated_at };
@@ -136,7 +136,7 @@ export async function fetchStrokes(shareToken) {
     .eq("share_token", shareToken)
     .order("page_num", { ascending: true });
   if (error) {
-    console.warn("Stroke yükleme hatası:", error);
+    console.warn("Ошибка загрузки штрихов:", error);
     return null;
   }
   return (data || []).map((r) => ({
@@ -199,7 +199,7 @@ export function subscribeStrokes(shareToken, onUpdate) {
       );
     })
     .subscribe((status) => {
-      if (status === "CHANNEL_ERROR") console.warn("[Realtime] Bağlantı hatası - SUPABASE_REALTIME_ENABLE.sql çalıştırdın mı?");
+      if (status === "CHANNEL_ERROR") console.warn("[Realtime] Ошибка подключения — выполнен ли SUPABASE_REALTIME_ENABLE.sql?");
     });
   return {
     unsubscribe: () => supabase.removeChannel(channel),

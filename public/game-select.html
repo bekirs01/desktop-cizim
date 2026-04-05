@@ -27,7 +27,7 @@
       flex-direction: column;
     }
     .wrap {
-      width: min(980px, 100%);
+      width: min(1120px, 100%);
       margin: 0 auto;
       padding: 20px 16px 28px;
       display: flex;
@@ -53,7 +53,7 @@
     }
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      grid-template-columns: repeat(2, minmax(320px, 1fr));
       gap: 16px;
       margin-top: 8px;
     }
@@ -67,7 +67,7 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
-      min-height: 160px;
+      min-height: 190px;
       transition: transform .15s ease, border-color .15s ease;
     }
     .card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.25); }
@@ -83,13 +83,12 @@
       border: 1px solid rgba(99, 102, 241, 0.4);
       font-weight: 700;
     }
-    .card.duo .badge {
-      background: rgba(249, 115, 22, 0.14);
-      border-color: rgba(249, 115, 22, 0.45);
-      color: #fdba74;
-    }
     .card h3 { margin: 4px 0 0; font-size: 18px; }
     .card p { margin: 0; color: var(--muted); line-height: 1.45; font-size: 14px; }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+      .card { min-height: 170px; }
+    }
   </style>
 </head>
 <body>
@@ -108,7 +107,7 @@
         <h3>Классический режим</h3>
         <p>Нарисуйте фигуру по шаблону и получите оценку в процентах.</p>
       </a>
-      <a class="card duo" href="/two-player-puzzle.html">
+      <a class="card" href="/two-player-puzzle.html">
         <span class="badge">2</span>
         <h3>Пазл на двоих</h3>
         <p>Сделайте фото, перемешайте 3x3 и решайте фрагменты руками (pinch).</p>
@@ -118,20 +117,10 @@
         <h3>Мото-дуэль (2 игрока)</h3>
         <p>Две дорожки, постоянная скорость, руль руками, правая рука — газ, объезжайте препятствия.</p>
       </a>
-      <a class="card duo" href="/balloon-duel.html">
+      <a class="card" href="/billiard-duel.html">
         <span class="badge">4</span>
-        <h3>Шариковая дуэль (2 игрока)</h3>
-        <p>Поза «пистолет» и резкий подъем руки вверх — выстрел. Кто первым собьет 3 шара, тот победил.</p>
-      </a>
-      <a class="card duo" href="/billiard-duel.html">
-        <span class="badge">5</span>
         <h3>Бильярд (2 игрока)</h3>
         <p>Американский пул 8-ball: очередность ходов, шары с полосой/без и победа на восьмёрке.</p>
-      </a>
-      <a class="card duo" href="/pet-duel.html">
-        <span class="badge">6</span>
-        <h3>Кот vs Пёс (2 игрока)</h3>
-        <p>Выберите персонажа и бросок: зажми кулак, оттяни, отпусти — предмет летит через стену во врага.</p>
       </a>
     </div>
   </div>

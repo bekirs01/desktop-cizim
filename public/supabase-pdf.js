@@ -23,7 +23,7 @@ function editorAndViewerPasswordsConflict(editorPassword, viewerPassword) {
 /** sharePassword = öğretmen (çizim), viewerPassword = öğrenci (salt izleme) */
 export async function uploadPdfToSupabase(file, onSuccess, onError, sharePassword = null, viewerPassword = null) {
   if (!supabase) {
-    onError?.("Supabase yapılandırılmamış");
+    onError?.("Supabase не настроен");
     return null;
   }
   try {
@@ -33,7 +33,7 @@ export async function uploadPdfToSupabase(file, onSuccess, onError, sharePasswor
     }
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      onError?.("Giriş yapılmamış");
+      onError?.("Вход не выполнен");
       return null;
     }
     const user = session.user;
@@ -48,7 +48,7 @@ export async function uploadPdfToSupabase(file, onSuccess, onError, sharePasswor
       upsert: true,
       contentType,
     });
-    if (uploadErr) throw new Error("Storage: " + (uploadErr.message || "Yükleme hatası"));
+    if (uploadErr) throw new Error("Storage: " + (uploadErr.message || "Ошибка загрузки"));
 
     const sharePasswordHash = sharePassword ? await hashPassword(sharePassword) : null;
     const viewerPasswordHash = viewerPassword ? await hashPassword(viewerPassword) : null;
@@ -68,16 +68,16 @@ export async function uploadPdfToSupabase(file, onSuccess, onError, sharePasswor
       delete fallback.share_viewer_password_hash;
       ({ error: dbErr } = await supabase.from("pdfs").insert(fallback));
       if (!dbErr) {
-        console.warn("share_viewer_password_hash sütunu yok; izleyici şifresi kaydedilmedi. Supabase'de PDF_DUAL_PASSWORD_MIGRATION.sql çalıştırın.");
+        console.warn("Нет столбца share_viewer_password_hash; пароль зрителя не сохранён. Выполните PDF_DUAL_PASSWORD_MIGRATION.sql в Supabase.");
       }
     }
-    if (dbErr) throw new Error("Veritabanı: " + (dbErr.message || "Kayıt hatası"));
+    if (dbErr) throw new Error("База данных: " + (dbErr.message || "Ошибка сохранения"));
 
     const link = `${getShareBaseUrl()}/index.html?id=${shareId}`;
     onSuccess?.(link);
     return { shareId, link };
   } catch (err) {
-    onError?.(err.message || "Yükleme hatası");
+    onError?.(err.message || "Ошибка загрузки");
     return null;
   }
 }
@@ -103,7 +103,7 @@ function formatSupabaseErr(err) {
 async function updatePdfPasswordsOnRow(shareToken, editorPassword, viewerPassword, pdfRowId = null) {
   const { data: { session } } = await supabase.auth.getSession();
   const user = session?.user;
-  if (!user) return { ok: false, error: "Oturum yok; yeniden giriş yapın." };
+  if (!user) return { ok: false, error: "Сессия отсутствует; войдите снова." };
   if (editorAndViewerPasswordsConflict(editorPassword, viewerPassword)) {
     return { ok: false, error: "Пароли ведущего и зрителя не должны совпадать." };
   }
@@ -127,17 +127,17 @@ async function updatePdfPasswordsOnRow(shareToken, editorPassword, viewerPasswor
     else q2 = q2.eq("share_token", shareToken);
     ({ data, error } = await q2.select("id"));
     if (!error) {
-      console.warn("İzleyici şifresi kaydedilemedi: share_viewer_password_hash sütunu yok. PDF_DUAL_PASSWORD_MIGRATION.sql çalıştırın.");
+      console.warn("Не удалось сохранить пароль зрителя: нет столбца share_viewer_password_hash. Выполните PDF_DUAL_PASSWORD_MIGRATION.sql.");
     }
   }
   if (!error && Array.isArray(data) && data.length > 0) return { ok: true };
   if (error) {
-    return { ok: false, error: formatSupabaseErr(error) || "Güncelleme başarısız" };
+    return { ok: false, error: formatSupabaseErr(error) || "Не удалось обновить" };
   }
   return {
     ok: false,
     error:
-      "Kayıt güncellenemedi (0 satır). Supabase SQL Editor’da pdfs için UPDATE politikası (pdfs_user_update) ve PDF_DUAL_PASSWORD_MIGRATION.sql çalıştırın.",
+      "Запись не обновлена (0 строк). В Supabase SQL Editor выполните UPDATE policy для pdfs (pdfs_user_update) и PDF_DUAL_PASSWORD_MIGRATION.sql.",
   };
 }
 
@@ -180,23 +180,23 @@ export async function setPdfSharePasswords(shareToken, editorPassword, viewerPas
 /** PDF'i Storage, pdf_strokes ve pdfs tablosundan tamamen siler */
 export async function deletePdfFromSupabase(pdfRow, onError) {
   if (!supabase) {
-    onError?.("Supabase yapılandırılmamış");
+    onError?.("Supabase не настроен");
     return false;
   }
   try {
     const { share_token, storage_path, id } = pdfRow;
     if (!share_token || !storage_path || !id) {
-      onError?.("Eksik PDF bilgisi");
+      onError?.("Недостаточно данных PDF");
       return false;
     }
     await supabase.from("pdf_page_strokes").delete().eq("share_token", share_token);
     const { error: storageErr } = await supabase.storage.from("pdfs").remove([storage_path]);
-    if (storageErr) console.warn("Storage silme uyarısı:", storageErr);
+    if (storageErr) console.warn("Предупреждение удаления из Storage:", storageErr);
     const { error: dbErr } = await supabase.from("pdfs").delete().eq("id", id);
-    if (dbErr) throw new Error(dbErr.message || "Veritabanı silme hatası");
+    if (dbErr) throw new Error(dbErr.message || "Ошибка удаления из базы данных");
     return true;
   } catch (err) {
-    onError?.(err.message || "Silme hatası");
+    onError?.(err.message || "Ошибка удаления");
     return false;
   }
 }

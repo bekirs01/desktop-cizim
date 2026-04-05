@@ -5,7 +5,6 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d", { alpha: false });
 const statusText = document.getElementById("statusText");
 const hpText = document.getElementById("hpText");
-const startBtn = document.getElementById("startBtn");
 const resetBtn = document.getElementById("resetBtn");
 
 const name1El = document.getElementById("name1");
@@ -61,6 +60,8 @@ const shotState = {
   bestDy: 0,
   currentDx: 0,
   currentDy: 0,
+  smoothAimNx: 1,
+  smoothAimNy: -0.2,
 };
 
 function makePlayer(id) {
@@ -131,6 +132,8 @@ function resetMatch() {
   shotState.bestDy = 0;
   shotState.currentDx = 0;
   shotState.currentDy = 0;
+  shotState.smoothAimNx = 1;
+  shotState.smoothAimNy = -0.2;
   running = true;
   updateHpUi();
   setStatus(`${players[0].name} начинает. Открытая ладонь -> кулак -> оттянуть -> открыть ладонь для броска.`);
@@ -153,17 +156,26 @@ function drawVideo() {
 }
 
 function drawWorld() {
-  ctx.fillStyle = "rgba(28,42,68,0.28)";
+  const sky = ctx.createLinearGradient(0, 0, 0, world.groundY);
+  sky.addColorStop(0, "rgba(37,99,235,0.26)");
+  sky.addColorStop(1, "rgba(15,23,42,0.2)");
+  ctx.fillStyle = sky;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.fillStyle = "#1f2937";
+  const ground = ctx.createLinearGradient(0, world.groundY, 0, canvas.height);
+  ground.addColorStop(0, "#1f2937");
+  ground.addColorStop(1, "#111827");
+  ctx.fillStyle = ground;
   ctx.fillRect(0, world.groundY, canvas.width, canvas.height - world.groundY);
 
   ctx.fillStyle = "#475569";
   ctx.fillRect(world.wall.x, world.wall.y, world.wall.w, world.wall.h);
+  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  ctx.fillRect(world.wall.x + 8, world.wall.y + 8, world.wall.w - 16, world.wall.h - 16);
 
   drawPlayer(players[0], "#60a5fa");
   drawPlayer(players[1], "#fb923c");
+  drawHud();
 }
 
 function drawPlayer(p, tint) {
@@ -196,6 +208,36 @@ function drawPlayer(p, tint) {
   ctx.font = "600 14px system-ui";
   ctx.textAlign = "center";
   ctx.fillText(p.name, p.x, p.y - 78);
+  drawPlayerHpBar(p);
+}
+
+function drawPlayerHpBar(p) {
+  const w = 92;
+  const h = 10;
+  const ratio = Math.max(0, Math.min(1, p.hp / 100));
+  const x = p.x - w / 2;
+  const y = p.y - 68;
+  ctx.fillStyle = "rgba(15,23,42,0.8)";
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = ratio > 0.45 ? "#22c55e" : ratio > 0.22 ? "#f59e0b" : "#ef4444";
+  ctx.fillRect(x + 1, y + 1, (w - 2) * ratio, h - 2);
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  ctx.strokeRect(x, y, w, h);
+}
+
+function drawHud() {
+  const active = players[currentTurn - 1];
+  ctx.fillStyle = "rgba(15,23,42,0.78)";
+  ctx.fillRect(16, 16, 290, 56);
+  ctx.strokeStyle = "rgba(255,255,255,0.24)";
+  ctx.strokeRect(16, 16, 290, 56);
+  ctx.fillStyle = "#e2e8f0";
+  ctx.font = "600 14px system-ui";
+  ctx.textAlign = "left";
+  ctx.fillText(`Ход: ${active.name}`, 26, 38);
+  const item = ITEMS[active.item] || ITEMS.bone;
+  ctx.fillStyle = "#94a3b8";
+  ctx.fillText(`Бросок: ${item.label}`, 26, 58);
 }
 
 function toCanvasPoint(p) {
@@ -209,8 +251,13 @@ function detectHands(ts) {
   if (!handLandmarker) return [];
   const res = handLandmarker.detectForVideo(video, ts);
   const items = (res.landmarks || []).map((hand) => {
-    const i = toCanvasPoint(hand[8]);
-    return { hand, x: i.x, y: i.y };
+    const tip = toCanvasPoint(hand[8]);
+    const palmCenterNorm = {
+      x: (hand[0].x + hand[5].x + hand[9].x + hand[13].x + hand[17].x) / 5,
+      y: (hand[0].y + hand[5].y + hand[9].y + hand[13].y + hand[17].y) / 5,
+    };
+    const palmCenter = toCanvasPoint(palmCenterNorm);
+    return { hand, x: palmCenter.x, y: palmCenter.y, tipX: tip.x, tipY: tip.y };
   });
   const tracked = [];
   const used = new Set();
@@ -301,6 +348,14 @@ function tryGestureThrow(hands) {
   const palm = isPalmOpen(hand.hand);
   const fist = isFist(hand.hand);
   const sameHand = shotState.handId === null || shotState.handId === hand.id;
+  const targetX = hand.x - activePlayer.x;
+  const targetY = hand.y - (activePlayer.y - 34);
+  const targetLen = Math.hypot(targetX, targetY) || 1;
+  const targetNx = targetX / targetLen;
+  const targetNy = targetY / targetLen;
+  const smooth = shotState.phase === "charging" ? 0.24 : 0.16;
+  shotState.smoothAimNx += (targetNx - shotState.smoothAimNx) * smooth;
+  shotState.smoothAimNy += (targetNy - shotState.smoothAimNy) * smooth;
 
   if (shotState.phase === "idle") {
     if (palm) {
@@ -349,10 +404,7 @@ function tryGestureThrow(hands) {
     } else if (palm) {
       // direction lock: fist phase final pull vector is used; palm transition does not alter direction
       if (shotState.maxPull > 14) {
-        const relLen = Math.hypot(shotState.currentDx, shotState.currentDy);
-        const throwDx = relLen > 4 ? shotState.currentDx : shotState.bestDx;
-        const throwDy = relLen > 4 ? shotState.currentDy : shotState.bestDy;
-        throwProjectile(activePlayer, throwDx, throwDy, shotState.maxPull);
+        throwProjectile(activePlayer, shotState.bestDx, shotState.bestDy, shotState.maxPull);
       }
       shotState.phase = "ready";
       shotState.maxPull = 0;
@@ -394,22 +446,30 @@ function drawAimGuide(player, hand) {
   const ratio = Math.max(0, Math.min(1, shotState.maxPull / 220));
   const dx = shotState.phase === "charging" ? shotState.currentDx : shotState.bestDx;
   const dy = shotState.phase === "charging" ? shotState.currentDy : shotState.bestDy;
-  const len = Math.hypot(dx, dy) || 1;
-  const nx = len > 0 ? -dx / len : (player.id === 1 ? 1 : -1);
-  const ny = len > 0 ? -dy / len : -0.2;
+  const len = Math.hypot(dx, dy);
+  let nx = player.id === 1 ? 1 : -1;
+  let ny = -0.2;
+  if (len > 4) {
+    nx = -dx / len;
+    ny = -dy / len;
+  } else {
+    const smoothLen = Math.hypot(shotState.smoothAimNx, shotState.smoothAimNy) || 1;
+    nx = shotState.smoothAimNx / smoothLen;
+    ny = shotState.smoothAimNy / smoothLen;
+  }
 
   ctx.save();
-  ctx.strokeStyle = shotState.phase === "charging" ? "rgba(250,204,21,0.95)" : "rgba(56,189,248,0.9)";
+  ctx.strokeStyle = shotState.phase === "charging" ? "rgba(250,204,21,0.98)" : "rgba(56,189,248,0.95)";
   ctx.lineWidth = shotState.phase === "charging" ? 5 : 3;
-  // Kıvrımlı (balistik) tahmini yol: yaklaşık %70 doğruluk hedefi
   const baseSpeed = Math.min(920, 260 + Math.max(shotState.maxPull, 14) * 3.8);
   const vx0 = nx * baseSpeed;
   const vy0 = ny * baseSpeed;
   const sx = player.x;
   const sy = player.y - 34;
   ctx.beginPath();
+  ctx.setLineDash([8, 6]);
   for (let i = 0; i <= 28; i++) {
-    const t = (i / 28) * 0.9; // yaklaşık ilk 0.9 saniye
+    const t = (i / 28) * 0.9;
     const px = sx + vx0 * t;
     const py = sy + vy0 * t + 0.5 * G * t * t;
     if (i === 0) ctx.moveTo(px, py);
@@ -417,9 +477,10 @@ function drawAimGuide(player, hand) {
     if (px < 0 || px > canvas.width || py > world.groundY) break;
   }
   ctx.stroke();
+  ctx.setLineDash([]);
 
   ctx.beginPath();
-  ctx.arc(hand.x, hand.y, 10, 0, Math.PI * 2);
+  ctx.arc(hand.x, hand.y, 9, 0, Math.PI * 2);
   ctx.strokeStyle = "rgba(255,255,255,0.85)";
   ctx.lineWidth = 2;
   ctx.stroke();
@@ -567,7 +628,6 @@ async function initModel() {
   });
 }
 
-startBtn.addEventListener("click", resetMatch);
 resetBtn.addEventListener("click", resetMatch);
 
 window.addEventListener("resize", () => {

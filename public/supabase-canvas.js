@@ -22,7 +22,7 @@ export async function createCanvas(name, sharePassword = null) {
   const sharePasswordHash = sharePassword ? await hashPassword(sharePassword) : null;
   const { data, error } = await supabase.from("canvases").insert({
     user_id: user.id,
-    name: (name || "Çizim").trim() || "Çizim",
+    name: (name || "Рисунок").trim() || "Рисунок",
     share_token: shareToken,
     share_password_hash: sharePasswordHash,
   }).select("id, share_token").single();

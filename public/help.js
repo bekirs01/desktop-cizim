@@ -34,5 +34,5 @@ window.addEventListener("beforeunload", stopDemoCamera);
 window.addEventListener("pagehide", stopDemoCamera);
 
 requestAnimationFrame(() => {
-  if (iframe) iframe.src = "/index.html?mode=camera&embed=1&hands=both";
+  if (iframe) iframe.src = "/index.html?mode=camera&embed=1&hands=both&noeye=1";
 });
