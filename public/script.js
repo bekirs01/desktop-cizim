@@ -1078,12 +1078,15 @@ function renderPdfToTempForFill(ctx, w, h, pdfCanvasEl, opts) {
   const { strokes: st = pdfStrokes, shapes: sh = pdfShapes, currentStroke: cs } = opts;
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, w, h);
+  const prevSmooth = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = false;
   pdfFillShapes.forEach((f) => {
     const t = document.createElement("canvas");
     t.width = f.w; t.height = f.h;
     t.getContext("2d").putImageData(f.data, 0, 0);
     ctx.drawImage(t, 0, 0, f.w, f.h, 0, 0, w, h);
   });
+  ctx.imageSmoothingEnabled = prevSmooth;
   const defLw = drawLineWidth || 4;
   sh.forEach((s) => {
     if (s.type === "image") return;
@@ -1249,12 +1252,15 @@ function renderPptxToTempForFill(ctx, w, h, pptxCanvasEl, opts) {
   const { strokes: st = pptxStrokes, shapes: sh = pptxShapes, currentStroke: cs } = opts;
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, w, h);
+  const prevSmooth = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = false;
   pptxFillShapes.forEach((f) => {
     const t = document.createElement("canvas");
     t.width = f.w; t.height = f.h;
     t.getContext("2d").putImageData(f.data, 0, 0);
     ctx.drawImage(t, 0, 0, f.w, f.h, 0, 0, w, h);
   });
+  ctx.imageSmoothingEnabled = prevSmooth;
   const sxPptx = (x) => x * w;
   sh.forEach((s) => {
     if (s.type !== "image") drawShapeToCtx(ctx, s, w, h, sxPptx);
@@ -1293,10 +1299,13 @@ function drawStrokesToCanvas(w, h) {
   dctx.clearRect(0, 0, w, h);
   const sx = (x) => (MIRROR_CAMERA ? (1 - x) * w : x * w);
 
+  const prevSmooth = dctx.imageSmoothingEnabled;
+  dctx.imageSmoothingEnabled = false;
   fillShapes.forEach((f) => {
     const t = getCachedFillShapeCanvas(f);
     if (t) dctx.drawImage(t, 0, 0, f.w, f.h, 0, 0, w, h);
   });
+  dctx.imageSmoothingEnabled = prevSmooth;
 
   const defLw = drawLineWidth || 4;
 
@@ -2023,10 +2032,13 @@ function drawStrokesToPdfCanvas(w, h) {
   if (!pdfDrawCanvas) return;
   const dctx = pdfDrawCanvas.getContext("2d");
   dctx.clearRect(0, 0, pdfDrawCanvas.width, pdfDrawCanvas.height);
+  const prevSmooth = dctx.imageSmoothingEnabled;
+  dctx.imageSmoothingEnabled = false;
   pdfFillShapes.forEach((f) => {
     const t = getCachedFillShapeCanvas(f);
     if (t) dctx.drawImage(t, 0, 0, f.w, f.h, 0, 0, pdfDrawCanvas.width, pdfDrawCanvas.height);
   });
+  dctx.imageSmoothingEnabled = prevSmooth;
   const defLw = drawLineWidth || 4;
   pdfShapes.forEach((sh) => {
     if (sh.type === "image") return;
@@ -3569,10 +3581,13 @@ function drawStrokesToPptxCanvas(w, h) {
   if (!pptxDrawCanvas) return;
   const dctx = pptxDrawCanvas.getContext("2d");
   dctx.clearRect(0, 0, pptxDrawCanvas.width, pptxDrawCanvas.height);
+  const prevSmooth = dctx.imageSmoothingEnabled;
+  dctx.imageSmoothingEnabled = false;
   pptxFillShapes.forEach((f) => {
     const t = getCachedFillShapeCanvas(f);
     if (t) dctx.drawImage(t, 0, 0, f.w, f.h, 0, 0, w, h);
   });
+  dctx.imageSmoothingEnabled = prevSmooth;
   const defLw = drawLineWidth || 4;
   pptxShapes.forEach((sh) => {
     if (sh.type === "image") return;
