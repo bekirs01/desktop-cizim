@@ -4,125 +4,387 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DrawFlow | Выбор игры</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=17">
   <style>
-    html { color-scheme: dark; }
     :root {
-      --bg: #0a0a0f;
-      --panel: rgba(25, 25, 36, 0.86);
-      --border: rgba(255, 255, 255, 0.11);
-      --text: #f4f4f7;
-      --muted: #a1a1aa;
-      --accent: #6366f1;
-      --accent2: #06b6d4;
+      --dash-bg: #0a0a0b;
+      --dash-bg-end: #12121a;
+      --dash-glass: rgba(255, 255, 255, 0.055);
+      --dash-glass-border: rgba(255, 255, 255, 0.09);
+      --dash-glass-hover: rgba(255, 255, 255, 0.09);
+      --dash-border: rgba(255, 255, 255, 0.08);
+      --dash-border-hover: rgba(255, 255, 255, 0.14);
+      --dash-accent: #7c7fd9;
+      --dash-accent-deep: #5b5fc7;
+      --dash-accent-light: #9d9fef;
+      --dash-accent-glow: rgba(91, 95, 199, 0.28);
+      --dash-cyan: #5ac8d4;
+      --dash-green: #5eead4;
+      --dash-text: #fafafa;
+      --dash-text-dim: #a1a1aa;
+      --dash-text-mid: #d4d4d8;
+      --dash-radius: 20px;
+      --dash-radius-sm: 12px;
+      --dash-font: 'Plus Jakarta Sans', -apple-system, system-ui, sans-serif;
+      --dash-space-section: 2rem;
     }
-    * { box-sizing: border-box; }
+
+    html {
+      background-color: var(--dash-bg);
+      overscroll-behavior: none;
+    }
+
     body {
-      margin: 0;
+      font-family: var(--dash-font);
+      background: linear-gradient(168deg, #0c0c0e 0%, #0f0f12 42%, #0a0a0d 100%);
+      color: var(--dash-text);
       min-height: 100vh;
-      background-color: var(--bg);
-      background: radial-gradient(circle at 20% 20%, #1b1b2e 0%, var(--bg) 55%);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      display: flex;
-      flex-direction: column;
+      min-height: 100dvh;
+      margin: 0;
+      overflow-x: hidden;
+      overscroll-behavior: none;
+      -webkit-font-smoothing: antialiased;
     }
-    .wrap {
-      width: min(1120px, 100%);
+
+    .liquid-glass {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    .liquid-glass .df-ambient-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 1;
+    }
+
+    .liquid-glass .blob {
+      position: absolute;
+      border-radius: 50%;
+      opacity: 0.42;
+      z-index: 2;
+    }
+
+    .liquid-glass .blob-1 {
+      top: -15%;
+      right: -10%;
+      width: 55%;
+      height: 65%;
+      background: radial-gradient(ellipse 80% 70% at 30% 40%, rgba(124, 108, 245, 0.38) 0%, rgba(90, 200, 212, 0.14) 45%, transparent 68%);
+      filter: blur(68px);
+      animation: gsBlob1 26s ease-in-out infinite;
+    }
+
+    .liquid-glass .blob-2 {
+      bottom: -20%;
+      left: -15%;
+      width: 50%;
+      height: 60%;
+      background: radial-gradient(ellipse 75% 65% at 60% 50%, rgba(45, 212, 191, 0.22) 0%, rgba(91, 95, 199, 0.14) 48%, transparent 68%);
+      filter: blur(64px);
+      animation: gsBlob2 32s ease-in-out infinite;
+    }
+
+    .liquid-glass .blob-3 {
+      top: 35%;
+      left: 20%;
+      width: 35%;
+      height: 40%;
+      background: radial-gradient(ellipse at center, rgba(180, 170, 248, 0.2) 0%, transparent 72%);
+      filter: blur(48px);
+      animation: gsBlob3 22s ease-in-out infinite;
+      opacity: 0.85;
+    }
+
+    @keyframes gsBlob3 {
+      0%, 100% { transform: translate(0, 0); }
+      50% { transform: translate(8%, -6%); }
+    }
+
+    @keyframes gsBlob1 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(-5%, 4%) scale(1.03); }
+    }
+
+    @keyframes gsBlob2 {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(4%, -5%) scale(1.04); }
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background:
+        radial-gradient(ellipse at 22% 18%, rgba(124, 108, 245, 0.1) 0%, transparent 46%),
+        radial-gradient(ellipse at 78% 82%, rgba(45, 212, 191, 0.07) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+      animation: gsBgDrift 32s ease-in-out infinite alternate;
+    }
+
+    @keyframes gsBgDrift {
+      0% { transform: translate(0, 0); }
+      100% { transform: translate(-3%, -3%); }
+    }
+
+    @keyframes gsHeroPulse {
+      0%, 100% { opacity: 0.5; filter: brightness(1); }
+      50% { opacity: 0.95; filter: brightness(1.15); }
+    }
+
+    .dash-app {
+      position: relative;
+      z-index: 1;
+      max-width: 1040px;
       margin: 0 auto;
-      padding: 20px 16px 28px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
+      padding: 2rem clamp(1rem, 4vw, 1.75rem) 4rem;
     }
-    .top {
+
+    .gs-header {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
-      gap: 12px;
+      gap: 1rem;
+      margin-bottom: var(--dash-space-section);
+      flex-wrap: wrap;
     }
-    .title { font-size: 22px; font-weight: 700; }
-    .subtitle { color: var(--muted); font-size: 14px; }
-    .back {
-      text-decoration: none;
-      color: var(--text);
-      border: 1px solid var(--border);
-      background: var(--panel);
-      border-radius: 10px;
-      padding: 9px 13px;
-      font-size: 14px;
+
+    .gs-title {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin: 0.35rem 0 0.25rem;
     }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(320px, 1fr));
-      gap: 16px;
-      margin-top: 8px;
+
+    .gs-sub {
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--dash-text-dim);
+      font-weight: 500;
     }
-    .card {
-      border: 1px solid var(--border);
-      background: linear-gradient(160deg, var(--panel) 0%, rgba(20, 20, 30, 0.84) 100%);
-      border-radius: 16px;
-      padding: 18px;
-      text-decoration: none;
-      color: var(--text);
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      min-height: 190px;
-      transition: transform .15s ease, border-color .15s ease;
-    }
-    .card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.25); }
-    .badge {
+
+    .dash-btn {
+      padding: 0.6rem 1.2rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      font-family: var(--dash-font);
+      border-radius: var(--dash-radius-sm);
+      cursor: pointer;
+      transition: color 0.22s, background 0.22s, border-color 0.22s;
+      white-space: nowrap;
       display: inline-flex;
       align-items: center;
-      justify-content: center;
-      width: 38px;
-      height: 38px;
-      border-radius: 10px;
-      background: rgba(99, 102, 241, 0.16);
-      color: #c7d2fe;
-      border: 1px solid rgba(99, 102, 241, 0.4);
-      font-weight: 700;
+      text-decoration: none;
+      border: 1px solid var(--dash-glass-border);
+      background: var(--dash-glass);
+      color: var(--dash-text-mid);
+      backdrop-filter: blur(12px);
     }
-    .card h3 { margin: 4px 0 0; font-size: 18px; }
-    .card p { margin: 0; color: var(--muted); line-height: 1.45; font-size: 14px; }
-    @media (max-width: 900px) {
-      .grid { grid-template-columns: 1fr; }
-      .card { min-height: 170px; }
+
+    .dash-btn:hover {
+      color: var(--dash-text);
+      background: var(--dash-glass-hover);
+      border-color: var(--dash-border-hover);
+    }
+
+    .dash-hero {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      align-items: stretch;
+    }
+
+    @media (max-width: 720px) {
+      .dash-hero { grid-template-columns: 1fr; }
+    }
+
+    .dash-hero-card {
+      position: relative;
+      padding: 1.75rem 1.85rem;
+      border-radius: var(--dash-radius);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: linear-gradient(168deg, rgba(30, 30, 33, 0.85) 0%, rgba(24, 24, 27, 0.72) 100%);
+      backdrop-filter: blur(28px) saturate(1.12);
+      -webkit-backdrop-filter: blur(28px) saturate(1.12);
+      box-shadow: 0 4px 28px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.05);
+      cursor: pointer;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+      overflow: hidden;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      min-height: 190px;
+      box-sizing: border-box;
+    }
+
+    .dash-hero-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      border-radius: var(--dash-radius) var(--dash-radius) 0 0;
+      opacity: 0.55;
+      transition: opacity 0.3s;
+      animation: gsHeroPulse 7s ease-in-out infinite;
+    }
+
+    .dash-hero-card:hover::before {
+      opacity: 1;
+      animation: none;
+    }
+
+    .dash-hero-card:hover {
+      border-color: rgba(255, 255, 255, 0.12);
+      background: linear-gradient(168deg, rgba(39, 39, 42, 0.88) 0%, rgba(30, 30, 33, 0.8) 100%);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255,255,255,0.07);
+    }
+
+    .dash-hero-card--draw::before {
+      background: linear-gradient(90deg, var(--dash-accent-deep), var(--dash-cyan));
+    }
+
+    .dash-hero-card--game::before {
+      background: linear-gradient(90deg, var(--dash-cyan), var(--dash-accent-deep));
+    }
+
+    .dash-hero-card--duo::before {
+      background: linear-gradient(90deg, #fb923c, #f97316);
+    }
+
+    .dash-hero-card--pool::before {
+      background: linear-gradient(90deg, #a78bfa, #6366f1);
+    }
+
+    .dash-hero-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.1rem;
+      font-weight: 800;
+      font-size: 1.1rem;
+    }
+
+    .dash-hero-card--draw .dash-hero-icon {
+      background: rgba(99, 102, 241, 0.15);
+      color: var(--dash-accent-light);
+      border: 1px solid rgba(129, 140, 248, 0.2);
+    }
+
+    .dash-hero-card--game .dash-hero-icon {
+      background: rgba(34, 211, 238, 0.1);
+      color: var(--dash-cyan);
+      border: 1px solid rgba(34, 211, 238, 0.18);
+    }
+
+    .dash-hero-card--duo .dash-hero-icon {
+      background: rgba(249, 115, 22, 0.12);
+      color: #fdba74;
+      border: 1px solid rgba(249, 115, 22, 0.28);
+    }
+
+    .dash-hero-card--pool .dash-hero-icon {
+      background: rgba(129, 140, 248, 0.12);
+      color: #c4b5fd;
+      border: 1px solid rgba(129, 140, 248, 0.25);
+    }
+
+    .dash-hero-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+      letter-spacing: -0.02em;
+    }
+
+    .dash-hero-desc {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--dash-text-dim);
+      line-height: 1.55;
+    }
+
+    .dash-eyebrow {
+      font-size: 0.625rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--dash-text-dim);
+      margin: 0 0 0.45rem;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .liquid-glass .blob,
+      .liquid-glass .blob-1,
+      .liquid-glass .blob-2,
+      .liquid-glass .blob-3 {
+        animation: none;
+      }
+      body::before {
+        animation: none;
+      }
+      .dash-hero-card::before {
+        animation: none;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="top">
+  <div class="liquid-glass" aria-hidden="true">
+    <canvas class="df-ambient-canvas"></canvas>
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+  <div class="dash-app">
+    <header class="gs-header">
       <div>
-        <div class="title">Выбор игры</div>
-        <div class="subtitle">Нажмите на игру, которую хотите запустить</div>
+        <p class="dash-eyebrow">DrawFlow</p>
+        <h1 class="gs-title">Выбор игры</h1>
+        <p class="gs-sub">Нажмите на карточку, чтобы открыть режим</p>
       </div>
-      <a class="back" href="/dashboard.html">Назад</a>
-    </div>
+      <a class="dash-btn" href="/dashboard.html">Назад к документам</a>
+    </header>
 
-    <div class="grid">
-      <a class="card" href="/game.html">
-        <span class="badge">1</span>
-        <h3>Классический режим</h3>
-        <p>Нарисуйте фигуру по шаблону и получите оценку в процентах.</p>
+    <div class="dash-hero">
+      <a class="dash-hero-card dash-hero-card--draw" href="/game.html">
+        <div class="dash-hero-icon" aria-hidden="true">1</div>
+        <div class="dash-hero-title">Классический режим</div>
+        <div class="dash-hero-desc">Нарисуйте фигуру по шаблону и получите оценку в процентах.</div>
       </a>
-      <a class="card" href="/two-player-puzzle.html">
-        <span class="badge">2</span>
-        <h3>Пазл на двоих</h3>
-        <p>Сделайте фото, перемешайте 3x3 и решайте фрагменты руками (pinch).</p>
+      <a class="dash-hero-card dash-hero-card--game" href="/two-player-puzzle.html">
+        <div class="dash-hero-icon" aria-hidden="true">2</div>
+        <div class="dash-hero-title">Пазл на двоих</div>
+        <div class="dash-hero-desc">Фото, сетка 3×3 и сборка фрагментов жестами.</div>
       </a>
-      <a class="card" href="/moto-duel.html">
-        <span class="badge">3</span>
-        <h3>Мото-дуэль (2 игрока)</h3>
-        <p>Две дорожки, постоянная скорость, руль руками, правая рука — газ, объезжайте препятствия.</p>
+      <a class="dash-hero-card dash-hero-card--duo" href="/moto-duel.html">
+        <div class="dash-hero-icon" aria-hidden="true">3</div>
+        <div class="dash-hero-title">Мото-дуэль</div>
+        <div class="dash-hero-desc">Две дорожки, газ и руль руками, объезжайте препятствия.</div>
       </a>
-      <a class="card" href="/billiard-duel.html">
-        <span class="badge">4</span>
-        <h3>Бильярд (2 игрока)</h3>
-        <p>Американский пул 8-ball: очередность ходов, шары с полосой/без и победа на восьмёрке.</p>
+      <a class="dash-hero-card dash-hero-card--pool" href="/billiard-duel.html">
+        <div class="dash-hero-icon" aria-hidden="true">4</div>
+        <div class="dash-hero-title">Бильярд 8-ball</div>
+        <div class="dash-hero-desc">Два игрока, очередность ходов и победа на восьмёрке.</div>
       </a>
     </div>
   </div>
+  <script type="module" src="df-ambient.js?v=6"></script>
 </body>
 </html>

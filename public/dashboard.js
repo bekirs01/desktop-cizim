@@ -46,7 +46,11 @@ const pdfEmpty = document.getElementById("pdfEmpty");
 const pdfCount = document.getElementById("pdfCount");
 const uploadError = document.getElementById("uploadError");
 const fileInput = document.getElementById("fileInput");
-const uploadZone = document.getElementById("uploadZone");
+const uploadModal = document.getElementById("uploadModal");
+const openUploadModalBtn = document.getElementById("openUploadModalBtn");
+const uploadPickFileBtn = document.getElementById("uploadPickFileBtn");
+const uploadModalCancelBtn = document.getElementById("uploadModalCancelBtn");
+const uploadFileHint = document.getElementById("uploadFileHint");
 const logoutBtn = document.getElementById("logoutBtn");
 const pdfLinkInput = document.getElementById("pdfLinkInput");
 const openLinkBtn = document.getElementById("openLinkBtn");
@@ -163,6 +167,36 @@ document.getElementById("newCanvasModal")?.querySelector(".dash-modal-backdrop")
   document.getElementById("newCanvasModal").style.display = "none";
 });
 
+function closeUploadModal() {
+  if (uploadModal) uploadModal.style.display = "none";
+}
+
+function openUploadModal() {
+  showUploadError("");
+  const p1 = document.getElementById("uploadPasswordInput");
+  const p2 = document.getElementById("uploadViewerPasswordInput");
+  if (p1) p1.value = "";
+  if (p2) p2.value = "";
+  if (fileInput) fileInput.value = "";
+  if (uploadFileHint) uploadFileHint.textContent = "Файл не выбран";
+  const lbl = document.getElementById("uploadBtnLabel");
+  if (lbl) lbl.textContent = "Выбрать файл";
+  if (uploadPickFileBtn) uploadPickFileBtn.style.opacity = "1";
+  if (uploadModal) uploadModal.style.display = "flex";
+}
+
+openUploadModalBtn?.addEventListener("click", (e) => {
+  e.preventDefault();
+  openUploadModal();
+});
+
+uploadPickFileBtn?.addEventListener("click", () => {
+  fileInput?.click();
+});
+
+uploadModalCancelBtn?.addEventListener("click", closeUploadModal);
+uploadModal?.querySelector(".dash-modal-backdrop")?.addEventListener("click", closeUploadModal);
+
 let passwordModalType = "pdf";
 
 async function loadDocuments() {
@@ -175,10 +209,10 @@ async function loadDocuments() {
   const pdfError = pdfRes.error;
   const pdfData = pdfRes.data || [];
   if (pdfError) {
-    showUploadError("Не удалось загрузить документы: " + (pdfError.message || "ошибка"));
+    showListError("Не удалось загрузить документы: " + (pdfError.message || "ошибка"));
     return;
   }
-  showUploadError("");
+  showListError("");
   const items = [
     ...pdfData.map((r) => {
       const fn = r.file_name || r.storage_path || "";
@@ -248,7 +282,15 @@ function showUploadError(msg) {
   }
 }
 
-fileInput.addEventListener("change", async (e) => {
+function showListError(msg) {
+  const el = document.getElementById("dashListError");
+  if (el) {
+    el.textContent = msg || "";
+    el.style.display = msg ? "block" : "none";
+  }
+}
+
+fileInput?.addEventListener("change", async (e) => {
   const uploadBtnLabel = document.getElementById("uploadBtnLabel");
   const file = e.target.files?.[0];
   if (!file) return;
@@ -259,25 +301,28 @@ fileInput.addEventListener("change", async (e) => {
     return;
   }
   showUploadError("");
+  if (uploadFileHint) uploadFileHint.textContent = file.name;
   const sharePassword = document.getElementById("uploadPasswordInput")?.value?.trim() || null;
   const viewerPassword = document.getElementById("uploadViewerPasswordInput")?.value?.trim() || null;
-  const btnText = uploadZone?.querySelector("button");
-  if (btnText) btnText.style.opacity = "0.6";
+  if (uploadPickFileBtn) uploadPickFileBtn.style.opacity = "0.6";
   if (uploadBtnLabel) uploadBtnLabel.textContent = "Загрузка…";
   let err = null;
   try {
     const result = await uploadPdfToSupabase(file, null, (e) => { err = e; }, sharePassword, viewerPassword);
-    if (btnText) btnText.style.opacity = "1";
-    if (uploadBtnLabel) uploadBtnLabel.textContent = "Загрузить документ";
+    if (uploadPickFileBtn) uploadPickFileBtn.style.opacity = "1";
+    if (uploadBtnLabel) uploadBtnLabel.textContent = "Выбрать файл";
     e.target.value = "";
     if (err) {
       showUploadError("Ошибка загрузки: " + err);
       return;
     }
-    if (result) await loadDocuments();
+    if (result) {
+      closeUploadModal();
+      await loadDocuments();
+    }
   } catch (ex) {
-    if (btnText) btnText.style.opacity = "1";
-    if (uploadBtnLabel) uploadBtnLabel.textContent = "Загрузить документ";
+    if (uploadPickFileBtn) uploadPickFileBtn.style.opacity = "1";
+    if (uploadBtnLabel) uploadBtnLabel.textContent = "Выбрать файл";
     e.target.value = "";
     showUploadError("Ошибка: " + (ex?.message || ex));
   }

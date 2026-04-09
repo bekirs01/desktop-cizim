@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="preconnect" href="https://storage.googleapis.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800&display=swap" rel="stylesheet">
   <script>
     (function(){
       if(window.location.search.indexOf('id=')!==-1){
@@ -25,7 +25,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=11">
+  <link rel="stylesheet" href="style.css?v=17">
   <script type="module">
     import { supabase } from './supabase-config.js';
 
@@ -77,12 +77,15 @@
   </script>
 </head>
 <body>
+  <div class="df-ambient" aria-hidden="true">
+    <canvas class="df-ambient-canvas"></canvas>
+  </div>
   <div class="app">
     <header class="header">
       <h1 id="appHeaderTitle">DrawFlow</h1>
       <div class="header-right">
         <button id="exportDocBtn" class="btn btn-secondary btn-small" title="Экспорт с рисунками" style="display:none;margin-right:0.5rem">&#x2193; Экспорт</button>
-        <a href="/dashboard.html" class="btn btn-secondary btn-small" style="margin-right:0.5rem;font-family:'Inter',sans-serif;">&larr; Документы</a>
+        <a href="/dashboard.html" class="btn btn-secondary btn-small" style="margin-right:0.5rem;font-family:'Plus Jakarta Sans',sans-serif;">&larr; Документы</a>
         <a href="/help.html" class="btn-icon" title="Справка: горячие клавиши" aria-label="Справка">?</a>
         <button type="button" id="fullscreenBtn" class="btn-icon" title="Полный экран (Esc — выход)">&#x26F6;</button>
         <div class="fps-badge" id="fps">0 FPS</div>
@@ -327,6 +330,7 @@
       </section>
     </main>
   </div>
+  <script type="module" src="df-ambient.js?v=6"></script>
   <script type="module" src="script.js?v=17"></script>
 </body>
 </html>
