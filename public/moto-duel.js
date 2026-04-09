@@ -1,4 +1,5 @@
 import { HAND_CONNECTIONS } from "./app/config/landmarks.js";
+import cameraTracker from "./app/core/CameraTracker.js";
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("gameCanvas");
@@ -16,9 +17,10 @@ const CAMERA_MAX_FPS = IS_LOW_END ? 24 : 30;
 const SHOW_HAND_SKELETON = !IS_LOW_END;
 const RENDER_SCALE = IS_LOW_END ? 0.86 : 1;
 const GAME_DURATION_SEC = 45;
+const MAX_OBSTACLES_PER_PLAYER = IS_LOW_END ? 12 : 20;
+const DETECT_INTERVAL_MIN = IS_LOW_END ? 66 : 30;
+const DETECT_INTERVAL_MAX = IS_LOW_END ? 130 : 70;
 
-let handLandmarker = null;
-let stream = null;
 let raf = 0;
 let lastTs = 0;
 let lastTimerDomText = "";
@@ -30,6 +32,8 @@ let prevTracks = [];
 let nextTrackId = 1;
 let cachedTracked = [];
 let lastDetectMs = 0;
+let detectIntervalMs = DETECT_INTERVAL_MS;
+let fpsEma = IS_LOW_END ? 28 : 52;
 
 const players = [
   createPlayer(0, "Игрок 1", "rgba(99,102,241,0.95)"),
@@ -93,8 +97,8 @@ function drawVideo() {
 }
 
 function detectHands(ts) {
-  if (!handLandmarker) return [];
-  const res = handLandmarker.detectForVideo(video, ts);
+  const res = cameraTracker.detectForVideo(video, ts, { pose: false, face: false, hand: true })?.hand;
+  if (!res) return [];
   const raw = res.landmarks || [];
   const withCenters = raw.map((hand) => {
     let sx = 0;
@@ -129,8 +133,8 @@ function detectHands(ts) {
 }
 
 function getTrackedHands(ts) {
-  if (!handLandmarker) return cachedTracked;
-  if (!lastDetectMs || ts - lastDetectMs >= DETECT_INTERVAL_MS) {
+  if (!cameraTracker.getHandLandmarker()) return cachedTracked;
+  if (!lastDetectMs || ts - lastDetectMs >= detectIntervalMs) {
     cachedTracked = detectHands(ts);
     lastDetectMs = ts;
   }
@@ -187,7 +191,7 @@ function updateWorld(dt, elapsedSec) {
 
     if (elapsedSec >= p.spawnAt) {
       // Engel sıklığını bir miktar azalt.
-      p.spawnAt = elapsedSec + Math.max(0.95, 1.75 - p.distance * 0.0005);
+      p.spawnAt = elapsedSec + Math.max(1.05, 1.9 - p.distance * 0.00045);
       const laneCenter = Math.random() * 0.76 + 0.12;
       const width = 0.1 + Math.random() * 0.08;
       p.obstacles.push({
@@ -203,18 +207,71 @@ function updateWorld(dt, elapsedSec) {
       ob.yNorm += ob.speed * dt;
     }
     p.obstacles = p.obstacles.filter((o) => o.yNorm < 1.22);
+    if (p.obstacles.length > MAX_OBSTACLES_PER_PLAYER) {
+      p.obstacles.splice(0, p.obstacles.length - MAX_OBSTACLES_PER_PLAYER);
+    }
   }
+}
+
+function updatePerfBudget(dt, trackedCount, totalObstacles) {
+  const fps = 1 / Math.max(1e-3, dt);
+  fpsEma += (fps - fpsEma) * 0.08;
+  const loadPenalty = totalObstacles > 20 ? 3 : 0;
+  const lowFps = IS_LOW_END ? 25 : 35;
+  const highFps = IS_LOW_END ? 33 : 48;
+  if (fpsEma + loadPenalty < lowFps) {
+    detectIntervalMs = Math.min(DETECT_INTERVAL_MAX, detectIntervalMs + (trackedCount > 2 ? 10 : 6));
+  } else if (fpsEma > highFps) {
+    detectIntervalMs = Math.max(DETECT_INTERVAL_MIN, detectIntervalMs - 4);
+  }
+}
+
+function circleRectHit(cx, cy, r, rx, ry, rw, rh) {
+  const nx = Math.max(rx, Math.min(cx, rx + rw));
+  const ny = Math.max(ry, Math.min(cy, ry + rh));
+  const dx = cx - nx;
+  const dy = cy - ny;
+  return dx * dx + dy * dy <= r * r;
+}
+
+function bikeHitsObstacle(bikeX, ob) {
+  const bodyHit = circleRectHit(
+    bikeX,
+    0.85,
+    0.05,
+    ob.xNorm - ob.wNorm * 0.5,
+    ob.yNorm - ob.hNorm * 0.5,
+    ob.wNorm,
+    ob.hNorm
+  );
+  if (bodyHit) return true;
+  const leftWheelHit = circleRectHit(
+    bikeX - 0.03,
+    0.905,
+    0.022,
+    ob.xNorm - ob.wNorm * 0.5,
+    ob.yNorm - ob.hNorm * 0.5,
+    ob.wNorm,
+    ob.hNorm
+  );
+  if (leftWheelHit) return true;
+  return circleRectHit(
+    bikeX + 0.03,
+    0.905,
+    0.022,
+    ob.xNorm - ob.wNorm * 0.5,
+    ob.yNorm - ob.hNorm * 0.5,
+    ob.wNorm,
+    ob.hNorm
+  );
 }
 
 function checkCollisions() {
   for (const p of players) {
     if (p.finished) continue;
-    const bike = { x: p.bikeXNorm, y: 0.86, w: 0.12, h: 0.16 };
     const keep = [];
     for (const o of p.obstacles) {
-      const hit =
-        Math.abs(o.xNorm - bike.x) < (o.wNorm + bike.w) * 0.5 &&
-        Math.abs(o.yNorm - bike.y) < (o.hNorm + bike.h) * 0.5;
+      const hit = bikeHitsObstacle(p.bikeXNorm, o);
       if (hit) {
         p.hits += 1;
         return p.index;
@@ -364,6 +421,8 @@ function render(ts) {
 
   const elapsedSec = startTs ? (ts - startTs) / 1000 : 0;
   const worldElapsedSec = running ? elapsedSec : endElapsedSec;
+  const totalObstacles = players[0].obstacles.length + players[1].obstacles.length;
+  updatePerfBudget(dt, tracked.length, totalObstacles);
   if (running) {
     updateControls(dt);
     updateWorld(dt, elapsedSec);
@@ -392,29 +451,8 @@ function render(ts) {
   raf = requestAnimationFrame(render);
 }
 
-async function initCamera() {
-  stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "user", width: { ideal: CAMERA_WIDTH }, height: { ideal: CAMERA_HEIGHT }, frameRate: { ideal: CAMERA_MAX_FPS, max: CAMERA_MAX_FPS } },
-    audio: false,
-  });
-  video.srcObject = stream;
-  await video.play();
-}
-
-async function initModel() {
-  const { FilesetResolver, HandLandmarker } = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/vision_bundle.mjs");
-  const fileset = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm");
-  handLandmarker = await HandLandmarker.createFromOptions(fileset, {
-    baseOptions: {
-      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-      delegate: "GPU",
-    },
-    runningMode: "VIDEO",
-    numHands: 4,
-    minHandDetectionConfidence: 0.35,
-    minHandPresenceConfidence: 0.3,
-    minTrackingConfidence: 0.3,
-  });
+async function initApp() {
+  await cameraTracker.startCamera(video, { width: CAMERA_WIDTH, height: CAMERA_HEIGHT, maxWidth: CAMERA_WIDTH, maxHeight: CAMERA_HEIGHT });
 }
 
 restartBtn.addEventListener("click", startGame);
@@ -422,15 +460,13 @@ restartBtn.addEventListener("click", startGame);
 window.addEventListener("resize", fitCanvas);
 window.addEventListener("beforeunload", () => {
   if (raf) cancelAnimationFrame(raf);
-  if (stream) stream.getTracks().forEach((t) => t.stop());
+  cameraTracker.stopCamera(video);
 });
 
 (async function init() {
   fitCanvas();
-  setStatus("Запрашиваем доступ к камере...");
-  await initCamera();
-  setStatus("Камера запущена. Загружаем модель рук...");
-  await initModel();
+  setStatus("Запуск камеры и моделей...");
+  await initApp();
   startGame();
   raf = requestAnimationFrame(render);
 })().catch((err) => {

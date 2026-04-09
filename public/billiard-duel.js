@@ -1,4 +1,5 @@
 import { HAND_CONNECTIONS } from "./app/config/landmarks.js";
+import cameraTracker from "./app/core/CameraTracker.js";
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("gameCanvas");
@@ -15,11 +16,10 @@ const CAMERA_HEIGHT = IS_LOW_END ? 540 : 720;
 const BALL_R = 16;
 const FRICTION = 0.985;
 const RESTITUTION = 0.98;
-const STOP_EPS = 18;
-const STOP_SNAP_MAX = 22;
+const STOP_EPS = 7.5;
+const STOP_SNAP_MAX = 4;
+const MAX_STEP_PIXELS = BALL_R * 0.42;
 
-let stream = null;
-let handLandmarker = null;
 let raf = 0;
 let lastTs = 0;
 let running = false;
@@ -44,11 +44,19 @@ const singleHandShot = {
   startX: 0,
   startY: 0,
   startZ: 0,
+  anchorDist: 0,
+  pullAxisX: 1,
+  pullAxisY: 0,
   maxPull: 0,
   bestPullDx: 0,
   bestPullDy: 0,
   smoothAimNx: 1,
   smoothAimNy: 0,
+  chargeAimNx: 1,
+  chargeAimNy: 0,
+  startDist: 0,
+  filteredX: 0,
+  filteredY: 0,
 };
 
 let turnPocketed = [];
@@ -128,6 +136,14 @@ function resetRack() {
   singleHandShot.bestPullDy = 0;
   singleHandShot.smoothAimNx = 1;
   singleHandShot.smoothAimNy = 0;
+  singleHandShot.chargeAimNx = 1;
+  singleHandShot.chargeAimNy = 0;
+  singleHandShot.startDist = 0;
+  singleHandShot.filteredX = 0;
+  singleHandShot.filteredY = 0;
+  singleHandShot.anchorDist = 0;
+  singleHandShot.pullAxisX = 1;
+  singleHandShot.pullAxisY = 0;
   shotCooldown = 0;
   running = true;
   updateInfo();
@@ -198,8 +214,8 @@ function drawBall(ball) {
 }
 
 function detectHands(ts) {
-  if (!handLandmarker) return [];
-  const res = handLandmarker.detectForVideo(video, ts);
+  const res = cameraTracker.detectForVideo(video, ts, { pose: false, face: false, hand: true })?.hand;
+  if (!res) return [];
   const items = (res.landmarks || []).map((hand) => {
     const tip = toCanvasPoint(hand[8]);
     const palmCenterNorm = {
@@ -239,7 +255,7 @@ function detectHands(ts) {
 }
 
 function getHandsForFrame(ts) {
-  if (!handLandmarker) return cachedHands;
+  if (!cameraTracker.getHandLandmarker()) return cachedHands;
   if (!lastDetectMs || ts - lastDetectMs >= DETECT_INTERVAL_MS) {
     cachedHands = detectHands(ts);
     lastDetectMs = ts;
@@ -306,20 +322,31 @@ function tryShootFromHands(hands, dt) {
     singleHandShot.maxPull = 0;
     singleHandShot.bestPullDx = 0;
     singleHandShot.bestPullDy = 0;
+    singleHandShot.anchorDist = 0;
     return;
   }
+  const handSmooth = singleHandShot.phase === "charging" ? 0.28 : 0.16;
+  if (singleHandShot.filteredX === 0 && singleHandShot.filteredY === 0) {
+    singleHandShot.filteredX = hand.x;
+    singleHandShot.filteredY = hand.y;
+  } else {
+    singleHandShot.filteredX += (hand.x - singleHandShot.filteredX) * handSmooth;
+    singleHandShot.filteredY += (hand.y - singleHandShot.filteredY) * handSmooth;
+  }
+  const hx = singleHandShot.filteredX;
+  const hy = singleHandShot.filteredY;
 
-  const dirX = hand.x - cue.x;
-  const dirY = hand.y - cue.y;
+  const dirX = cue.x - hx;
+  const dirY = cue.y - hy;
   const len = Math.hypot(dirX, dirY) || 1;
-  let aimNx = dirX / len;
-  let aimNy = dirY / len;
+  let shotNx = dirX / len;
+  let shotNy = dirY / len;
   const smoothFactor = singleHandShot.phase === "charging" ? 0.24 : 0.15;
-  singleHandShot.smoothAimNx += (aimNx - singleHandShot.smoothAimNx) * smoothFactor;
-  singleHandShot.smoothAimNy += (aimNy - singleHandShot.smoothAimNy) * smoothFactor;
+  singleHandShot.smoothAimNx += (shotNx - singleHandShot.smoothAimNx) * smoothFactor;
+  singleHandShot.smoothAimNy += (shotNy - singleHandShot.smoothAimNy) * smoothFactor;
   const smoothLen = Math.hypot(singleHandShot.smoothAimNx, singleHandShot.smoothAimNy) || 1;
-  aimNx = singleHandShot.smoothAimNx / smoothLen;
-  aimNy = singleHandShot.smoothAimNy / smoothLen;
+  shotNx = singleHandShot.smoothAimNx / smoothLen;
+  shotNy = singleHandShot.smoothAimNy / smoothLen;
 
   const palm = isPalmOpen(hand.hand);
   const fist = isFist(hand.hand);
@@ -339,9 +366,18 @@ function tryShootFromHands(hands, dt) {
       singleHandShot.bestPullDy = 0;
     } else if (fist) {
       singleHandShot.phase = "charging";
-      singleHandShot.startX = hand.x;
-      singleHandShot.startY = hand.y;
+      singleHandShot.startX = hx;
+      singleHandShot.startY = hy;
       singleHandShot.startZ = hand.nz;
+      const pullX = hx - cue.x;
+      const pullY = hy - cue.y;
+      const pullLen = Math.hypot(pullX, pullY) || 1;
+      singleHandShot.pullAxisX = pullX / pullLen;
+      singleHandShot.pullAxisY = pullY / pullLen;
+      singleHandShot.anchorDist = pullLen;
+      singleHandShot.startDist = pullLen;
+      singleHandShot.chargeAimNx = -singleHandShot.pullAxisX;
+      singleHandShot.chargeAimNy = -singleHandShot.pullAxisY;
       singleHandShot.maxPull = 0;
       singleHandShot.bestPullDx = 0;
       singleHandShot.bestPullDy = 0;
@@ -360,31 +396,24 @@ function tryShootFromHands(hands, dt) {
       singleHandShot.bestPullDx = 0;
       singleHandShot.bestPullDy = 0;
     } else if (fist) {
-      const dx = hand.x - singleHandShot.startX;
-      const dy = hand.y - singleHandShot.startY;
-      const pull2d = Math.hypot(dx, dy);
-      const pullZ = Math.max(0, hand.nz - singleHandShot.startZ) * 920;
-      const pull = pull2d * 0.8 + pullZ;
+      const curPullX = hx - cue.x;
+      const curPullY = hy - cue.y;
+      const curAlong = curPullX * singleHandShot.pullAxisX + curPullY * singleHandShot.pullAxisY;
+      const pullAlong = Math.max(0, curAlong - singleHandShot.anchorDist);
+      const pullZ = Math.max(0, hand.nz - singleHandShot.startZ) * 620;
+      const pull = pullAlong + pullZ;
       if (pull > singleHandShot.maxPull) {
         singleHandShot.maxPull = pull;
-        singleHandShot.bestPullDx = dx;
-        singleHandShot.bestPullDy = dy;
+        singleHandShot.bestPullDx = singleHandShot.pullAxisX * pull;
+        singleHandShot.bestPullDy = singleHandShot.pullAxisY * pull;
       }
-      // Şarj sırasında tahmin yönü: çekişin tam tersi
-      if (pull2d > 5) {
-        aimNx = -dx / pull2d;
-        aimNy = -dy / pull2d;
-      }
+      shotNx = singleHandShot.chargeAimNx;
+      shotNy = singleHandShot.chargeAimNy;
     } else if (palm) {
       if (shotCooldown <= 0 && singleHandShot.maxPull > 16) {
         const power = Math.min(1180, 220 + singleHandShot.maxPull * 2.6);
-        const bestLen = Math.hypot(singleHandShot.bestPullDx, singleHandShot.bestPullDy);
-        if (bestLen > 4) {
-          aimNx = -singleHandShot.bestPullDx / bestLen;
-          aimNy = -singleHandShot.bestPullDy / bestLen;
-        }
-        cue.vx = aimNx * power;
-        cue.vy = aimNy * power;
+        cue.vx = singleHandShot.chargeAimNx * power;
+        cue.vy = singleHandShot.chargeAimNy * power;
         phase = "rolling";
         shotCooldown = 0.42;
         turnStartedBy = currentPlayer;
@@ -396,27 +425,34 @@ function tryShootFromHands(hands, dt) {
       singleHandShot.maxPull = 0;
       singleHandShot.bestPullDx = 0;
       singleHandShot.bestPullDy = 0;
+      singleHandShot.anchorDist = 0;
+      singleHandShot.startDist = 0;
     }
   }
 
-  drawAim(cue, aimNx, aimNy, hand, singleHandShot.phase === "charging", singleHandShot.maxPull);
+  drawAim(cue, shotNx, shotNy, hx, hy, singleHandShot.phase === "charging", singleHandShot.maxPull);
 }
 
-function drawAim(cue, nx, ny, hand, charging, maxPull) {
-  const px = hand.x;
-  const py = hand.y;
+function drawAim(cue, shotNx, shotNy, handX, handY, charging, maxPull) {
   const pullRatio = Math.max(0, Math.min(1, maxPull / 220));
-  const cueLen = 120 + pullRatio * 120;
-  const headX = cue.x - nx * BALL_R;
-  const headY = cue.y - ny * BALL_R;
+  const backNx = -shotNx;
+  const backNy = -shotNy;
+  const tipDist = BALL_R + 6 + pullRatio * 10;
+  const buttDist = 120 + pullRatio * 170;
+  const tipX = cue.x + backNx * tipDist;
+  const tipY = cue.y + backNy * tipDist;
+  const buttX = cue.x + backNx * buttDist;
+  const buttY = cue.y + backNy * buttDist;
+  const predX = cue.x + shotNx * 240;
+  const predY = cue.y + shotNy * 240;
 
   ctx.save();
 
   ctx.strokeStyle = charging ? "rgba(250,204,21,0.95)" : "rgba(56,189,248,0.9)";
   ctx.lineWidth = charging ? 6 : 4;
   ctx.beginPath();
-  ctx.moveTo(px - nx * cueLen, py - ny * cueLen);
-  ctx.lineTo(headX - nx * 8, headY - ny * 8);
+  ctx.moveTo(tipX, tipY);
+  ctx.lineTo(buttX, buttY);
   ctx.stroke();
 
   ctx.strokeStyle = "rgba(255,255,255,0.78)";
@@ -424,20 +460,29 @@ function drawAim(cue, nx, ny, hand, charging, maxPull) {
   ctx.setLineDash([10, 8]);
   ctx.beginPath();
   ctx.moveTo(cue.x, cue.y);
-  ctx.lineTo(cue.x + nx * 220, cue.y + ny * 220);
+  ctx.lineTo(predX, predY);
   ctx.stroke();
   ctx.setLineDash([]);
 
   ctx.beginPath();
   ctx.fillStyle = "rgba(255,255,255,0.2)";
-  ctx.arc(cue.x + nx * 220, cue.y + ny * 220, 6, 0, Math.PI * 2);
+  ctx.arc(predX, predY, 6, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.beginPath();
-  ctx.arc(px, py, 9, 0, Math.PI * 2);
+  ctx.arc(handX, handY, 9, 0, Math.PI * 2);
   ctx.strokeStyle = "rgba(255,255,255,0.85)";
   ctx.lineWidth = 2;
   ctx.stroke();
+
+  ctx.strokeStyle = "rgba(148,163,184,0.55)";
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 5]);
+  ctx.beginPath();
+  ctx.moveTo(handX, handY);
+  ctx.lineTo(buttX, buttY);
+  ctx.stroke();
+  ctx.setLineDash([]);
 
   ctx.fillStyle = "rgba(15,23,42,0.78)";
   ctx.fillRect(18, 18, 190, 24);
@@ -450,55 +495,68 @@ function drawAim(cue, nx, ny, hand, charging, maxPull) {
 
 function updatePhysics(dt) {
   if (phase !== "rolling") return;
-
+  let maxSpeed = 0;
   for (const b of balls) {
-    if (b.pocketed) continue;
-    b.x += b.vx * dt;
-    b.y += b.vy * dt;
-    b.vx *= FRICTION;
-    b.vy *= FRICTION;
-    if (Math.abs(b.vx) < STOP_EPS) {
-      const tailX = (b.vx * dt * FRICTION) / (1 - FRICTION);
-      b.x += Math.max(-STOP_SNAP_MAX, Math.min(STOP_SNAP_MAX, tailX));
-      b.vx = 0;
-    }
-    if (Math.abs(b.vy) < STOP_EPS) {
-      const tailY = (b.vy * dt * FRICTION) / (1 - FRICTION);
-      b.y += Math.max(-STOP_SNAP_MAX, Math.min(STOP_SNAP_MAX, tailY));
-      b.vy = 0;
-    }
-    const left = table.x + BALL_R, right = table.x + table.w - BALL_R;
-    const top = table.y + BALL_R, bottom = table.y + table.h - BALL_R;
-    if (b.x < left) { b.x = left; b.vx *= -RESTITUTION; }
-    if (b.x > right) { b.x = right; b.vx *= -RESTITUTION; }
-    if (b.y < top) { b.y = top; b.vy *= -RESTITUTION; }
-    if (b.y > bottom) { b.y = bottom; b.vy *= -RESTITUTION; }
+    if (!b.pocketed) maxSpeed = Math.max(maxSpeed, Math.hypot(b.vx, b.vy));
   }
+  const steps = Math.min(6, Math.max(1, Math.ceil((maxSpeed * dt) / MAX_STEP_PIXELS)));
+  const subDt = dt / steps;
 
-  for (let i = 0; i < balls.length; i++) {
-    const a = balls[i];
-    if (a.pocketed) continue;
-    for (let j = i + 1; j < balls.length; j++) {
-      const b = balls[j];
+  for (let step = 0; step < steps; step++) {
+    const fr = Math.pow(FRICTION, subDt * 60);
+    for (const b of balls) {
       if (b.pocketed) continue;
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const dist = Math.hypot(dx, dy);
-      const minD = BALL_R * 2;
-      if (dist <= 0 || dist >= minD) continue;
-      const nx = dx / dist, ny = dy / dist;
-      const overlap = minD - dist;
-      a.x -= nx * overlap * 0.5;
-      a.y -= ny * overlap * 0.5;
-      b.x += nx * overlap * 0.5;
-      b.y += ny * overlap * 0.5;
-      const rvx = b.vx - a.vx, rvy = b.vy - a.vy;
-      const vn = rvx * nx + rvy * ny;
-      if (vn > 0) continue;
-      const impulse = -(1 + RESTITUTION) * vn * 0.5;
-      a.vx -= impulse * nx;
-      a.vy -= impulse * ny;
-      b.vx += impulse * nx;
-      b.vy += impulse * ny;
+      b.x += b.vx * subDt;
+      b.y += b.vy * subDt;
+      b.vx *= fr;
+      b.vy *= fr;
+      if (Math.abs(b.vx) < STOP_EPS) {
+        if (STOP_SNAP_MAX > 0) {
+          const tailX = (b.vx * subDt * fr) / (1 - fr);
+          b.x += Math.max(-STOP_SNAP_MAX, Math.min(STOP_SNAP_MAX, tailX));
+        }
+        b.vx = 0;
+      }
+      if (Math.abs(b.vy) < STOP_EPS) {
+        if (STOP_SNAP_MAX > 0) {
+          const tailY = (b.vy * subDt * fr) / (1 - fr);
+          b.y += Math.max(-STOP_SNAP_MAX, Math.min(STOP_SNAP_MAX, tailY));
+        }
+        b.vy = 0;
+      }
+      const left = table.x + BALL_R, right = table.x + table.w - BALL_R;
+      const top = table.y + BALL_R, bottom = table.y + table.h - BALL_R;
+      if (b.x < left) { b.x = left; b.vx *= -RESTITUTION; }
+      if (b.x > right) { b.x = right; b.vx *= -RESTITUTION; }
+      if (b.y < top) { b.y = top; b.vy *= -RESTITUTION; }
+      if (b.y > bottom) { b.y = bottom; b.vy *= -RESTITUTION; }
+    }
+
+    for (let i = 0; i < balls.length; i++) {
+      const a = balls[i];
+      if (a.pocketed) continue;
+      for (let j = i + 1; j < balls.length; j++) {
+        const b = balls[j];
+        if (b.pocketed) continue;
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const dist = Math.hypot(dx, dy);
+        const minD = BALL_R * 2;
+        if (dist <= 0 || dist >= minD) continue;
+        const nx = dx / dist, ny = dy / dist;
+        const overlap = minD - dist;
+        a.x -= nx * overlap * 0.5;
+        a.y -= ny * overlap * 0.5;
+        b.x += nx * overlap * 0.5;
+        b.y += ny * overlap * 0.5;
+        const rvx = b.vx - a.vx, rvy = b.vy - a.vy;
+        const vn = rvx * nx + rvy * ny;
+        if (vn > 0) continue;
+        const impulse = -(1 + RESTITUTION) * vn * 0.5;
+        a.vx -= impulse * nx;
+        a.vy -= impulse * ny;
+        b.vx += impulse * nx;
+        b.vy += impulse * ny;
+      }
     }
   }
 
@@ -600,29 +658,8 @@ function render(ts) {
   raf = requestAnimationFrame(render);
 }
 
-async function initCamera() {
-  stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "user", width: { ideal: CAMERA_WIDTH }, height: { ideal: CAMERA_HEIGHT }, frameRate: { ideal: 30, max: 30 } },
-    audio: false,
-  });
-  video.srcObject = stream;
-  await video.play();
-}
-
-async function initModel() {
-  const { FilesetResolver, HandLandmarker } = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/vision_bundle.mjs");
-  const fileset = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm");
-  handLandmarker = await HandLandmarker.createFromOptions(fileset, {
-    baseOptions: {
-      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-      delegate: "GPU",
-    },
-    runningMode: "VIDEO",
-    numHands: 4,
-    minHandDetectionConfidence: 0.35,
-    minHandPresenceConfidence: 0.3,
-    minTrackingConfidence: 0.3,
-  });
+async function initApp() {
+  await cameraTracker.startCamera(video, { width: CAMERA_WIDTH, height: CAMERA_HEIGHT, maxWidth: CAMERA_WIDTH, maxHeight: CAMERA_HEIGHT });
 }
 
 function startGame() {
@@ -633,14 +670,13 @@ resetBtn.addEventListener("click", startGame);
 window.addEventListener("resize", () => initTable());
 window.addEventListener("beforeunload", () => {
   if (raf) cancelAnimationFrame(raf);
-  if (stream) stream.getTracks().forEach((t) => t.stop());
+  cameraTracker.stopCamera(video);
 });
 
 (async function init() {
-  setStatus("Запрашивается доступ к камере...");
-  await initCamera();
-  setStatus("Камера готова. Загружается модель рук...");
-  await initModel();
+  setStatus("Запуск камеры и моделей...");
+  await initApp();
+  setStatus("Игра готова.");
   initTable();
   resetRack();
   raf = requestAnimationFrame(render);

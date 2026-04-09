@@ -1,4 +1,5 @@
 import { HAND_CONNECTIONS } from "./app/config/landmarks.js";
+import cameraTracker from "./app/core/CameraTracker.js";
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("stageCanvas");
@@ -16,11 +17,9 @@ const CAMERA_WIDTH = IS_LOW_END ? 960 : 1280;
 const CAMERA_HEIGHT = IS_LOW_END ? 540 : 720;
 
 let gridSize = 3;
-let handLandmarker = null;
 let animationId = 0;
 /** DOM’u her karede güncellemek zayıf makinelerde titremeye yol açar; sadece metin değişince yaz. */
 let lastTimerDomText = "";
-let stream = null;
 let winner = null;
 let gameStartedAt = 0;
 
@@ -417,9 +416,9 @@ function renderLoop() {
   drawGuides();
 
   let rawHands = cachedRawHands;
-  if (handLandmarker && (!lastDetectMs || now - lastDetectMs >= DETECT_INTERVAL_MS)) {
-    const res = handLandmarker.detectForVideo(video, now);
-    rawHands = res.landmarks || [];
+  if (cameraTracker.getHandLandmarker() && (!lastDetectMs || now - lastDetectMs >= DETECT_INTERVAL_MS)) {
+    const res = cameraTracker.detectForVideo(video, now, { pose: false, face: false, hand: true })?.hand;
+    rawHands = res?.landmarks || [];
     cachedRawHands = rawHands;
     lastDetectMs = now;
   }
@@ -468,47 +467,16 @@ function renderLoop() {
   animationId = requestAnimationFrame(renderLoop);
 }
 
-async function initCamera() {
-  stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "user", width: { ideal: CAMERA_WIDTH }, height: { ideal: CAMERA_HEIGHT }, frameRate: { ideal: 30, max: 30 } },
-    audio: false,
-  });
-  video.srcObject = stream;
-  await video.play();
-}
-
-async function initHandModel() {
-  const {
-    FilesetResolver,
-    HandLandmarker,
-  } = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/vision_bundle.mjs");
-  const fileset = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm");
-  handLandmarker = await HandLandmarker.createFromOptions(fileset, {
-    baseOptions: {
-      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-      delegate: "GPU",
-    },
-    runningMode: "VIDEO",
-    numHands: 4,
-    minHandDetectionConfidence: 0.35,
-    minHandPresenceConfidence: 0.3,
-    minTrackingConfidence: 0.3,
-  });
+async function initApp() {
+  await cameraTracker.startCamera(video, { width: CAMERA_WIDTH, height: CAMERA_HEIGHT, maxWidth: CAMERA_WIDTH, maxHeight: CAMERA_HEIGHT });
 }
 
 async function init() {
   fitCanvasToViewport();
-  setStatus("Запрашиваем доступ к камере...");
-  await initCamera();
+  setStatus("Запуск камеры и моделей...");
+  await initApp();
   renderLoop();
-  setStatus("Камера запущена. Загружаем модель рук...");
-  try {
-    await initHandModel();
-    setStatus("Готово. Отслеживание 4 рук активно. Сделайте фото и начните пазл.");
-  } catch (err) {
-    console.error(err);
-    setStatus("Камера работает, но модель рук не загрузилась: " + (err?.message || err));
-  }
+  setStatus("Готово. Отслеживание рук активно. Сделайте фото и начните пазл.");
 }
 
 captureBtn.addEventListener("click", () => {
@@ -537,7 +505,7 @@ reshuffleBtn.addEventListener("click", () => {
 window.addEventListener("resize", fitCanvasToViewport);
 window.addEventListener("beforeunload", () => {
   if (animationId) cancelAnimationFrame(animationId);
-  if (stream) stream.getTracks().forEach((t) => t.stop());
+  cameraTracker.stopCamera(video);
 });
 
 init().catch((err) => {
