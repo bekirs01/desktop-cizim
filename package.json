@@ -4,8 +4,8 @@
   "description": "DrawFlow: web app for PDF/PPTX/canvas with realtime drawing and Supabase",
   "scripts": {
     "start": "node server/server.js",
-    "web": "serve public -l 8080 -c config/serve.json",
-    "dev": "npx serve public -l 3457 -c config/serve.json",
+    "web": "serve public -l 8080 -c ../config/serve.json",
+    "dev": "npx serve public -l 3457 -c ../config/serve.json",
     "tunnel": "npx --yes localtunnel --port 3457",
     "share": "npx --yes concurrently -n dev,tunnel -c blue,green \"npx serve public -l 3457 -c config/serve.json\" \"npx --yes localtunnel --port 3457\""
   },

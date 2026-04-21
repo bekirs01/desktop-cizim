@@ -30,7 +30,7 @@ async function ensureGameHandLandmarker() {
       return HandLandmarker.createFromOptions(vision, {
         baseOptions: { modelAssetPath: HAND_MODEL },
         runningMode: "VIDEO",
-        numHands: 2,
+        numHands: 4,
         minHandDetectionConfidence: 0.2,
         minHandPresenceConfidence: 0.2,
         minTrackingConfidence: 0.2,

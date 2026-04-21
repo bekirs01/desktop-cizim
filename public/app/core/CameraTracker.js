@@ -55,6 +55,7 @@ class CameraTracker {
         this.poseLandmarker = p;
         this.faceLandmarker = f;
         this.handLandmarker = h;
+        await h.setOptions({ numHands: 4 });
       })();
     }
     try {
